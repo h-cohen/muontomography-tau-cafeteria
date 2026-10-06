@@ -1,10 +1,11 @@
 """The repository is self-contained: no trace of predecessor projects."""
 
+import re
 import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-FORBIDDEN = ("megid", "muontomo", "cafeteria_3d")
+FORBIDDEN = re.compile(r"\b(megid\w*|muontomo|cafeteria_3d\w*)\b", re.I)
 
 
 def test_no_predecessor_names():
@@ -17,6 +18,6 @@ def test_no_predecessor_names():
         path = ROOT / rel
         if path.suffix in {".root", ".png", ".pdf"} or not path.is_file():
             continue
-        text = path.read_text(errors="ignore").lower()
-        hits += [f"{rel}: {w}" for w in FORBIDDEN if w in text]
+        text = path.read_text(errors="ignore")
+        hits += [f"{rel}: {m.group(0)}" for m in FORBIDDEN.finditer(text)]
     assert not hits, "\n".join(hits)

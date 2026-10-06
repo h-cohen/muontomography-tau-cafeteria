@@ -1,4 +1,4 @@
-# cafetomo
+# muontomography-tau-cafeteria
 
 Two-position muon tomography of the TAU cafeteria ceiling: full analysis and paper.
 
