@@ -1,0 +1,107 @@
+# TAU cafeteria campaign: two detector positions under the ceiling and one
+# open-sky roof run of the same detector.
+site: cafeteria
+data_dir: ../data
+
+# Measured from the sky run: active width = span of `Hit Position cm Layer0..3`
+# above 1% of plateau (all four layers, 23 live bars); layer separation =
+# width / acceptance-edge |tan| (0.91 at 0.2% of peak in `txty`).
+detector:
+  active_width_cm: 35.375
+  layer_dz_cm: 38.9
+  source: "HistsOutSkyRoofRuns37-77.root hit positions and txty acceptance edge"
+
+sky_reference:
+  id: SKY
+  root_file: HistsOutSkyRoofRuns37-77.root
+
+exposures:
+  - id: pos0
+    root_file: HistsOutDataCafePos0.root
+    pose: {x: 0.0, y: 0.0, z: 0.0, az_deg: 0.0}
+  - id: pos1
+    root_file: HistsOutDataCafePos1.root
+    # Prior only: a ~1.75 m floor offset along +x. The pose used downstream is
+    # results/pose.json, fitted by `cafetomo selfcal`.
+    pose: {x: 1.75, y: 0.0, z: 0.0, az_deg: 0.0}
+
+binning:          # the ROOT bins (0.005 tan), cropped to +-1.25
+  t_max: 1.25
+  n_bins: 500
+
+opacity:
+  rebin_factor: 10        # 0.05 tan analysis bins
+  max_tan: 1.25
+  min_sky: 25.0           # sky counts below which a bin is not used
+  t_floor: 0.05           # transmission floor; caps lambda at ~3.0
+  sky_t_max: 2.5
+  sky_n_bins: 100
+  n_sigma_replicas: 12    # Poisson replicas for the per-bin lambda sigma (fit weights)
+
+volume:
+  z_min_m: 1.0
+  z_max_m: 9.0
+  spacing_m: 0.2
+  n_aperture_sub: 4
+  # Display-only clip box: the region both positions see. Cropping the SOLVE
+  # box instead dumps oblique rays' opacity on its side walls.
+  viewer_crop_xy_m: [[-5.0, 7.0], [-5.0, 5.0]]
+
+reconstruction:
+  algorithm: tv
+  n_iter: 150
+  # Swept 0.01-0.2 on the data: 0.03 is where chi2 ~ 1 under the bootstrap
+  # weights, the least smoothing that stops fitting noise; 0.08+ smears beams.
+  tv_alpha: 0.03
+  # z smoothing fights the only depth information (parallax of sharp features).
+  tv_z_weight: 0.0
+  # Damps voxels crossed by one or two rays (the noise shell); 0.2+ over-damps.
+  coverage_damping: 0.05
+
+selfcal:
+  free_pose: pos1
+  baseline_m: null        # external pos0-pos1 distance; null = fit it (see paper, scale closure)
+  bounds_m: 1.0
+  bounds_deg: 10.0
+  spacing_m: 0.4          # coarse lattice for the pose objective
+  n_iter: 60
+  n_bootstrap: 8
+
+autofocus:
+  z_min_m: 6.0
+  z_max_m: 8.0
+  coarse_m: 0.2
+  fine_m: 0.1
+  layer_thickness_m: 0.3
+  spacing_m: 0.1          # 0.15 m aliases the ~1.7 m beam pitch at 7 m
+  trim_pct: 90.0          # drop each view's worst 10% of bins (aliasing spikes)
+
+beams:
+  band_x: 0.32            # |tan_y| band averaged for profiles across x
+  band_y: 0.45
+  match_tol_m: 0.6
+  prominence_sigmas: 0.5
+  gate_max_offset_m: 0.15
+  z_scan_m: [4.0, 9.0]
+  n_z: 81
+
+beamdepth:
+  y_extent_m: [-5.0, 5.0]   # beams run along y across the room
+  band_sy: 0.32
+  w_init_m: 0.3
+  h_init_m: 0.6
+  h_max_m: 3.0
+  bg_degree: 2
+  n_sub: 4
+  y_band_m: [-2.0, 2.0]     # voxel z-profile cross-check: y range averaged
+
+uncertainty:
+  n_replicas: 50
+  seed: 0
+  flux_scale_frac: 0.03     # sky-run vs position-run flux difference (pressure, epoch)
+  mcs_p_min_gev: 0.5
+
+validation:
+  focus_heights_m: [6.6, 7.0, 7.4]
+  depth_h_true_m: [0.6, 1.25, 2.0]
+  n_realizations: 8

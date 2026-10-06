@@ -218,3 +218,12 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# project
+runs/
+paper/generated/
+docs/dev/
+*.aux
+*.fdb_latexmk
+*.fls
+.superpowers/
