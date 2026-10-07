@@ -1,7 +1,6 @@
 """The world-frame voxel lattice the inversion solves on.
 
-World frame: z up, lengths in METRES, origin at detector position pos0. The
-detector module works in centimetres; nothing in this module does.
+World frame: z up, lengths in METRES, origin at detector position pos0.
 """
 from __future__ import annotations
 
