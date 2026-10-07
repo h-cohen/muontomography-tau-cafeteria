@@ -109,3 +109,16 @@ validation:
   focus_heights_m: [6.6, 7.0, 7.4]
   depth_h_true_m: [0.6, 1.25, 2.0]
   n_realizations: 8
+
+# Pins the beams' opacity density to concrete (see src/cafetomo/muonphysics.py
+# for the spectra and the PDG range table).
+physics:
+  concrete_density_gcm3: 2.4    # steel-reinforced concrete, nominal
+  concrete_density_sigma: 0.1   # its systematic
+  # ESTIMATE, not measured: kinetic energy to cross the four scintillator
+  # planes and their housing, taken as ~6 g/cm^2 (CSDA range of a 30 MeV muon).
+  detector_threshold_gev: 0.03
+  # Guan et al. 2015 (arXiv:1509.06176): Gaisser's PDG formula corrected to
+  # sub-GeV energies. PDG eq. (30.4) itself is valid only above 100/cos GeV.
+  flux_model: guan
+  flux_model_alt: shukla        # Shukla & Sankrith 2018 (arXiv:1606.06907)

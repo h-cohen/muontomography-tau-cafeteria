@@ -54,3 +54,18 @@ def test_fast_shrinks_work(cfg):
 def test_with_pose_unknown_raises(cfg):
     with pytest.raises(KeyError, match="nope"):
         cfg.with_pose("nope", Pose(0, 0, 0))
+
+
+def test_physics_section(cfg):
+    p = cfg.physics
+    assert (p.concrete_density_gcm3, p.concrete_density_sigma) == (2.4, 0.1)
+    assert p.flux_model != p.flux_model_alt
+    assert cfg.fast().physics == p
+
+
+def test_unknown_flux_model_raises(tmp_path):
+    text = open(CONFIG).read().replace("flux_model: guan", "flux_model: nope")
+    bad = tmp_path / "c.yaml"
+    bad.write_text(text.replace("../data", os.path.abspath("data")))
+    with pytest.raises(ValueError, match="nope"):
+        load_config(bad)

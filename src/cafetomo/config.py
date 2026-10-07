@@ -15,6 +15,7 @@ import numpy as np
 import yaml
 
 from cafetomo.detector import Detector
+from cafetomo.muonphysics import MODELS
 
 
 @dataclass(frozen=True)
@@ -150,6 +151,24 @@ class ValidationSettings:
 
 
 @dataclass(frozen=True)
+class PhysicsSettings:
+    """Muon physics behind the pinned beam opacity (see muonphysics)."""
+
+    concrete_density_gcm3: float = 2.4
+    concrete_density_sigma: float = 0.1
+    detector_threshold_gev: float = 0.03
+    flux_model: str = "guan"
+    flux_model_alt: str = "shukla"
+
+    def __post_init__(self):
+        for m in (self.flux_model, self.flux_model_alt):
+            if m not in MODELS:
+                raise ValueError(f"physics: unknown muon flux model {m!r}; have {MODELS}")
+        if self.concrete_density_gcm3 <= 0 or self.detector_threshold_gev <= 0:
+            raise ValueError("physics: density and detector threshold must be positive")
+
+
+@dataclass(frozen=True)
 class Config:
     site: str
     data_dir: Path
@@ -166,6 +185,7 @@ class Config:
     beamdepth: BeamDepthSettings = field(default_factory=BeamDepthSettings)
     uncertainty: UncertaintySettings = field(default_factory=UncertaintySettings)
     validation: ValidationSettings = field(default_factory=ValidationSettings)
+    physics: PhysicsSettings = field(default_factory=PhysicsSettings)
 
     def exposure(self, eid: str) -> Exposure:
         for e in self.exposures:
@@ -229,6 +249,7 @@ def load_config(path: str | Path, pose_file: str | Path | None = None) -> Config
         "beamdepth": BeamDepthSettings,
         "uncertainty": UncertaintySettings,
         "validation": ValidationSettings,
+        "physics": PhysicsSettings,
     }
     top = {"site", "data_dir", "detector", "sky_reference", "exposures", *sections}
     unknown = sorted(set(raw) - top)
