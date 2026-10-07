@@ -1,5 +1,10 @@
 """Ground truth for the two height measurements: phantoms with the REAL rows,
-weights and positions of this campaign, at known geometry."""
+weights and positions of this campaign, at known geometry.
+
+The phantoms are concrete: beams and slab carry the fitted density, the slab
+is as thick as the fitted overburden in front of the beams, and lambda follows
+from each ray's grammage through the muon transmission (`phantom_data` with
+`physics`), the same physics the pinned beam-depth fit assumes."""
 
 from dataclasses import replace
 from pathlib import Path
@@ -25,6 +30,28 @@ def _truth_grid(cfg: Config, data: FitData) -> VoxelGrid:
     return auto_grid(vol, cfg.origins(), data.rows.t_reach(), aperture_m=cfg.detector.aperture_m)
 
 
+def _truth(g: VoxelGrid, cfg: Config, nominal_depth: dict, *, z0: float, h: float) -> np.ndarray:
+    """Concrete beams of the nominal footprint under a concrete slab whose
+    thickness turns the nominal (slant) overburden into a vertical one: a
+    slight overestimate of the background, as most rays are oblique."""
+    rho = nominal_depth["density"]
+    overburden = nominal_depth["overburden_mean"]
+    if not (np.isfinite(rho) and np.isfinite(overburden)):
+        raise ValueError("validation needs a finite fitted density and overburden")
+    return beam_ceiling(
+        g,
+        xs=nominal_depth["xs"],
+        z0=z0,
+        w=nominal_depth["w"],
+        h=h,
+        kappa=(rho,) * len(nominal_depth["xs"]),
+        y_extent=cfg.beamdepth.y_extent_m,
+        slab_thickness=overburden / (100.0 * rho),
+        slab_kappa=rho,
+        slab_y_extent=None,
+    )
+
+
 def validate_autofocus(
     data: FitData, cfg: Config, nominal_depth: dict, *, cache_dir: str | Path | None = None
 ) -> dict:
@@ -38,17 +65,9 @@ def validate_autofocus(
     rng = np.random.default_rng(cfg.uncertainty.seed)
     injected, recovered = [], []
     for z0 in cfg.validation.focus_heights_m:
-        truth = beam_ceiling(
-            g,
-            xs=nominal_depth["xs"],
-            z0=z0,
-            w=nominal_depth["w"],
-            h=nominal_depth["h"],
-            kappa=nominal_depth["kappa"],
-            y_extent=cfg.beamdepth.y_extent_m,
-            slab_y_extent=None,
-        )
-        scan = cv_height_scan(phantom_data(fwd, truth, data, rng), cfg, cache_dir=cache_dir)
+        truth = _truth(g, cfg, nominal_depth, z0=z0, h=nominal_depth["h"])
+        phantom = phantom_data(fwd, truth, data, rng, physics=cfg.physics)
+        scan = cv_height_scan(phantom, cfg, cache_dir=cache_dir)
         injected.append(z0 + nominal_depth["h"] / 2)
         recovered.append(scan.z_best)
     err = np.array(recovered) - np.array(injected)
@@ -72,20 +91,11 @@ def validate_depth(data: FitData, cfg: Config, nominal_depth: dict, *, sky: SkyG
     rng = np.random.default_rng(cfg.uncertainty.seed + 1)
     out = {"depth_true": [], "depth_mean": [], "depth_spread": []}
     for h in cfg.validation.depth_h_true_m:
-        truth = beam_ceiling(
-            g,
-            xs=nominal_depth["xs"],
-            z0=nominal_depth["zbottom"],
-            w=nominal_depth["w"],
-            h=h,
-            kappa=nominal_depth["kappa"],
-            y_extent=cfg.beamdepth.y_extent_m,
-            slab_y_extent=None,
-        )
-        hs = [
-            estimate_beam_depth(phantom_data(fwd, truth, data, rng), cfg, sky)[1].h
-            for _ in range(cfg.validation.n_realizations)
-        ]
+        truth = _truth(g, cfg, nominal_depth, z0=nominal_depth["zbottom"], h=h)
+        hs = []
+        for _ in range(cfg.validation.n_realizations):
+            phantom = phantom_data(fwd, truth, data, rng, physics=cfg.physics)
+            hs.append(estimate_beam_depth(phantom, cfg, sky)[1].h)
         out["depth_true"].append(h)
         out["depth_mean"].append(float(np.mean(hs)))
         out["depth_spread"].append(float(np.std(hs, ddof=1)) if len(hs) > 1 else float("nan"))

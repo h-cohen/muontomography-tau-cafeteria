@@ -4,10 +4,18 @@ import pytest
 from cafetomo import validation
 from cafetomo.beamdepth import estimate_beam_depth
 from cafetomo.validation import validate_autofocus, validate_depth
-from phantoms import KAPPA, XS, Z0, W, beam_phantom, phantom_sky
+from phantoms import SLAB_M, XS, Z0, W, beam_phantom, phantom_sky
 
 H_TRUE = 1.25
-NOMINAL = {"xs": list(XS), "w": W, "h": H_TRUE, "kappa": list(KAPPA), "zbottom": Z0}
+RHO = 2.4
+NOMINAL = {
+    "xs": list(XS),
+    "w": W,
+    "h": H_TRUE,
+    "density": RHO,
+    "overburden_mean": 100.0 * RHO * SLAB_M,
+    "zbottom": Z0,
+}
 
 
 @pytest.fixture(scope="module")
@@ -48,3 +56,11 @@ def test_validate_autofocus_reports_signed_bias(phantom):
     assert out["focus_max_error"] == pytest.approx(float(np.abs(err).max()))
     assert np.isfinite(out["focus_bias"])
     assert not any(ch.isdigit() for k in out for ch in k)
+
+
+def test_validation_needs_a_finite_overburden(cfg):
+    from cafetomo.voxels import VoxelGrid
+
+    g = VoxelGrid(origin=(-3.0, -3.0, 6.0), spacing=0.1, shape=(10, 10, 10))
+    with pytest.raises(ValueError, match="finite fitted density and overburden"):
+        validation._truth(g, cfg, NOMINAL | {"overburden_mean": float("nan")}, z0=7.0, h=0.5)

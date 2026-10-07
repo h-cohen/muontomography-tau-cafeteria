@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from cafetomo.measure import measure
-from phantoms import KAPPA, XS, beam_phantom, phantom_sky
+from phantoms import XS, beam_phantom, phantom_sky
 
 H_TRUE = 1.25
 BASE_KEYS = {
@@ -33,7 +33,9 @@ def test_measure_without_volume_recovers_the_phantom(phantom):
     assert m.values["depth_h"] == pytest.approx(H_TRUE, abs=0.15)
     assert m.values["depth_ztop"] == pytest.approx(m.values["depth_zbottom"] + m.values["depth_h"])
     assert m.values["beams_pitch"] == pytest.approx(XS[1] - XS[0], abs=0.15)
-    assert len(m.details["depth"].kappa) == len(KAPPA)
+    depth = m.details["depth"]
+    assert depth.density == c.physics.concrete_density_gcm3
+    assert depth.kappa_mean > 0 and depth.overburden_mean > 0
 
 
 @pytest.mark.slow

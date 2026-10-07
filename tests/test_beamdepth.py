@@ -6,7 +6,6 @@ from scipy import optimize
 
 from cafetomo import beamdepth
 from cafetomo.beamdepth import (
-    BeamDepthFit,
     beam_design,
     box_path_lengths,
     estimate_beam_depth,
@@ -14,6 +13,7 @@ from cafetomo.beamdepth import (
     zprofile_depth,
 )
 from cafetomo.fitdata import FitData
+from cafetomo.muonphysics import Transmission, kappa_concrete, overburden_from_lambda
 from cafetomo.phantom import beam_ceiling, sky_rows
 from cafetomo.reconstruct import VoxelSolution
 from cafetomo.voxels import VoxelGrid
@@ -63,7 +63,9 @@ def test_zprofile_measures_column_extent(cfg):
 
 
 def _analytic(cfg):
-    """Noiseless lambda from the fit's own box model: a cheap stand-in for a phantom."""
+    """Noiseless lambda from the pinned fit's own physics: concrete beams of
+    depth 1.0 m behind a uniform overburden of lambda 0.07. A cheap stand-in
+    for a phantom."""
     rows = sky_rows(cfg.position_ids, 0.9, 24)
     xs = (-1.7, 0.0, 1.7)
     L = beam_design(
@@ -77,7 +79,11 @@ def _analytic(cfg):
         xs=xs,
         y_extent=(-5.0, 5.0),
     )
-    lam = L @ np.full(len(xs), 1.2) + 0.1
+    p = cfg.physics
+    cos = 1.0 / np.sqrt(1.0 + rows.sx**2 + rows.sy**2)
+    trans = Transmission(cos, threshold_gev=p.detector_threshold_gev, model=p.flux_model)
+    x_bg = trans.overburden(np.full(rows.n_rows, 0.07))
+    lam = trans.lam(x_bg + 100.0 * p.concrete_density_gcm3 * L.sum(axis=1))
     c = replace(cfg, beamdepth=replace(cfg.beamdepth, n_sub=2))
     return c, FitData(lam=lam, w=np.full(rows.n_rows, 1 / 0.02**2), rows=rows), xs
 
@@ -89,7 +95,40 @@ def test_fit_reports_convergence_and_json_keys(cfg):
     js = fit.to_json()
     assert js["chisq_per_dof"] == fit.chi2_per_dof
     assert js["converged"] is True and js["n_eval"] == fit.n_eval
+    assert "kappa" not in js
+    assert (js["kappa_mean"], js["overburden_mean"]) == (fit.kappa_mean, fit.overburden_mean)
+    assert js["density"] == c.physics.concrete_density_gcm3
     assert not any(ch.isdigit() for key in js for ch in key)
+
+
+def test_pinned_fit_recovers_noiseless_physics(cfg):
+    """The beams' opacity is not free: the noiseless model data come back at
+    their depth, with the pinned kappa of concrete behind lambda 0.07."""
+    c, data, xs = _analytic(cfg)
+    fit = fit_beam_depth(data, c, xs_init=xs, z0_init=7.1)
+    assert fit.h == pytest.approx(1.0, abs=0.05)
+    assert fit.z0 == pytest.approx(7.0, abs=0.05)
+    p = c.physics
+    k_vertical = kappa_concrete(
+        overburden_from_lambda(
+            0.07, 1.0, threshold_gev=p.detector_threshold_gev, model=p.flux_model
+        ),
+        1.0,
+        p.concrete_density_gcm3,
+        threshold_gev=p.detector_threshold_gev,
+        model=p.flux_model,
+    )
+    assert fit.kappa_mean == pytest.approx(float(k_vertical), rel=0.25)
+
+
+def test_density_and_flux_model_keywords_override_the_config(cfg):
+    c, data, xs = _analytic(cfg)
+    nominal = fit_beam_depth(data, c, xs_init=xs, z0_init=7.1)
+    denser = fit_beam_depth(data, c, xs_init=xs, z0_init=7.1, density=2.6)
+    assert denser.density == 2.6 and denser.kappa_mean > nominal.kappa_mean
+    assert denser.h < nominal.h
+    alt = fit_beam_depth(data, c, xs_init=xs, z0_init=7.1, flux_model=c.physics.flux_model_alt)
+    assert alt.kappa_mean != nominal.kappa_mean
 
 
 def test_failed_solve_raises(cfg, monkeypatch):
@@ -129,47 +168,73 @@ def test_zprofile_empty_selections_raise(cfg):
         zprofile_depth(_column((0.0,), 1.2), far, xs=(0.0,), w=0.3, z_ref=7.0)
 
 
-def _stub_fit(chi2):
-    return BeamDepthFit(
-        z0=7.0,
-        w=0.3,
-        h=1.0,
-        xs=(0.0,),
-        kappa=(1.0,),
-        chi2_per_dof=chi2,
-        at_bound=False,
-        n_rows=1,
-        profiles={},
-        converged=True,
-        n_eval=1,
-    )
+def test_fit_starts_free_then_pinned_and_keeps_lowest_chisq(cfg, monkeypatch):
+    c, data, xs = _analytic(cfg)
+    calls = []
+    real = beamdepth._fit_once
 
+    def spy(band, cf, *, z0_init, h_init, pinned, **kw):
+        fit = real(band, cf, z0_init=z0_init, h_init=h_init, pinned=pinned, **kw)
+        calls.append((z0_init, h_init, pinned is None, fit))
+        return fit
 
-@pytest.mark.parametrize("winner", [0, 1])
-def test_fit_seeds_bottom_and_centre_and_keeps_lower_chisq(cfg, monkeypatch, winner):
-    seeds = []
-    chis = (1.0, 2.0) if winner == 0 else (2.0, 1.0)
-
-    def once(data, c, *, xs_init, z0_init, angle_jitter):
-        seeds.append(z0_init)
-        return _stub_fit(chis[len(seeds) - 1])
-
-    monkeypatch.setattr(beamdepth, "_fit_once", once)
-    fit = fit_beam_depth(None, cfg, xs_init=(0.0,), z0_init=7.6)
-    assert seeds == pytest.approx([7.6, 7.6 - cfg.beamdepth.h_init_m / 2])
-    assert fit.chi2_per_dof == 1.0
+    monkeypatch.setattr(beamdepth, "_fit_once", spy)
+    fit = fit_beam_depth(data, c, xs_init=xs, z0_init=7.6)
+    h0 = c.beamdepth.h_init_m
+    free = [x for x in calls if x[2]]
+    pinned = [x for x in calls if not x[2]]
+    assert [(z, h) for z, h, *_ in free] == pytest.approx([(7.6, h0), (7.6 - h0 / 2, h0)])
+    h_free = min((x[3] for x in free), key=lambda f: f.chi2_per_dof).h
+    hs = (*c.beamdepth.h_starts_m, h_free)
+    expect = [start for h in hs for start in ((7.6, h), (7.6 - h / 2, h))]
+    assert [(z, h) for z, h, *_ in pinned] == pytest.approx(expect)
+    assert fit.chi2_per_dof == min(x[3].chi2_per_dof for x in pinned)
+    assert np.isfinite(fit.kappa_mean) and all(np.isnan(x[3].kappa_mean) for x in free)
 
 
 def test_non_finite_chisq_raises(cfg, monkeypatch):
-    monkeypatch.setattr(beamdepth, "_fit_once", lambda *a, **k: _stub_fit(np.nan))
+    c, data, xs = _analytic(cfg)
+    real = beamdepth._fit_once
+
+    def nan_fit(*a, **k):
+        return replace(real(*a, **k), chi2_per_dof=np.nan)
+
+    monkeypatch.setattr(beamdepth, "_fit_once", nan_fit)
     with pytest.raises(RuntimeError, match="non-finite"):
-        fit_beam_depth(None, cfg, xs_init=(0.0,), z0_init=7.6)
+        fit_beam_depth(data, c, xs_init=xs, z0_init=7.6)
+
+
+@pytest.mark.slow
+def test_pinned_starts_agree_where_the_free_fit_trades_kappa_for_depth(cfg, monkeypatch):
+    """The degeneracy is broken: on the h = 1.25 m phantom (noise draw 3) the
+    pinned fit started from both bottom-face seeds at the free pass's depth
+    lands on one h within 0.05 m, close to the truth, whereas the free fit
+    (each beam's kappa free) overshoots to ~1.43 m."""
+    c, data = beam_phantom(cfg, 1.25, np.random.default_rng(3))
+    calls = []
+    real = beamdepth._fit_once
+
+    def spy(band, cf, *, h_init, pinned, **kw):
+        fit = real(band, cf, h_init=h_init, pinned=pinned, **kw)
+        calls.append((h_init, pinned is None, fit))
+        return fit
+
+    monkeypatch.setattr(beamdepth, "_fit_once", spy)
+    fit = fit_beam_depth(data, c, xs_init=(-1.7, 0.0, 1.7, 3.4), z0_init=7.1)
+    free = min((f for _, is_free, f in calls if is_free), key=lambda f: f.chi2_per_dof)
+    from_free = [f.h for h0, is_free, f in calls if not is_free and h0 == free.h]
+    assert len(from_free) == 2
+    assert abs(from_free[0] - from_free[1]) < 0.05
+    assert fit.h == pytest.approx(1.25, abs=0.05)
+    assert abs(free.h - 1.25) > abs(fit.h - 1.25)
 
 
 @pytest.mark.slow
 def test_estimate_escapes_the_one_seed_local_minimum(cfg):
-    """Noise draw 5 of the h = 1.25 phantom: seeded only at the triangulated
-    height, the fit settled at h = 1.10 with a worse chi^2."""
+    """Noise draw 5 of the h = 1.25 phantom has two pinned minima, h ~ 1.18
+    and ~ 1.24 m (chi^2/dof 0.9588 vs 0.9580): seeded only at the
+    triangulated height the fit settles in the worse one; the multistart
+    keeps the better."""
     c, data = beam_phantom(cfg, 1.25, np.random.default_rng(5))
     beams, fit = estimate_beam_depth(data, c, phantom_sky())
     assert beams["ok"] and fit.z0 < beams["z"]

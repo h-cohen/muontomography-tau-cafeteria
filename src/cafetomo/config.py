@@ -129,6 +129,7 @@ class BeamDepthSettings:
     band_sy: float = 0.32
     w_init_m: float = 0.3
     h_init_m: float = 0.6
+    h_starts_m: tuple = (0.6, 1.2, 1.8)
     h_max_m: float = 3.0
     bg_degree: int = 2
     n_sub: int = 4

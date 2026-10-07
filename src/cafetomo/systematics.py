@@ -9,6 +9,10 @@ pose       -- the free position moved by its self-calibration sigma along x and 
 background -- the beam-depth fit removes a smooth background; an unmodelled
               sharp feature would bias the depth, so the polynomial degree is
               raised by one and the shift is the model-choice systematic.
+density    -- the beams' opacity is pinned to concrete of the configured
+              density; refit at density +- its systematic sigma.
+flux model -- the pinned opacity rests on a sea-level muon spectrum; refit
+              with the alternative published parametrisation.
 
 A shift is NaN for a key when either measurement of it is NaN (for example a
 z-profile face off the grid); it stays NaN through the budget instead of
@@ -114,7 +118,9 @@ def flux_scale_shift(
 
 def mcs_dlam(data: FitData, cfg: Config, depth, jitter_tan: float) -> np.ndarray:
     """Change of lambda when the nominal fitted beams (`depth`) are seen through
-    direction-smeared paths; the background cancels in the difference."""
+    direction-smeared paths; the background cancels in the difference. The
+    beams' opacity is taken at the fit's mean pinned density `kappa_mean`:
+    linear in the path change, ample for the size of a blur bias."""
     s = cfg.beamdepth
     common = dict(
         aperture_m=cfg.detector.aperture_m,
@@ -129,7 +135,7 @@ def mcs_dlam(data: FitData, cfg: Config, depth, jitter_tan: float) -> np.ndarray
     return (
         beam_design(data.rows, origins, angle_jitter=jitter_tan, **common)
         - beam_design(data.rows, origins, **common)
-    ) @ np.asarray(depth.kappa)
+    ).sum(axis=1) * depth.kappa_mean
 
 
 def mcs_shift(
@@ -201,18 +207,46 @@ def pose_shift(
     return worst
 
 
-def error_budget(stat: dict, flux: dict, mcs_d: dict, pose: dict, bg: dict, keys) -> dict:
-    """Per key, each source's magnitude and their quadrature total. The total
-    is NaN when any component is NaN."""
+def density_shift(
+    data: FitData,
+    cfg: Config,
+    nominal: Measurement,
+    *,
+    sky: SkyGrid,
+    cache_dir: str | Path | None = None,
+) -> dict[str, float]:
+    """Largest |shift| with the concrete density moved by +-1 sigma."""
+    p = cfg.physics
+    worst: dict[str, float] = {}
+    for sign in (1, -1):
+        rho = p.concrete_density_gcm3 + sign * p.concrete_density_sigma
+        c = replace(cfg, physics=replace(p, concrete_density_gcm3=rho))
+        m = measure(data, c, sky, cache_dir=cache_dir, with_volume=False)
+        worst = _worst(worst, _delta(m, nominal))
+    return worst
+
+
+def flux_model_shift(
+    data: FitData,
+    cfg: Config,
+    nominal: Measurement,
+    *,
+    sky: SkyGrid,
+    cache_dir: str | Path | None = None,
+) -> dict[str, float]:
+    """Shift when the pinned opacity uses the alternative muon spectrum."""
+    p = cfg.physics
+    c = replace(cfg, physics=replace(p, flux_model=p.flux_model_alt))
+    return _delta(measure(data, c, sky, cache_dir=cache_dir, with_volume=False), nominal)
+
+
+def error_budget(stat: dict, shifts: dict[str, dict[str, float]], keys) -> dict:
+    """Per key: `<k>_stat` (the bootstrap sigma), `<k>_<source>` for every
+    systematic source in `shifts` (|shift|) and their quadrature `<k>_total`.
+    The total is NaN when any component is NaN."""
     out = {}
     for k in keys:
-        parts = {
-            "stat": stat[f"{k}_sigma"],
-            "flux": flux[k],
-            "mcs": mcs_d[k],
-            "pose": pose[k],
-            "bg": bg[k],
-        }
+        parts = {"stat": stat[f"{k}_sigma"]} | {src: d[k] for src, d in shifts.items()}
         parts = {src: abs(float(v)) for src, v in parts.items()}
         for src, v in parts.items():
             out[f"{k}_{src}"] = v

@@ -94,6 +94,9 @@ beamdepth:
   band_sy: 0.32
   w_init_m: 0.3
   h_init_m: 0.6
+  # Depth starts of the pinned pass (plus the free pass's h): its chi^2 still
+  # has local minima, and shallow starts alone miss the deep one.
+  h_starts_m: [0.6, 1.2, 1.8]
   h_max_m: 3.0
   bg_degree: 2
   n_sub: 4

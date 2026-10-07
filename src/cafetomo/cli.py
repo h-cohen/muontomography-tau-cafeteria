@@ -188,13 +188,17 @@ def cmd_validate(args) -> None:
 
 def cmd_uncertainty(args) -> None:
     """uncertainty.json: bootstrap summary, MCS scale (`mcs_<k>`) and the error
-    budget of every quoted quantity."""
+    budget of every quoted quantity: `<k>_stat`, one `<k>_<source>` per
+    systematic (flux scale, MCS, pose, background, concrete density `rho`,
+    muon spectrum `model`) and `<k>_total`."""
     from cafetomo.bootstrap import run_bootstrap
     from cafetomo.measure import measure
     from cafetomo.reconstruct import VoxelSolution
     from cafetomo.systematics import (
         background_shift,
+        density_shift,
         error_budget,
+        flux_model_shift,
         flux_scale_shift,
         mcs,
         mcs_shift,
@@ -239,13 +243,16 @@ def cmd_uncertainty(args) -> None:
         cache_dir=args.cache,
     )
     bg = background_shift(data, cfg, nominal, sky=sky, cache_dir=args.cache)
+    rho = density_shift(data, cfg, nominal, sky=sky, cache_dir=args.cache)
+    model = flux_model_shift(data, cfg, nominal, sky=sky, cache_dir=args.cache)
+    shifts = {"flux": flux, "mcs": mcs_d, "pose": pose, "bg": bg, "rho": rho, "model": model}
     _write_json(
         Path(args.results) / "uncertainty.json",
         {
             "replicas": cfg.uncertainty.n_replicas,
             **stat,
             **{f"mcs_{k}": v for k, v in scat.items()},
-            **error_budget(stat, flux, mcs_d, pose, bg, _BUDGET_KEYS),
+            **error_budget(stat, shifts, _BUDGET_KEYS),
         },
     )
 

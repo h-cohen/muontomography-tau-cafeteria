@@ -5,8 +5,10 @@ from types import EllipsisType
 
 import numpy as np
 
+from cafetomo.config import PhysicsSettings
 from cafetomo.fitdata import FitData, RowIndex
 from cafetomo.forward import ForwardModel
+from cafetomo.muonphysics import Transmission
 from cafetomo.voxels import VoxelGrid
 
 
@@ -71,11 +73,27 @@ def beam_ceiling(
 
 
 def phantom_data(
-    fwd: ForwardModel, truth: np.ndarray, like: FitData, rng: np.random.Generator
+    fwd: ForwardModel,
+    truth: np.ndarray,
+    like: FitData,
+    rng: np.random.Generator,
+    *,
+    physics: PhysicsSettings | None = None,
 ) -> FitData:
     """Truth projected onto `like`'s rows, plus Gaussian noise at `like`'s sigma.
-    Rows with zero weight stay unmeasured."""
+    Rows with zero weight stay unmeasured.
+
+    Without `physics` the truth is an opacity density (1/m) and lambda is its
+    line integral. With it the truth is a mass density (g/cm^3): each ray's
+    slant grammage 100 * integral(rho dl) becomes lambda through the muon
+    transmission of `physics` (muonphysics), as the beam-depth fit models it."""
     clean = fwd.predict(truth)
+    if physics is not None:
+        cos = 1.0 / np.sqrt(1.0 + like.rows.sx**2 + like.rows.sy**2)
+        trans = Transmission(
+            cos, threshold_gev=physics.detector_threshold_gev, model=physics.flux_model
+        )
+        clean = trans.lam(100.0 * clean)
     sigma = np.where(like.w > 0, 1.0 / np.sqrt(np.where(like.w > 0, like.w, 1.0)), 0.0)
     lam = np.where(like.w > 0, clean + rng.normal(size=clean.size) * sigma, 0.0)
     return FitData(lam=lam, w=like.w.copy(), rows=like.rows)
