@@ -47,6 +47,7 @@ def _campaign(cfg, true_pose: Pose):
 
 
 def test_pose_from_free_baseline(cfg):
+    cfg = replace(cfg, selfcal=replace(cfg.selfcal, baseline_m=None))
     p = _pose_from(np.array([1.6, -0.3, 2.5]), cfg)
     assert (p.x, p.y, p.az_deg) == (1.6, -0.3, 2.5)
     assert p.z == cfg.exposure(cfg.selfcal.free_pose).pose.z
@@ -93,6 +94,7 @@ def test_candidate_xy_spans_the_baseline_arc(cfg):
 
 
 def test_pose_result_keys(cfg):
+    cfg = replace(cfg, selfcal=replace(cfg.selfcal, baseline_m=None))
     fit = PoseFit(pose=Pose(1.8, 0.6, 0.0, 1.5), objective=0.9, n_eval=40, converged=True)
     out = pose_result(fit, {"x": 0.02, "y": 0.03, "az_deg": 0.4}, cfg)
     assert set(out) == {

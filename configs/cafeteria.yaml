@@ -21,8 +21,9 @@ exposures:
     pose: {x: 0.0, y: 0.0, z: 0.0, az_deg: 0.0}
   - id: pos1
     root_file: HistsOutDataCafePos1.root
-    # Prior only: a ~1.75 m floor offset along +x. The pose used downstream is
-    # results/pose.json, fitted by `cafetomo selfcal`.
+    # Prior only: a ~1.75 m floor offset along +x. The separation from pos0 is
+    # measured (selfcal.baseline_m); the bearing and azimuth are fitted by
+    # `cafetomo selfcal` into results/pose.json, which is the pose used downstream.
     pose: {x: 1.75, y: 0.0, z: 0.0, az_deg: 0.0}
 
 binning:          # the ROOT bins (0.005 tan), cropped to +-1.25
@@ -60,8 +61,10 @@ reconstruction:
 
 selfcal:
   free_pose: pos1
-  baseline_m: null        # external pos0-pos1 distance; null = fit it (see paper, scale closure)
-  bounds_m: 1.0
+  baseline_m: 2.42        # tape-measured pos0-pos1 floor separation; sets the absolute scale
+  # With the separation fixed the bearing search is +-bounds_m/baseline_m rad
+  # (2.6/2.42 = +-61.5 deg), wide enough to reach the ~42 deg the free fit implies.
+  bounds_m: 2.6
   bounds_deg: 10.0
   spacing_m: 0.4          # coarse lattice for the pose objective
   n_iter: 60
