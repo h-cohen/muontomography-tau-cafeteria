@@ -24,16 +24,6 @@ class AngularHist:
     def total(self) -> int:
         return int(self.values.sum())
 
-    def __add__(self, other: AngularHist) -> AngularHist:
-        same = (self.xedges.shape == other.xedges.shape
-                and self.yedges.shape == other.yedges.shape
-                and np.allclose(self.xedges, other.xedges)
-                and np.allclose(self.yedges, other.yedges))
-        if not same:
-            raise ValueError("cannot add histograms with different binning")
-        return AngularHist(values=self.values + other.values, xedges=self.xedges,
-                           yedges=self.yedges, name=self.name)
-
 
 def save_counts(hist: AngularHist, out_dir: Path, exposure_id: str, meta: dict) -> Path:
     """Write counts_<id>.npz and merge `meta` into the directory's meta.json."""
@@ -90,12 +80,6 @@ class AnalysisGrid:
         histogram convention `np.histogram2d(tan_x, tan_y)`."""
         c = self.centers
         return np.meshgrid(c, c, indexing="ij")
-
-    def occupied(self, min_counts: int = 1) -> np.ndarray:
-        total = np.zeros((self.n_bins, self.n_bins), dtype=np.int64)
-        for v in self.counts.values():
-            total = total + v
-        return total >= min_counts
 
 
 def load_analysis_grid(ingest_dir: str | Path, ids: Sequence[str],

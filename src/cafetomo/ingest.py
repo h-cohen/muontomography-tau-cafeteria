@@ -69,6 +69,9 @@ def read_live_time(path: Path, hist: str = "dT") -> float:
     time the detector was taking data, excluding gaps between runs. Cross-checked
     against the exponential slope of `dT` and the `rate` profile: rate ratios
     agree to 0.3%.
+
+    A missing histogram raises KeyError (uproot's KeyInFileError); `ingest`
+    converts that into a ValueError naming the file.
     """
     import uproot
 
@@ -84,7 +87,11 @@ def read_live_time(path: Path, hist: str = "dT") -> float:
 
 
 def ingest(cfg: Config, out_dir: Path) -> list[IngestResult]:
-    """Write counts_<id>.npz for every exposure and the open-sky reference."""
+    """Write counts_<id>.npz for every exposure and the open-sky reference.
+
+    Every source is read and validated before anything is written, so a failure
+    never leaves a half-ingested directory.
+    """
     out_dir = Path(out_dir)
     edges = cfg.binning.edges()
     sources: list[tuple[str, str, str, dict]] = [
@@ -92,7 +99,7 @@ def ingest(cfg: Config, out_dir: Path) -> list[IngestResult]:
     s = cfg.sky_reference
     sources.append((s.id, s.root_file, s.root_hist, {"role": "open_sky_reference"}))
 
-    results = []
+    loaded = []
     for sid, fname, hist, meta in sources:
         path = cfg.data_dir / fname
         h, total = read_root_counts(path, hist, edges)
@@ -101,6 +108,10 @@ def ingest(cfg: Config, out_dir: Path) -> list[IngestResult]:
         except KeyError as exc:
             raise ValueError(f"{path.name}: no 'dT' histogram; the absolute opacity gauge "
                              "needs a measured live time") from exc
+        loaded.append((sid, fname, hist, meta, h, total, live))
+
+    results = []
+    for sid, fname, hist, meta, h, total, live in loaded:
         out = save_counts(h, out_dir, sid, dict(meta, exposure=sid, source=fname,
                                                  root_hist=hist, total_in_file=total,
                                                  live_time_s=live))

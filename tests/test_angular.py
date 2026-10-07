@@ -19,20 +19,9 @@ def _hist(n=500, fill=1):
                        xedges=edges, yedges=edges)
 
 
-def test_counts_are_integers_and_additive():
-    s = _hist(fill=2) + _hist(fill=1)
-    assert s.total == 3 * 500 * 500
-    assert s.values.dtype == np.int64
-
-
-def test_adding_different_binning_is_an_error():
-    with pytest.raises(ValueError, match="binning"):
-        _hist(n=500) + _hist(n=400)
-
-
 def test_save_and_load_roundtrip(tmp_path):
     h = _hist(n=50, fill=3)
-    p = save_counts(h, tmp_path, "P0", meta={"exposure": "P0", "n_files": 21})
+    p = save_counts(h, tmp_path, "P0", meta={"exposure": "P0", "live_time_s": 12.5})
     assert p.name == "counts_P0.npz"
 
     back = load_counts(p)
@@ -41,7 +30,7 @@ def test_save_and_load_roundtrip(tmp_path):
     assert back.name == "txty"
 
     meta = json.loads((tmp_path / "meta.json").read_text())
-    assert meta["exposures"]["P0"]["n_files"] == 21
+    assert meta["exposures"]["P0"]["live_time_s"] == 12.5
     assert meta["exposures"]["P0"]["total_counts"] == h.total
 
 
@@ -96,17 +85,6 @@ def test_grid_centres_and_mesh():
     assert tx[0, 0] == pytest.approx(tx[0, 49])
     assert ty[0, 0] == pytest.approx(ty[49, 0])
     assert tx[1, 0] > tx[0, 0]
-
-
-def test_occupied_is_the_union_over_exposures():
-    a = np.zeros((50, 50), np.int64)
-    a[10, 10] = 5
-    b = np.zeros((50, 50), np.int64)
-    b[20, 20] = 5
-    g = AnalysisGrid(edges=np.linspace(-1.25, 1.25, 51), counts={"A": a, "B": b})
-    occ = g.occupied()
-    assert occ[10, 10] and occ[20, 20]
-    assert occ.sum() == 2
 
 
 def test_load_analysis_grid_reads_ingested_counts(tmp_path):

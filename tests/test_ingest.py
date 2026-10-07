@@ -67,6 +67,19 @@ def test_ingest_without_dt_names_the_file(cfg, tmp_path):
         ingest(replace(cfg, data_dir=data), tmp_path / "out")
 
 
+def test_failure_on_a_later_source_writes_nothing(cfg, tmp_path):
+    edges = np.linspace(-2, 2, 801)
+    data = tmp_path / "data"
+    data.mkdir()
+    for e in cfg.exposures:
+        _write_th2(data / e.root_file, np.ones((800, 800)), edges, with_dt=True)
+    _write_th2(data / cfg.sky_reference.root_file, np.ones((800, 800)), edges)
+    out = tmp_path / "out"
+    with pytest.raises(ValueError, match="no 'dT' histogram"):
+        ingest(replace(cfg, data_dir=data), out)
+    assert not out.exists() or not list(out.iterdir())
+
+
 def test_live_times_unknown_id_is_an_error(cfg, tmp_path):
     ingest(cfg, tmp_path)
     with pytest.raises(ValueError, match="nope"):
