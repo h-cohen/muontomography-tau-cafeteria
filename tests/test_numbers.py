@@ -24,8 +24,26 @@ def test_nan_renders_as_dash():
     assert format_value(1.5, float("nan")) == "1.5"
 
 
-def test_exponent_uses_num():
+def test_large_values_stay_fixed_notation():
+    assert format_value(1134.7) == "1135"
+    assert format_value(12345.6) == "12346"
+
+
+def test_tiny_values_use_num():
+    assert format_value(0.000888) == "\\num{0.000888}"
     assert format_value(8.88e-16) == "\\num{8.88e-16}"
+
+
+def test_midrange_and_negative():
+    assert format_value(7.04) == "7.04"
+    assert format_value(-0.07) == "\\ensuremath{-0.07}"
+    assert format_value(-0.0376, 0.01) == "\\ensuremath{-0.038}"
+
+
+def test_infinity_raises_with_origin(tmp_path):
+    (tmp_path / "z.json").write_text('{"k": Infinity}')
+    with pytest.raises(ValueError, match=r"z\.json:k"):
+        flatten(tmp_path)
 
 
 def test_flatten_pairs_sigma_and_skips_lists(tmp_path):

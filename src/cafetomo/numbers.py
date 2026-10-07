@@ -2,8 +2,8 @@
 
 A value with a sibling `<key>_sigma` is rounded to the decimal place of that
 sigma's second significant digit, and the sigma with it; any other float keeps
-three significant digits; integers are verbatim; NaN renders as a dash and exponent
-notation goes through siunitx `\\num`.
+three significant digits; integers are verbatim; NaN renders as a dash, magnitudes below 1e-3 go
+through siunitx `\\num`, negatives are wrapped in `\\ensuremath`; infinities raise.
 """
 
 import json
@@ -24,15 +24,23 @@ def _decimals(sigma: float) -> int:
     return max(0, 1 - int(math.floor(math.log10(abs(sigma)))))
 
 
+def _plain(value: float, sigma: float | None) -> str:
+    if sigma is not None and math.isfinite(sigma) and sigma > 0:
+        return f"{value:.{_decimals(sigma)}f}"
+    if abs(value) >= 100:
+        return f"{value:.0f}"
+    if value != 0 and abs(value) < 1e-3:
+        return f"\\num{{{value:.3g}}}"
+    return f"{value:.3g}"
+
+
 def format_value(value: float | int, sigma: float | None = None) -> str:
     if isinstance(value, int):
         return str(value)
     if math.isnan(value):
         return "--"
-    if sigma is not None and math.isfinite(sigma) and sigma > 0:
-        return f"{value:.{_decimals(sigma)}f}"
-    text = f"{value:.3g}"
-    return f"\\num{{{text}}}" if "e" in text else text
+    text = _plain(value, sigma)
+    return f"\\ensuremath{{{text}}}" if text.startswith("-") else text
 
 
 def flatten(results_dir: Path) -> dict[str, str]:
@@ -44,6 +52,8 @@ def flatten(results_dir: Path) -> dict[str, str]:
             k: v for k, v in doc.items() if isinstance(v, int | float) and not isinstance(v, bool)
         }
         for key, value in scalars.items():
+            if isinstance(value, float) and math.isinf(value):
+                raise ValueError(f"non-finite value in {path.name}:{key}")
             if key.endswith("_sigma") and key[: -len("_sigma")] in scalars:
                 base = scalars[key[: -len("_sigma")]]
                 text = (
