@@ -5,12 +5,11 @@ import pytest
 from scipy import optimize
 
 from cafetomo.beamdepth import beam_design, box_path_lengths, fit_beam_depth, zprofile_depth
-from cafetomo.config import Pose
 from cafetomo.fitdata import FitData
-from cafetomo.forward import build_forward_model
-from cafetomo.phantom import beam_ceiling, phantom_data, sky_rows
+from cafetomo.phantom import beam_ceiling, sky_rows
 from cafetomo.reconstruct import VoxelSolution
 from cafetomo.voxels import VoxelGrid
+from phantoms import beam_phantom
 
 
 def test_box_path_vertical_and_oblique():
@@ -28,24 +27,10 @@ def test_box_path_clips_corner():
     assert L[0] == pytest.approx(2.0 * np.sqrt(1.01), rel=1e-6)
 
 
-def _phantom(cfg, h_true, rng):
-    cfg = cfg.with_pose("pos1", Pose(1.78, 0.72, 0.0, 0.0))
-    rows = sky_rows(cfg.position_ids, 0.9, 36)
-    # x spans -9..10 m so every slab-bearing ray (|sx| <= 0.9 up to z = 8.45 m
-    # from either position) stays inside the grid: a slab cut off by the grid
-    # edge is a sharp background step the smooth background cannot follow.
-    g = VoxelGrid(origin=(-9.0, -6.0, 6.5), spacing=0.05, shape=(380, 240, 70))
-    truth = beam_ceiling(g, xs=(-1.7, 0.0, 1.7, 3.4), z0=7.0, w=0.3, h=h_true,
-                         kappa=(1.2,) * 4, y_extent=(-5.0, 5.0), slab_thickness=0.2)
-    fwd = build_forward_model(rows, cfg, grid=g)
-    like = FitData(lam=np.zeros(rows.n_rows), w=np.full(rows.n_rows, 1 / 0.02**2), rows=rows)
-    return cfg, phantom_data(fwd, truth, like, rng)
-
-
 @pytest.mark.slow
 @pytest.mark.parametrize("h_true", [0.6, 1.25])
 def test_recovers_depth(cfg, h_true):
-    c, data = _phantom(cfg, h_true, np.random.default_rng(3))
+    c, data = beam_phantom(cfg, h_true, np.random.default_rng(3))
     fit = fit_beam_depth(data, c, xs_init=(-1.7, 0.0, 1.7, 3.4), z0_init=7.1)
     assert not fit.at_bound
     assert fit.h == pytest.approx(h_true, abs=0.15)
@@ -53,7 +38,7 @@ def test_recovers_depth(cfg, h_true):
 
 
 def test_at_bound_flag(cfg):
-    c, data = _phantom(cfg, 0.6, np.random.default_rng(4))
+    c, data = beam_phantom(cfg, 0.6, np.random.default_rng(4))
     tight = replace(c, beamdepth=replace(c.beamdepth, h_max_m=0.3, h_init_m=0.2))
     assert fit_beam_depth(data, tight, xs_init=(-1.7, 0.0, 1.7, 3.4), z0_init=7.1).at_bound
 
