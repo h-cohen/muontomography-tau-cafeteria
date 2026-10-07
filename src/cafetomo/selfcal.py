@@ -54,23 +54,61 @@ def cross_position_score(data: FitData, cfg: Config, grid: VoxelGrid) -> float:
     return float(np.mean(scores))
 
 
-def _objective_grids(cfg: Config, data: FitData) -> tuple[VoxelGrid, VoxelGrid]:
-    """Coarse lattice from the prior, padded so a pose anywhere inside the
-    search bounds stays inside it, and its twin shifted by half a voxel in x
-    and y. A lattice coarser than the features aliases them: the score then
-    follows the phase of the lattice under the beams, not the pose. Averaging
-    the two phases cancels that to first order."""
+def _search_space(cfg: Config) -> tuple[np.ndarray, list[tuple[float, float]]]:
+    """Start point and bounds of the pose search, around the config's prior:
+    (x, y, az) with the baseline free, (bearing, az) with it fixed."""
     s = cfg.selfcal
-    g = auto_grid(replace(cfg.volume, spacing_m=s.spacing_m), cfg.origins(),
-                  data.rows.t_reach(), aperture_m=cfg.detector.aperture_m)
-    pad = int(np.ceil(s.bounds_m / g.spacing))
+    prior = cfg.exposure(s.free_pose).pose
+    az = (prior.az_deg - s.bounds_deg, prior.az_deg + s.bounds_deg)
+    if s.baseline_m is None:
+        return (np.array([prior.x, prior.y, prior.az_deg]),
+                [(prior.x - s.bounds_m, prior.x + s.bounds_m),
+                 (prior.y - s.bounds_m, prior.y + s.bounds_m), az])
+    b0 = float(np.arctan2(prior.y, prior.x))
+    db = s.bounds_m / s.baseline_m
+    return np.array([b0, prior.az_deg]), [(b0 - db, b0 + db), az]
+
+
+def _candidate_xy(cfg: Config) -> np.ndarray:
+    """[k, 2] floor positions whose bounding box holds every candidate of the
+    search: the corners of the box, or the ends and axis extremes of the arc."""
+    s = cfg.selfcal
+    _, bounds = _search_space(cfg)
+    if s.baseline_m is None:
+        (x0, x1), (y0, y1), _ = bounds
+        return np.array([[x0, y0], [x0, y1], [x1, y0], [x1, y1]])
+    lo, hi = bounds[0]
+    quarter = np.pi / 2
+    axes = quarter * np.arange(np.ceil(lo / quarter), np.floor(hi / quarter) + 1)
+    bearings = np.concatenate([[lo, hi], axes])
+    return s.baseline_m * np.stack([np.cos(bearings), np.sin(bearings)], axis=-1)
+
+
+def _objective_grids(cfg: Config, data: FitData) -> tuple[VoxelGrid, VoxelGrid]:
+    """Coarse lattice holding the full ray footprint of every candidate pose,
+    and its twin shifted by half a voxel in x and y.
+
+    The footprint is taken from every fixed position plus the extremes of the
+    free position's search region. Rotating the detector by up to `bounds_deg`
+    carries its corner rows from tangent t to t (cos d + sin d), capped at
+    `opacity.max_tan`, beyond which no row is kept. A lattice coarser than the
+    features aliases them: the score then follows the phase of the lattice
+    under the beams, not the pose. Averaging the two phases suppresses that."""
+    s = cfg.selfcal
+    z = cfg.exposure(s.free_pose).pose.z
+    origins = {pid: o for pid, o in cfg.origins().items() if pid != s.free_pose}
+    for k, (x, y) in enumerate(_candidate_xy(cfg)):
+        origins[f"{s.free_pose}@{k}"] = (float(x), float(y), z)
+    d = np.radians(min(s.bounds_deg, 45.0))
+    reach = min(data.rows.t_reach() * (np.cos(d) + np.sin(d)), cfg.opacity.max_tan)
+    g = auto_grid(replace(cfg.volume, spacing_m=s.spacing_m, xy_m=None), origins, reach,
+                  aperture_m=cfg.detector.aperture_m)
     nx, ny, nz = g.shape
-    x0, y0 = g.origin[0] - pad * g.spacing, g.origin[1] - pad * g.spacing
-    shape = (nx + 2 * pad + 1, ny + 2 * pad + 1, nz)
+    shape = (nx + 1, ny + 1, nz)
     half = 0.5 * g.spacing
-    return (VoxelGrid(origin=(x0, y0, g.origin[2]), spacing=g.spacing, shape=shape),
-            VoxelGrid(origin=(x0 - half, y0 - half, g.origin[2]), spacing=g.spacing,
-                      shape=shape))
+    return (VoxelGrid(origin=g.origin, spacing=g.spacing, shape=shape),
+            VoxelGrid(origin=(g.origin[0] - half, g.origin[1] - half, g.origin[2]),
+                      spacing=g.spacing, shape=shape))
 
 
 def _pose_from(theta: np.ndarray, cfg: Config) -> Pose:
@@ -86,9 +124,20 @@ def _pose_from(theta: np.ndarray, cfg: Config) -> Pose:
 
 def fit_pose(grid: AnalysisGrid, cfg: Config, live_time: dict[str, float]) -> PoseFit:
     """Minimise the cross-position score over the free position's pose,
-    bounded around the config's prior."""
+    bounded around the config's prior.
+
+    Limits of the fitted pose:
+    - The component along the beams (y) is pinned only by the beam ends and
+      weakly: on a beam-ceiling phantom the free-baseline fit gave y = 0.54 m
+      against a true 0.70 m while x was right to 0.02 m.
+    - Azimuth steps below about 1 degree are invisible: every detector bin is
+      scattered to the nearest sky bin, so a small rotation often leaves the
+      row set unchanged and the score flat. Any az within such a flat stretch
+      is as good as any other.
+    - The score is not zero at the true pose (one view predicts the other
+      only through a min-norm reconstruction), and that geometric part can
+      pull the minimum; nothing here measures that pull."""
     s = cfg.selfcal
-    prior = cfg.exposure(s.free_pose).pose
     nominal = build_fit_data(solve_opacity(grid, cfg, live_time), cfg,
                              poisson_sigma(grid, cfg, live_time))
     vgrids = _objective_grids(cfg, nominal)
@@ -99,16 +148,7 @@ def fit_pose(grid: AnalysisGrid, cfg: Config, live_time: dict[str, float]) -> Po
                               poisson_sigma(grid, c, live_time))
         return float(np.mean([cross_position_score(data, c, g) for g in vgrids]))
 
-    if s.baseline_m is None:
-        x0 = np.array([prior.x, prior.y, prior.az_deg])
-        bounds = [(prior.x - s.bounds_m, prior.x + s.bounds_m),
-                  (prior.y - s.bounds_m, prior.y + s.bounds_m),
-                  (prior.az_deg - s.bounds_deg, prior.az_deg + s.bounds_deg)]
-    else:
-        b0 = float(np.arctan2(prior.y, prior.x))
-        db = s.bounds_m / s.baseline_m
-        x0 = np.array([b0, prior.az_deg])
-        bounds = [(b0 - db, b0 + db), (prior.az_deg - s.bounds_deg, prior.az_deg + s.bounds_deg)]
+    x0, bounds = _search_space(cfg)
     res = optimize.minimize(objective, x0, method="Powell", bounds=bounds,
                             options={"xtol": 1e-3, "ftol": 1e-4, "maxiter": 60})
     return PoseFit(pose=_pose_from(res.x, cfg), objective=float(res.fun),
@@ -117,7 +157,13 @@ def fit_pose(grid: AnalysisGrid, cfg: Config, live_time: dict[str, float]) -> Po
 
 def pose_bootstrap(grid: AnalysisGrid, cfg: Config, live_time: dict[str, float], *,
                    n: int, seed: int) -> dict[str, float]:
-    """Spread of the fitted pose over Poisson replicas of every histogram."""
+    """Spread of the fitted pose over Poisson replicas of every histogram.
+
+    This is the counting-statistics spread only. It inherits the limits listed
+    in `fit_pose`: the y spread is wide along the beams, the az spread partly
+    reflects the sky binning rather than statistics, and the geometric bias of
+    the cross-validation score is identical in every replica, so it does not
+    appear here."""
     if n < 2:
         raise ValueError(f"pose bootstrap needs at least 2 replicas for a spread, got {n}")
     rng = np.random.default_rng(seed)
