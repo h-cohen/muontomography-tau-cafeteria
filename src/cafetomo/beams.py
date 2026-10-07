@@ -367,9 +367,12 @@ def verify_gate(
     """Do the reconstruction's beams sit where the raw data put them?
 
     Data beams are peaks of the positions' mean x-profile projected to the plane
-    z_m; reconstruction beams are peaks of its maximum-mass layer, profiled across
-    x over |y| < 2 m. Each data beam's offset is to the nearest reconstruction
-    beam; the gate passes when their mean |offset| is within s.gate_max_offset_m.
+    z_m; reconstruction beams are peaks of its voxel layer nearest z_m (the
+    triangulated beam height), profiled across x over |y| < 2 m. The layer is not
+    the maximum-mass one: a heavy slab above the beams outweighs them, and on the
+    real data would be picked instead, failing the gate for the wrong reason.
+    Each data beam's offset is to the nearest reconstruction beam;
+    the gate passes when their mean |offset| is within s.gate_max_offset_m.
     Reconstruction peaks are sought only where the data profile is measured, so
     side-wall artefacts outside the shared view cannot claim a match.
     """
@@ -386,7 +389,7 @@ def verify_gate(
     pk_data = beam_peaks(xgrid, data_prof, s.prominence_sigmas)
 
     pos = np.maximum(sol.rho3(), 0.0)
-    iz = int(np.argmax(pos.sum(axis=(0, 1))))
+    iz = int(np.argmin(np.abs(g.axis_centers(2) - z_m)))
     sl = pos[:, :, iz]
     yband = np.abs(ys_r) < _GATE_Y_BAND_M
     prof_r = gaussian_filter1d(sl[:, yband].mean(axis=1), _GATE_SMOOTH_M / g.spacing)

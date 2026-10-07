@@ -94,6 +94,23 @@ def test_verify_gate_passes_matching_reconstruction():
     assert gate["recon_layer_z"] == pytest.approx(7.0, abs=0.11)
 
 
+def test_verify_gate_uses_the_layer_at_the_beam_height_not_the_heaviest():
+    centers = make_sky_grid(1.0, 200).centers
+    origins = {"pos0": (0.0, 0.0, 0.0), "pos1": (1.78, 0.0, 0.0)}
+    xs = (-3.4, -1.7, 0.0, 1.7, 3.4)
+    images = _comb_images(origins, centers, xs, 7.0)
+    g = VoxelGrid(origin=(-6.0, -4.0, 6.0), spacing=0.1, shape=(120, 80, 30))
+    truth = beam_ceiling(
+        g, xs=xs, z0=6.9, w=0.2, h=0.2, kappa=(1.0,) * 5, y_extent=(-4.0, 4.0), slab_kappa=0.0
+    ).reshape(g.shape)
+    truth[:, :, 25:] += 5.0  # heavy uniform slab near z = 8.6, far above the beams
+    sol = VoxelSolution(rho=truth.ravel(), grid=g, offsets={}, position_ids=tuple(origins))
+    assert np.argmax(truth.sum(axis=(0, 1))) >= 25
+    gate = verify_gate(images, origins, centers, 7.0, sol, BeamSettings())
+    assert gate["passed"] and gate["n_beams_recon"] >= 3
+    assert gate["recon_layer_z"] == pytest.approx(7.0, abs=0.11)
+
+
 def _grid_data(images, sky, pids):
     rows = sky_rows(pids, float(sky.edges[-1]), sky.n_bins)
     lam = np.concatenate(
