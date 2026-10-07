@@ -1,0 +1,195 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { worldToVoxel, reorderForTexture, rayBox, voxelIndex, cubeGrid } from '../src/grid.mjs';
+
+const META = { shape: [4, 3, 2], spacing_m: 0.5, origin_m: [1, 2, 3] };
+
+test('worldToVoxel scales by the spacing from the grid corner', () => {
+  assert.deepEqual(worldToVoxel([2.5, 3.0, 3.5], META), [3, 2, 1]);
+});
+
+test('worldToVoxel at the origin is voxel (0,0,0)', () => {
+  const v = worldToVoxel(META.origin_m, META);
+  assert.deepEqual(v.map((x) => Math.round(x * 1e6) / 1e6), [0, 0, 0]);
+});
+
+test('voxelIndex addresses C-order [nx,ny,nz] data', () => {
+  const shape = [2, 2, 2];
+  const data = new Float32Array([0, 1, 2, 3, 4, 5, 6, 7]); // index = i*4 + j*2 + k
+  assert.equal(data[voxelIndex(shape, 0, 0, 0)], 0);
+  assert.equal(data[voxelIndex(shape, 1, 0, 1)], 5);
+  assert.equal(data[voxelIndex(shape, 1, 1, 1)], 7);
+});
+
+test('voxelIndex floors a fractional voxel coordinate to the containing box, not the nearest integer', () => {
+  // Voxel k occupies [k, k+1) in worldToVoxel units (center k+0.5), matching
+  // GL NEAREST texture filtering (texel index = floor(coord)). i=1.8 lies in
+  // box [1,2) -- a round-to-nearest-integer implementation would wrongly
+  // pick voxel 2 (round(1.8) = 2) instead of voxel 1.
+  const shape = [4, 1, 1];
+  assert.equal(voxelIndex(shape, 1.8, 0, 0), 1);
+  assert.equal(voxelIndex(shape, 1.01, 0, 0), 1);
+  assert.equal(voxelIndex(shape, 1.99, 0, 0), 1);
+});
+
+test('reorderForTexture transposes numpy C-order (z-fastest) to GL x-fastest', () => {
+  const shape = [3, 2, 2]; // nx=3, ny=2, nz=2, all distinct
+  const data = Float32Array.from({ length: 12 }, (_, n) => n);
+  const out = reorderForTexture(data, shape);
+  const [nx, ny, nz] = shape;
+  const expected = new Float32Array(nx * ny * nz);
+  for (let x = 0; x < nx; x++) {
+    for (let y = 0; y < ny; y++) {
+      for (let z = 0; z < nz; z++) {
+        expected[z * ny * nx + y * nx + x] = data[x * ny * nz + y * nz + z];
+      }
+    }
+  }
+  assert.deepEqual(Array.from(out), Array.from(expected));
+  // guard against a stub that returns the input unchanged (the buggy behavior)
+  assert.notDeepEqual(Array.from(out), Array.from(data));
+  assert.equal(out.length, data.length);
+  assert.notEqual(out, data);
+  assert.deepEqual(Array.from(data), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]); // not mutated
+});
+
+test('reorderForTexture passthrough for [1,1,1]', () => {
+  const data = new Float32Array([42]);
+  const out = reorderForTexture(data, [1, 1, 1]);
+  assert.deepEqual(Array.from(out), [42]);
+  assert.notEqual(out, data);
+});
+
+// rayBox mirrors the shader's slab intersection (FRAGMENT_SRC in app.mjs):
+// same sign-preserving 1e-8 guard on a zero direction component, tEnter
+// clamped at 0, null when the ray misses the box (tExit <= tEnter).
+
+test('rayBox: axis-aligned ray through a unit box gives the expected entry/exit', () => {
+  const min = [0, 0, 0], max = [1, 1, 1];
+  const hit = rayBox([0.5, 0.5, -2], [0, 0, 1], min, max);
+  assert.ok(hit);
+  const [tEnter, tExit] = hit;
+  assert.ok(Math.abs(tEnter - 2) < 1e-6);
+  assert.ok(Math.abs(tExit - 3) < 1e-6);
+});
+
+test('rayBox: a miss returns null', () => {
+  const min = [0, 0, 0], max = [1, 1, 1];
+  const hit = rayBox([5, 5, -2], [0, 0, 1], min, max);
+  assert.equal(hit, null);
+});
+
+test('rayBox: origin inside the box clamps tEnter to 0', () => {
+  const min = [0, 0, 0], max = [1, 1, 1];
+  const hit = rayBox([0.5, 0.5, 0.5], [0, 0, 1], min, max);
+  assert.ok(hit);
+  const [tEnter, tExit] = hit;
+  assert.equal(tEnter, 0);
+  assert.ok(Math.abs(tExit - 0.5) < 1e-6);
+});
+
+test('rayBox: a ray with a zero direction component still works (guard)', () => {
+  const min = [0, 0, 0], max = [1, 1, 1];
+  const hit = rayBox([0.5, -2, 0.5], [0, 1, 0], min, max);
+  assert.ok(hit);
+  const [tEnter, tExit] = hit;
+  assert.ok(Math.abs(tEnter - 2) < 1e-6);
+  assert.ok(Math.abs(tExit - 3) < 1e-6);
+});
+
+// voxelMarch: exact voxel-to-voxel traversal (Amanatides-Woo DDA) used by the
+// "Voxel cubes" render mode and its hover mirror. Visits every voxel the ray
+// passes through, in order, with the axis of the face it entered through.
+import { voxelMarch } from '../src/grid.mjs';
+
+const CUBE_META = { shape: [4, 3, 5], origin_m: [0, 0, 1], spacing_m: 0.5 };
+
+test('voxelMarch: a vertical ray from above visits one column top-down, entering through z faces', () => {
+  const seen = [];
+  voxelMarch([0.75, 0.25, 10], [0, 0, -1], CUBE_META, (i, j, k, axis) => { seen.push([i, j, k, axis]); return false; });
+  assert.deepEqual(seen.map((v) => v.slice(0, 3)), [[1, 0, 4], [1, 0, 3], [1, 0, 2], [1, 0, 1], [1, 0, 0]]);
+  assert.ok(seen.every((v) => v[3] === 2));
+});
+
+test('voxelMarch: stops at the first voxel the visitor accepts', () => {
+  const seen = [];
+  const hit = voxelMarch([0.75, 0.25, 10], [0, 0, -1], CUBE_META, (i, j, k) => { seen.push(k); return k === 2; });
+  assert.deepEqual(hit.slice(0, 3), [1, 0, 2]);
+  assert.deepEqual(seen, [4, 3, 2]);
+});
+
+test('voxelMarch: a diagonal ray in x-z steps through adjacent voxels only', () => {
+  const seen = [];
+  const d = [1 / Math.SQRT2, 0, 1 / Math.SQRT2];
+  voxelMarch([-0.1, 0.25, 0.9], d, CUBE_META, (i, j, k, axis) => { seen.push([i, j, k, axis]); return false; });
+  assert.ok(seen.length >= 4);
+  for (let n = 1; n < seen.length; n++) {
+    const dx = seen[n][0] - seen[n - 1][0], dz = seen[n][2] - seen[n - 1][2];
+    assert.equal(Math.abs(dx) + Math.abs(dz), 1, `step ${n} jumps a voxel`);
+    assert.equal(seen[n][3], dx !== 0 ? 0 : 2, `step ${n} reports the wrong entry face`);
+  }
+});
+
+test('voxelMarch: a ray that misses the box visits nothing', () => {
+  let n = 0;
+  const hit = voxelMarch([10, 10, 10], [0, 0, 1], CUBE_META, () => { n++; return true; });
+  assert.equal(hit, null);
+  assert.equal(n, 0);
+});
+
+// blockAverage: display-only merge of b x b x b voxels into one cube for the
+// "Cube size" control. Mean over the voxels `keep` accepts (and that are
+// finite); NaN when none are -- "no constrained voxel here", never 0.
+import { blockAverage } from '../src/grid.mjs';
+
+test('blockAverage: means each block and keeps partial edge blocks', () => {
+  const shape = [3, 2, 2];                       // x=2 is a partial block at b=2
+  const v = new Float32Array(12).map((_, n) => n);
+  const out = blockAverage(v, shape, 2, () => true);
+  assert.deepEqual(out.shape, [2, 1, 1]);
+  // block (0,0,0): x 0-1, y 0-1, z 0-1 -> indices x*4+y*2+z for x<2
+  assert.equal(out.values[0], (0 + 1 + 2 + 3 + 4 + 5 + 6 + 7) / 8);
+  assert.equal(out.values[1], (8 + 9 + 10 + 11) / 4);   // partial block: only x=2
+});
+
+test('blockAverage: gated voxels are excluded, and an all-gated block is NaN', () => {
+  const shape = [2, 2, 2];
+  const v = new Float32Array([1, 1, 1, 1, 1, 1, 1, 9]);
+  assert.equal(blockAverage(v, shape, 2, (n) => n !== 7).values[0], 1);
+  assert.ok(Number.isNaN(blockAverage(v, shape, 2, () => false).values[0]));
+});
+
+test('blockAverage: block size 1 returns the values unchanged', () => {
+  const v = new Float32Array([3, 1, 4, 1, 5, 9, 2, 6]);
+  const out = blockAverage(v, [2, 2, 2], 1, () => true);
+  assert.deepEqual(Array.from(out.values), Array.from(v));
+});
+
+test('voxelIndex floors and returns -1 outside the grid', () => {
+  const shape = [4, 3, 2];
+  assert.equal(voxelIndex(shape, 0, 0, 0), 0);
+  assert.equal(voxelIndex(shape, 1.99, 2.5, 1.2), 1 * 3 * 2 + 2 * 2 + 1);
+  assert.equal(voxelIndex(shape, -0.01, 0, 0), -1);
+  assert.equal(voxelIndex(shape, 4, 0, 0), -1);
+  assert.equal(voxelIndex(shape, 0, 0, 2), -1);
+});
+
+test('cubeGrid at block 1 is the layer itself, unbaked', () => {
+  const meta = { shape: [2, 2, 2], spacing_m: 0.5, origin_m: [0, 0, 0] };
+  const data = Float32Array.from([1, 2, 3, 4, 5, 6, 7, 8]);
+  const g = cubeGrid(data, meta, 1, () => true);
+  assert.equal(g.values, data);
+  assert.deepEqual(g.shape, [2, 2, 2]);
+  assert.equal(g.spacing, 0.5);
+  assert.equal(g.baked, false);
+});
+
+test('cubeGrid above block 1 is the kept-voxel block mean, baked', () => {
+  const meta = { shape: [2, 2, 2], spacing_m: 0.5, origin_m: [0, 0, 0] };
+  const data = Float32Array.from([1, 2, 3, 4, 5, 6, 7, 100]);
+  const g = cubeGrid(data, meta, 2, (n) => n !== 7);
+  assert.deepEqual(g.shape, [1, 1, 1]);
+  assert.equal(g.spacing, 1.0);
+  assert.equal(g.baked, true);
+  assert.ok(Math.abs(g.values[0] - 4) < 1e-6);   // mean of 1..7
+});

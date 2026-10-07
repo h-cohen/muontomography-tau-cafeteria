@@ -1,0 +1,158 @@
+export function worldToVoxel(p, meta) {
+  const s = meta.spacing_m;
+  return [
+    (p[0] - meta.origin_m[0]) / s,
+    (p[1] - meta.origin_m[1]) / s,
+    (p[2] - meta.origin_m[2]) / s,
+  ];
+}
+
+// Flat numpy-order index of the voxel containing fractional voxel-space
+// coordinate (i, j, k) (as returned by worldToVoxel), or -1 outside the grid.
+// Voxel k occupies the half-open box [k, k+1) in this coordinate (center at
+// k+0.5) -- the SAME convention GL's NEAREST texture filtering uses for a
+// texture coordinate scaled by the axis size (texel index = floor(coord)).
+// Uses Math.floor, not Math.round: rounding to the nearest INTEGER (rather
+// than the nearest voxel BOX) is off by up to half a voxel and disagrees with
+// which voxel the GPU actually sampled -- exactly the kind of drift hover
+// picking must not have from the renderer.
+export function voxelIndex(shape, i, j, k) {
+  const [nx, ny, nz] = shape;
+  const ii = Math.floor(i), jj = Math.floor(j), kk = Math.floor(k);
+  if (ii < 0 || ii >= nx || jj < 0 || jj >= ny || kk < 0 || kk >= nz) return -1;
+  return ii * ny * nz + jj * nz + kk;
+}
+
+// Slab intersection mirroring the shader's box march (FRAGMENT_SRC in
+// app.mjs): same sign-preserving 1e-8 guard on a zero/near-zero direction
+// component (so 1/dir never divides by exact zero), tEnter clamped at 0, and
+// null when the ray misses the box (tExit <= tEnter). picker.mjs's
+// pickFogAlong uses this so CPU-side hover picking marches the same box the
+// GPU shader does.
+export function rayBox(origin, dir, min, max) {
+  const invDir = [0, 0, 0];
+  for (let a = 0; a < 3; a++) {
+    const d = dir[a];
+    const safe = Math.abs(d) < 1e-8 ? (d >= 0 ? 1e-8 : -1e-8) : d;
+    invDir[a] = 1 / safe;
+  }
+  let tEnter = -Infinity, tExit = Infinity;
+  for (let a = 0; a < 3; a++) {
+    const t0 = (min[a] - origin[a]) * invDir[a];
+    const t1 = (max[a] - origin[a]) * invDir[a];
+    tEnter = Math.max(tEnter, Math.min(t0, t1));
+    tExit = Math.min(tExit, Math.max(t0, t1));
+  }
+  tEnter = Math.max(tEnter, 0);
+  if (tExit <= tEnter) return null;
+  return [tEnter, tExit];
+}
+
+// numpy C-order for shape [nx,ny,nz] is z-fastest: data[x*ny*nz + y*nz + z].
+// WebGL's texImage3D reads its buffer x-fastest: texel (x,y,z) at
+// buf[z*ny*nx + y*nx + x]. Reorder into a new buffer for the GPU upload only;
+// `data` itself (and anything else reading it, e.g. voxelIndex lookups) stays
+// numpy-order.
+export function reorderForTexture(data, shape) {
+  const [nx, ny, nz] = shape;
+  const out = new Float32Array(nx * ny * nz);
+  for (let x = 0; x < nx; x++) {
+    for (let y = 0; y < ny; y++) {
+      for (let z = 0; z < nz; z++) {
+        out[z * ny * nx + y * nx + x] = data[x * ny * nz + y * nz + z];
+      }
+    }
+  }
+  return out;
+}
+
+// Exact voxel-to-voxel traversal (Amanatides & Woo 1987 DDA) for the "Voxel
+// cubes" render mode. Enters the box via rayBox (same slab test and 1e-8
+// guard as the shader), then steps one voxel face at a time, calling
+// visit(i, j, k, axis) for every voxel in order -- `axis` is the face the
+// ray entered through (0 x, 1 y, 2 z; -1 when the ray starts inside the
+// box). Returns [i, j, k, axis] for the first voxel visit() accepts, or null.
+// FRAGMENT_SRC's cube branch runs this same algorithm; keep them in step.
+export function voxelMarch(origin, dir, meta, visit) {
+  const [nx, ny, nz] = meta.shape;
+  const n = [nx, ny, nz];
+  const s = meta.spacing_m;
+  const o = meta.origin_m;
+  const min = o;
+  const max = [o[0] + nx * s, o[1] + ny * s, o[2] + nz * s];
+  const hit = rayBox(origin, dir, min, max);
+  if (!hit) return null;
+  const [tEnter, tExit] = hit;
+
+  const safe = dir.map((d) => (Math.abs(d) < 1e-8 ? (d >= 0 ? 1e-8 : -1e-8) : d));
+  // Entry face: the axis whose slab entry time is the latest (the face hit).
+  let axis = -1;
+  if (tEnter > 0) {
+    let best = -Infinity;
+    for (let a = 0; a < 3; a++) {
+      const t0 = (min[a] - origin[a]) / safe[a], t1 = (max[a] - origin[a]) / safe[a];
+      const te = Math.min(t0, t1);
+      if (te > best) { best = te; axis = a; }
+    }
+  }
+  const p = [0, 1, 2].map((a) => origin[a] + dir[a] * tEnter);
+  const idx = [0, 1, 2].map((a) => Math.min(n[a] - 1, Math.max(0, Math.floor((p[a] - o[a]) / s))));
+  const step = safe.map((d) => (d > 0 ? 1 : -1));
+  const tDelta = safe.map((d) => Math.abs(s / d));
+  const tMax = [0, 1, 2].map((a) => {
+    const boundary = o[a] + (idx[a] + (step[a] > 0 ? 1 : 0)) * s;
+    return (boundary - origin[a]) / safe[a];
+  });
+
+  for (let guard = 0; guard < nx + ny + nz + 3; guard++) {
+    if (visit(idx[0], idx[1], idx[2], axis)) return [idx[0], idx[1], idx[2], axis];
+    let a = 0;
+    if (tMax[1] < tMax[a]) a = 1;
+    if (tMax[2] < tMax[a]) a = 2;
+    if (tMax[a] > tExit) return null;
+    idx[a] += step[a];
+    if (idx[a] < 0 || idx[a] >= n[a]) return null;
+    tMax[a] += tDelta[a];
+    axis = a;
+  }
+  return null;
+}
+
+// Display-only merge for the "Cube size" control: every b x b x b block of
+// voxels becomes one cube holding the mean of the block's voxels that
+// keep(flatIndex) accepts and that are finite. A block with none is NaN
+// ("not constrained here", never 0). Partial blocks at the far edges keep
+// whatever voxels they have. Numpy C-order in and out (z fastest).
+export function blockAverage(values, shape, b, keep) {
+  const [nx, ny, nz] = shape;
+  const cx = Math.ceil(nx / b), cy = Math.ceil(ny / b), cz = Math.ceil(nz / b);
+  const sum = new Float64Array(cx * cy * cz);
+  const cnt = new Uint32Array(cx * cy * cz);
+  for (let x = 0; x < nx; x++) {
+    const bx = Math.floor(x / b);
+    for (let y = 0; y < ny; y++) {
+      const by = Math.floor(y / b);
+      for (let z = 0; z < nz; z++) {
+        const n = x * ny * nz + y * nz + z;
+        const v = values[n];
+        if (!Number.isFinite(v) || !keep(n)) continue;
+        const c = bx * cy * cz + by * cz + Math.floor(z / b);
+        sum[c] += v;
+        cnt[c] += 1;
+      }
+    }
+  }
+  const out = new Float32Array(cx * cy * cz);
+  for (let c = 0; c < out.length; c++) out[c] = cnt[c] ? sum[c] / cnt[c] : NaN;
+  return { values: out, shape: [cx, cy, cz] };
+}
+
+// The cube-mode grid for the "Cube size" control: at block 1 the layer itself
+// (the shader applies the gates per voxel); above 1 the b^3 block means of the
+// voxels keep(n) accepts, with the gates then "baked" into the values.
+export function cubeGrid(data, meta, block, keep) {
+  const b = Math.max(1, block | 0);
+  if (b === 1 || !data) return { shape: meta.shape, spacing: meta.spacing_m, values: data, baked: false };
+  const merged = blockAverage(data, meta.shape, b, keep);
+  return { shape: merged.shape, spacing: meta.spacing_m * b, values: merged.values, baked: true };
+}
