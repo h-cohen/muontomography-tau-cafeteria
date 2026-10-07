@@ -32,6 +32,7 @@ M_MU_GEV = 0.10566
 X0_CONCRETE_M = 0.1155
 P_MAX_GEV = 100.0
 N_P_SAMPLES = 4000
+MCS_SCAN = (0.5, 1.0, 2.0)
 
 
 def theta0(p_gev: np.ndarray, L_m: float) -> np.ndarray:
@@ -47,52 +48,85 @@ def spectrum_weight(p_gev: np.ndarray) -> np.ndarray:
     return 1.0 / (1.0 + (p_gev / 3.5) ** 2.7)
 
 
+def rms_theta(p_gev: np.ndarray, weight: np.ndarray, L_m: float) -> float:
+    """Spectrum-weighted RMS scattering angle, sqrt(<theta0^2>): the width of
+    the Gaussian smear that independent scatters add up to."""
+    th2 = theta0(p_gev, L_m) ** 2
+    return float(np.sqrt(np.trapezoid(th2 * weight, p_gev) / np.trapezoid(weight, p_gev)))
+
+
 def mcs(cfg: Config, *, h_m: float, lever_m: float) -> dict:
-    """Flux-weighted theta0 for a vertical crossing of the fitted beam depth
-    `h_m` (the scattering length L), and the lateral blur it causes at the
-    ceiling `lever_m` away. `jitter_tan` is the tan-unit smear for the model."""
+    """Scattering of a muon crossing the fitted beam depth `h_m` (the
+    scattering length L, vertical crossing) and the image smear it causes.
+
+    Scattering happens inside the beam and below it is air, so projecting the
+    detected exit direction back is exact at the beam's bottom face; what is
+    blurred is the lateral displacement accumulated inside the beam,
+    theta_rms * h / sqrt(3) (metres). Seen from the detector at height
+    `lever_m` (the beam bottom above it) that is a direction smear of
+    `jitter_tan` = displacement / lever_m, in tan units.
+
+    `mcs_p_min_gev` is a conservative lower momentum cut: the overburden above
+    the beam is unknown, and a higher cut only lowers theta."""
     ps = np.geomspace(cfg.uncertainty.mcs_p_min_gev, P_MAX_GEV, N_P_SAMPLES)
-    w = spectrum_weight(ps)
-    th = float(np.trapezoid(theta0(ps, h_m) * w, ps) / np.trapezoid(w, ps))
-    return {"theta": th, "blur": th * lever_m, "jitter_tan": th}
+    th = rms_theta(ps, spectrum_weight(ps), h_m)
+    disp = th * h_m / np.sqrt(3.0)
+    return {"theta": th, "displacement": disp, "jitter_tan": disp / lever_m}
 
 
 def _delta(variant: Measurement, nominal: Measurement) -> dict[str, float]:
     return {k: float(variant.values[k] - nominal.values[k]) for k in variant.values}
 
 
+def _worst(acc: dict[str, float], delta: dict[str, float]) -> dict[str, float]:
+    """Running max of |delta| per key; NaN once any term is NaN."""
+    for k, v in delta.items():
+        a = abs(v)
+        acc[k] = a if k not in acc else (np.nan if np.isnan(a) or np.isnan(acc[k])
+                                         else max(acc[k], a))
+    return acc
+
+
 def flux_scale_shift(maps: OpacityMaps, cfg: Config, sigma: dict, rows: RowIndex,
                      nominal: Measurement, *, sky: SkyGrid,
                      cache_dir: str | Path | None = None) -> dict[str, float]:
-    """Shift when every opacity is scaled by the configured flux fraction."""
+    """Shift when every opacity is scaled by the configured flux fraction. A
+    constant lambda offset is absorbed by the degree-0 background term, so
+    depth shifts are ~0 by construction."""
     shifted = maps.shifted(float(np.log1p(cfg.uncertainty.flux_scale_frac)))
     m = measure(build_fit_data(shifted, cfg, sigma, rows=rows), cfg, sky,
                 cache_dir=cache_dir, with_volume=False)
     return _delta(m, nominal)
 
 
+def mcs_dlam(data: FitData, cfg: Config, depth, jitter_tan: float) -> np.ndarray:
+    """Change of lambda when the nominal fitted beams (`depth`) are seen through
+    direction-smeared paths; the background cancels in the difference."""
+    s = cfg.beamdepth
+    common = dict(aperture_m=cfg.detector.aperture_m, n_sub=s.n_sub, z0=depth.z0, w=depth.w,
+                  h=depth.h, xs=depth.xs, y_extent=s.y_extent_m)
+    origins = cfg.origins()
+    return (beam_design(data.rows, origins, angle_jitter=jitter_tan, **common)
+            - beam_design(data.rows, origins, **common)) @ np.asarray(depth.kappa)
+
+
 def mcs_shift(data: FitData, cfg: Config, nominal: Measurement, *, sky: SkyGrid,
               jitter_tan: float, cache_dir: str | Path | None = None) -> dict[str, float]:
     """Bias multiple scattering causes in the nominal estimator.
 
-    The blur is injected into the DATA: the nominal fitted beams are seen
-    through direction-smeared paths, the difference from the straight-path
-    signal is added to lambda (the background cancels in it), and the unsmeared
-    estimator is refit. Refitting with a smeared model instead would measure
+    The blur is injected into the DATA (`mcs_dlam`) and the unsmeared
+    estimator is refit; refitting with a smeared model instead would measure
     model mismatch, not the bias. The size depends on the momentum cut
-    (`mcs_p_min_gev`) and on the scattering length, taken as the fitted beam
-    depth."""
-    d = nominal.details["depth"]
-    s = cfg.beamdepth
-    common = dict(aperture_m=cfg.detector.aperture_m, n_sub=s.n_sub, z0=d.z0, w=d.w, h=d.h,
-                  xs=d.xs, y_extent=s.y_extent_m)
-    origins = cfg.origins()
-    kappa = np.asarray(d.kappa)
-    dlam = (beam_design(data.rows, origins, angle_jitter=jitter_tan, **common)
-            - beam_design(data.rows, origins, **common)) @ kappa
-    blurred = FitData(lam=data.lam + dlam * (data.w > 0), w=data.w, rows=data.rows)
-    m = measure(blurred, cfg, sky, cache_dir=cache_dir, with_volume=False)
-    return _delta(m, nominal)
+    (`mcs_p_min_gev`) and on the scattering length, the fitted beam depth.
+    The estimator has a few-centimetre instability floor, so each key quotes
+    the largest |shift| over 0.5, 1 and 2 times `jitter_tan`; NaN if any is."""
+    worst: dict[str, float] = {}
+    for f in MCS_SCAN:
+        dlam = mcs_dlam(data, cfg, nominal.details["depth"], f * jitter_tan)
+        blurred = FitData(lam=data.lam + dlam * (data.w > 0), w=data.w, rows=data.rows)
+        d = _delta(measure(blurred, cfg, sky, cache_dir=cache_dir, with_volume=False), nominal)
+        worst = _worst(worst, d)
+    return worst
 
 
 def background_shift(data: FitData, cfg: Config, nominal: Measurement, *, sky: SkyGrid,
@@ -105,21 +139,19 @@ def background_shift(data: FitData, cfg: Config, nominal: Measurement, *, sky: S
 
 def pose_shift(grid: AnalysisGrid, cfg: Config, live_time: dict[str, float], sigma: dict,
                pose_sigma: dict[str, float], nominal: Measurement, *, sky: SkyGrid,
-               cache_dir: str | Path | None = None) -> dict[str, float]:
+               rows: RowIndex, cache_dir: str | Path | None = None) -> dict[str, float]:
     """Largest |shift| over the free position moved by +-1 sigma along x and y.
-    A key that is NaN in any variant stays NaN."""
+    A key that is NaN in any variant stays NaN. `rows` pins the row set to the
+    nominal one, as in the bootstrap and flux paths."""
     free = cfg.selfcal.free_pose
     p = cfg.exposure(free).pose
     worst: dict[str, float] = {}
     for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
         c = cfg.with_pose(free, replace(p, x=p.x + dx * pose_sigma["x"],
                                         y=p.y + dy * pose_sigma["y"]))
-        data = build_fit_data(solve_opacity(grid, c, live_time), c, sigma)
-        d = _delta(measure(data, c, sky, cache_dir=cache_dir, with_volume=False), nominal)
-        for k, v in d.items():
-            a = abs(v)
-            worst[k] = a if k not in worst else (np.nan if np.isnan(a) or np.isnan(worst[k])
-                                                 else max(worst[k], a))
+        data = build_fit_data(solve_opacity(grid, c, live_time), c, sigma, rows=rows)
+        worst = _worst(worst, _delta(measure(data, c, sky, cache_dir=cache_dir,
+                                            with_volume=False), nominal))
     return worst
 
 

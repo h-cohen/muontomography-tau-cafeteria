@@ -100,7 +100,7 @@ uncertainty:
   n_replicas: 50
   seed: 0
   flux_scale_frac: 0.03     # sky-run vs position-run flux difference (pressure, epoch)
-  mcs_p_min_gev: 0.5
+  mcs_p_min_gev: 0.5        # conservative lower muon momentum cut for MCS (overburden unknown; higher only lowers it)
 
 validation:
   focus_heights_m: [6.6, 7.0, 7.4]
