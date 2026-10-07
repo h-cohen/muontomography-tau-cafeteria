@@ -41,6 +41,10 @@ def backproject_plane(data: FitData, cfg: Config, z_m: float,
     the single- or collinear-ray footprints every real position has near its
     edges.
 
+    Rays landing more than half a pixel outside the grid are dropped, not
+    clamped into edge pixels. A position at or above the plane (lever <= 0)
+    contributes nothing.
+
     Returns ({position id: grid[len(xs), len(ys)]}, mean over covered positions).
     Pixels a position does not cover are NaN, never zero: "no ray went there"
     and "no material there" are different statements.
@@ -48,6 +52,8 @@ def backproject_plane(data: FitData, cfg: Config, z_m: float,
     origins = cfg.origins()
     xs = np.asarray(xs)
     ys = np.asarray(ys)
+    half_x = 0.5 * float(np.median(np.diff(xs))) if xs.size > 1 else 0.0
+    half_y = 0.5 * float(np.median(np.diff(ys))) if ys.size > 1 else 0.0
 
     per: dict[str, np.ndarray] = {}
     for pid in data.rows.position_ids:
@@ -59,9 +65,12 @@ def backproject_plane(data: FitData, cfg: Config, z_m: float,
         if sel.any() and lever > 0:
             px = ox + data.rows.sx[sel] * lever
             py = oy + data.rows.sy[sel] * lever
+            inside = ((px >= xs.min() - half_x) & (px <= xs.max() + half_x)
+                      & (py >= ys.min() - half_y) & (py <= ys.max() + half_y))
+            px, py, lam = px[inside], py[inside], data.lam[sel][inside]
             ix = np.argmin(np.abs(xs[:, None] - px[None, :]), axis=0)
             iy = np.argmin(np.abs(ys[:, None] - py[None, :]), axis=0)
-            np.add.at(total, (ix, iy), data.lam[sel])
+            np.add.at(total, (ix, iy), lam)
             np.add.at(count, (ix, iy), 1.0)
         per[pid] = np.where(count > 0, total / np.maximum(count, 1.0), np.nan)
 

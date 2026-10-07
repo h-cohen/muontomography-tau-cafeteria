@@ -30,11 +30,13 @@ def beam_ceiling(grid: VoxelGrid, *, xs, z0: float, w: float, h: float, kappa,
     z = grid.axis_centers(2)[None, None, :]
     in_y = (y >= y_extent[0]) & (y <= y_extent[1])
     vol = np.zeros(grid.shape)
+    in_beam = np.zeros(grid.shape, dtype=bool)
     for xk, kk in zip(xs, kappa, strict=True):
         box = (np.abs(x - xk) <= w / 2) & in_y & (z >= z0) & (z <= z0 + h)
         vol = np.where(box, kk, vol)
+        in_beam |= box
     slab = in_y & (z > z0 + h) & (z <= z0 + h + slab_thickness)
-    return np.where(slab & (vol == 0), slab_kappa, vol)
+    return np.where(slab & ~in_beam, slab_kappa, vol)
 
 
 def phantom_data(fwd: ForwardModel, truth: np.ndarray, like: FitData,
