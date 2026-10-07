@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import numpy as np
 import pytest
 
@@ -22,6 +24,17 @@ def test_subbin_peak_refines():
     g = np.linspace(-1, 1, 41)
     p = np.exp(-((g - 0.013) ** 2) / 0.01)
     assert beam_peaks_subbin(g, p, 0.5)[0] == pytest.approx(0.013, abs=0.005)
+
+
+@pytest.mark.parametrize("offset", np.linspace(-0.45, 0.45, 19))
+def test_subbin_peak_of_a_beam_narrower_than_a_bin(offset):
+    """A box 0.8 bin wide, integrated into unit bins: the refinement must not
+    lock onto the bin centre."""
+    k = np.arange(-10, 11, dtype=float)
+    lo = np.maximum(k - 0.5, offset - 0.4)
+    hi = np.minimum(k + 0.5, offset + 0.4)
+    prof = np.clip(hi - lo, 0.0, None)
+    assert beam_peaks_subbin(k, prof, 0.5)[0] == pytest.approx(offset, abs=0.15)
 
 
 def test_match_peaks_groups_by_world_position():
@@ -72,6 +85,31 @@ def test_verify_gate_passes_matching_reconstruction():
     gate = verify_gate(images, origins, centers, 7.0, sol, BeamSettings())
     assert gate["passed"] and gate["n_beams_data"] >= 3
     assert gate["recon_layer_z"] == pytest.approx(7.0, abs=0.11)
+
+
+def _grid_data(images, sky, pids):
+    rows = sky_rows(pids, float(sky.edges[-1]), sky.n_bins)
+    lam = np.concatenate([images[pid].ravel()[rows.sky_flat[rows.pos_of_row == k]]
+                          for k, pid in enumerate(pids)])
+    return FitData(lam=lam, w=np.ones(rows.n_rows), rows=rows)
+
+
+@pytest.mark.parametrize(("min_y_corr", "used"), [(-1.0, True), (1.01, False)])
+def test_y_features_enter_the_joint_fit_only_above_min_y_corr(cfg, min_y_corr, used):
+    cfg = replace(cfg.with_pose("pos1", cfg.exposure("pos1").pose.__class__(1.78, 0.72, 0.0, 0.0)),
+                  beams=replace(cfg.beams, min_y_corr=min_y_corr))
+    sky = make_sky_grid(cfg.opacity.sky_t_max, cfg.opacity.sky_n_bins)
+    origins = cfg.origins()
+    xs_img = _comb_images(origins, sky.centers, (-3.4, -1.7, 0.0, 1.7, 3.4), 7.0)
+    swapped = {pid: (oy, ox, oz) for pid, (ox, oy, oz) in origins.items()}
+    ys_img = _comb_images(swapped, sky.centers, (-2.0, 1.0), 7.0)
+    images = {pid: xs_img[pid] + ys_img[pid].T for pid in origins}
+    res = find_beams(_grid_data(images, sky, cfg.position_ids), cfg, sky)
+    assert res["ok"] and res["y_used"] is used
+    assert (res["n_features_y"] > 0) is used
+    assert res["z_x"] == pytest.approx(7.0, abs=0.1) and np.isfinite(res["z_x_sigma"])
+    if not used:
+        assert res["z"] == res["z_x"]
 
 
 @pytest.mark.slow

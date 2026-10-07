@@ -119,6 +119,7 @@ class BeamSettings:
     gate_max_offset_m: float = 0.15
     z_scan_m: tuple = (4.0, 9.0)
     n_z: int = 81
+    min_y_corr: float = 0.5
 
 
 @dataclass(frozen=True)

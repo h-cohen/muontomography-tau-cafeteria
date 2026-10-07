@@ -61,8 +61,8 @@ def sky_images(data: FitData, sky: SkyGrid) -> dict[str, np.ndarray]:
     return out
 
 
-def profile(img: np.ndarray, centers: np.ndarray, axis: str = "x",
-            band: float = 0.32) -> tuple[np.ndarray, np.ndarray]:
+def profile(img: np.ndarray, centers: np.ndarray, axis: str,
+            band: float) -> tuple[np.ndarray, np.ndarray]:
     """Opacity profile vs tan(theta_axis), averaged over |t_other| < band.
 
     Images are indexed [i_x, j_y], so the x profile averages over axis 1.
@@ -84,7 +84,7 @@ def world_profile(t: np.ndarray, prof: np.ndarray, origin: tuple, axis: str, z: 
 
 def parallax_scan(images: dict, origins: dict, centers: np.ndarray, axis: str,
                   grid: np.ndarray, zs: np.ndarray,
-                  band: float = 0.32) -> tuple[np.ndarray, float, float]:
+                  band: float) -> tuple[np.ndarray, float, float]:
     """Correlation of the first two positions' world-projected profiles vs height.
 
     Returns (correlations, best_z, best_corr); correlation is NaN at heights where
@@ -121,12 +121,18 @@ def beam_peaks(grid: np.ndarray, prof: np.ndarray, prom_sigmas: float = 0.5) -> 
 
 
 def beam_peaks_subbin(grid: np.ndarray, prof: np.ndarray, prom_sigmas: float = 0.5) -> np.ndarray:
-    """`beam_peaks` refined to sub-bin precision by a parabola through each maximum.
+    """`beam_peaks` refined to sub-bin precision.
 
     Triangulation is acutely sensitive to peak position: with baseline ~1.8 m and a
     0.05 tan-unit bin, one bin of quantization in (t_0 - t_1) moves the closed-form
-    height by ~1 m. Bin-centre peaks are therefore not good enough, and the parabolic
-    refinement removes most of that error.
+    height by ~1 m, so bin-centre peaks are not good enough.
+
+    A 0.3 m beam at 7 m is narrower than one sky bin, and a parabola through such a
+    peak stays locked near the bin centre (up to 0.2 bin off). Instead the lower
+    neighbour is subtracted as background and the peak is placed by the linear
+    (equal-slope) interpolation of the remaining triple: within 0.14 bin for a
+    sub-bin box, while a plain 3-bin centroid would drag a peak spanning several
+    bins towards its wider shoulder.
     """
     ok = np.isfinite(prof)
     if ok.sum() < 5:
@@ -136,12 +142,10 @@ def beam_peaks_subbin(grid: np.ndarray, prof: np.ndarray, prom_sigmas: float = 0
     out = []
     for i in idx:
         if 0 < i < len(p) - 1:
-            denom = p[i - 1] - 2 * p[i] + p[i + 1]
-            # denom < 0 at a maximum; guard against a flat or pathological triple
-            delta = 0.5 * (p[i - 1] - p[i + 1]) / denom if denom < 0 else 0.0
-            delta = float(np.clip(delta, -0.5, 0.5))
-            step = g[i + 1] - g[i]
-            out.append(g[i] + delta * step)
+            q = np.clip(p[i - 1: i + 2] - min(p[i - 1], p[i + 1]), 0.0, None)
+            delta = 0.5 * (q[2] - q[0]) / q[1] if q[1] > 0 else 0.0
+            step = g[i + 1] - g[i] if delta > 0 else g[i] - g[i - 1]
+            out.append(g[i] + float(np.clip(delta, -0.5, 0.5)) * step)
         else:
             out.append(g[i])
     return np.asarray(out)
@@ -177,7 +181,7 @@ def match_peaks(peaks: dict, origins: dict, axis: str, z0: float, tol_m: float) 
 
 
 def triangulate(images: dict, origins: dict, centers: np.ndarray, z0: float,
-                sigma_t: float, s: BeamSettings) -> dict:
+                sigma_t: float, s: BeamSettings, axes: tuple[str, ...] = ("x", "y")) -> dict:
     """Joint least-squares ray intersection over every matched beam, both axes.
 
     Each (position, beam) peak fixes a ray; a beam at height z and world position X
@@ -190,12 +194,15 @@ def triangulate(images: dict, origins: dict, centers: np.ndarray, z0: float,
     Independent of the reconstruction AND of the cross-validation autofocus -- it
     uses only peak positions in the opacity images -- so it is a genuine
     cross-check rather than a restatement. `sigma_t` is the per-peak angular
-    uncertainty (tan units). An underdetermined fit returns ok=False with the fit
-    quantities NaN (not measured).
+    uncertainty (tan units). `axes` selects which beam families enter the fit;
+    an axis left out reports zero features. An underdetermined fit returns
+    ok=False with the fit quantities NaN (not measured).
     """
     _require_two(list(images), "triangulate")
-    feats = {}
-    for axis, band in (("x", s.band_x), ("y", s.band_y)):
+    bands = {"x": s.band_x, "y": s.band_y}
+    feats = {"x": [], "y": []}
+    for axis in axes:
+        band = bands[axis]
         peaks = {pid: beam_peaks_subbin(*profile(img, centers, axis, band), s.prominence_sigmas)
                  for pid, img in images.items()}
         feats[axis] = match_peaks(peaks, origins, axis, z0, s.match_tol_m)
@@ -244,7 +251,7 @@ def triangulate(images: dict, origins: dict, centers: np.ndarray, z0: float,
 
 
 def angular_beam_period(img: np.ndarray, centers: np.ndarray, axis: str = "x",
-                        t_window: float = 0.6) -> float:
+                        t_window: float = 0.6, *, band: float) -> float:
     """Dominant angular period of the beam pattern in one position, in tan-units.
 
     Measured by the FFT peak of the detrended opacity profile with parabolic sub-bin
@@ -252,7 +259,7 @@ def angular_beam_period(img: np.ndarray, centers: np.ndarray, axis: str = "x",
     no height, which is what makes it useful for closing the scale (see
     scale_closure). NaN when fewer than 16 measured bins fall in the window.
     """
-    t, p = profile(img, centers, axis)
+    t, p = profile(img, centers, axis, band)
     sel = np.isfinite(p) & (np.abs(t) < t_window)
     tt, pp = t[sel], p[sel]
     if len(tt) < 16:
@@ -270,7 +277,8 @@ def angular_beam_period(img: np.ndarray, centers: np.ndarray, axis: str = "x",
     return float(1.0 / f_pk) if f_pk > 0 else float("nan")
 
 
-def scale_closure(images: dict, origins: dict, centers: np.ndarray, z_m: float) -> dict:
+def scale_closure(images: dict, origins: dict, centers: np.ndarray, z_m: float, *,
+                  band: float) -> dict:
     """Close the (baseline, ceiling height, beam pitch) scale triangle.
 
     Triangulation fixes only a RATIO: z = d / (t_1 - t_2), so the height scales with
@@ -282,7 +290,7 @@ def scale_closure(images: dict, origins: dict, centers: np.ndarray, z_m: float) 
     measure on the detector separation, or on the ceiling beam spacing) determines
     the other two. Reporting the triple makes the assumption visible instead of
     leaving it buried in the pose config. Baseline-derived values are NaN with
-    fewer than two positions.
+    fewer than two positions. `band` is the |tan_y| band of the x profiles.
     """
     pids = list(images)
     if len(pids) >= 2:
@@ -290,7 +298,7 @@ def scale_closure(images: dict, origins: dict, centers: np.ndarray, z_m: float) 
         d = float(np.hypot(b[0] - a[0], b[1] - a[1]))
     else:
         d = float("nan")
-    per = {pid: angular_beam_period(img, centers) for pid, img in images.items()}
+    per = {pid: angular_beam_period(img, centers, band=band) for pid, img in images.items()}
     vals = [v for v in per.values() if np.isfinite(v)]
     period = float(np.mean(vals)) if vals else float("nan")
     pitch = period * z_m
@@ -343,7 +351,12 @@ def verify_gate(images: dict, origins: dict, centers: np.ndarray, z_m: float,
 
 def find_beams(data: FitData, cfg: Config, sky: SkyGrid) -> dict:
     """Model-free beam geometry: parallax heights on both axes, the joint
-    triangulated height and beam positions, and the scale triple."""
+    triangulated height and beam positions, and the scale triple.
+
+    The y family (one cross beam and the room's ends) is far weaker than the x
+    comb, so its features join the joint fit only when the y parallax itself
+    agrees (corr >= s.min_y_corr); the x-only height `z_x` is always reported
+    so the y contribution stays visible."""
     s = cfg.beams
     images = sky_images(data, sky)
     origins = cfg.origins()
@@ -355,12 +368,15 @@ def find_beams(data: FitData, cfg: Config, sky: SkyGrid) -> dict:
     cx, zx, rx = parallax_scan(images, origins, c, "x", xgrid, zs, s.band_x)
     cy, zy, ry = parallax_scan(images, origins, c, "y", ygrid, zs, s.band_y)
     sigma_t = float(c[1] - c[0]) / np.sqrt(12.0)
-    tri = triangulate(images, origins, c, zx, sigma_t, s)
+    y_used = bool(ry >= s.min_y_corr)
+    tri = triangulate(images, origins, c, zx, sigma_t, s, ("x", "y") if y_used else ("x",))
+    tri_x = tri if not y_used else triangulate(images, origins, c, zx, sigma_t, s, ("x",))
     z = tri["z"] if tri["ok"] else zx
-    closure = scale_closure(images, origins, c, z)
+    closure = scale_closure(images, origins, c, z, band=s.band_x)
     return {"ok": tri["ok"],
             "parallax_x_z": zx, "parallax_x_corr": rx, "parallax_y_z": zy, "parallax_y_corr": ry,
             "scan_z": zs.tolist(), "scan_corr_x": cx.tolist(), "scan_corr_y": cy.tolist(),
             **{k: v for k, v in tri.items() if k != "ok"},
+            "y_used": y_used, "z_x": tri_x["z"], "z_x_sigma": tri_x["z_sigma"],
             **{k: v for k, v in closure.items() if k != "z"},
             "n_beams_x": len(tri["beams_x"]), "n_beams_y": len(tri["beams_y"])}

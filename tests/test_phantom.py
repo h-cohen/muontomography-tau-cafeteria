@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from cafetomo.fitdata import FitData
 from cafetomo.forward import build_forward_model
@@ -46,3 +47,13 @@ def test_a_zero_kappa_beam_is_not_overwritten_by_the_slab():
                      y_extent=(-1.0, 1.0), slab_thickness=0.2, slab_kappa=0.5)
     zc = g.axis_centers(2)
     assert np.all(v[20, 20][(zc > 7.05) & (zc < 8.15)] == 0.0)
+
+
+def test_beam_is_rasterised_symmetrically_about_its_centre():
+    g = VoxelGrid(origin=(-7.0, -2.0, 6.5), spacing=0.1, shape=(140, 40, 15))
+    xc = g.axis_centers(0)
+    for xk in (0.0, 0.05, -1.7, 1.75):
+        v = beam_ceiling(g, xs=(xk,), z0=7.0, w=0.3, h=0.3, kappa=(1.0,),
+                         y_extent=(-1.0, 1.0), slab_kappa=0.0)
+        col = v.sum(axis=(1, 2))
+        assert float((col * xc).sum() / col.sum()) == pytest.approx(xk, abs=1e-9)

@@ -24,15 +24,20 @@ def beam_ceiling(grid: VoxelGrid, *, xs, z0: float, w: float, h: float, kappa,
                  y_extent: tuple[float, float], slab_thickness: float = 0.2,
                  slab_kappa: float = 0.3) -> np.ndarray:
     """Rectangular beams along y (bottom face z0, width w, depth h, opacity
-    density kappa_k) under a uniform slab whose underside is z0 + h."""
+    density kappa_k) under a uniform slab whose underside is z0 + h.
+
+    Voxel centres lying exactly on a beam face are all included: a bare
+    `<= w/2` keeps one face and drops the other by float rounding, which
+    shifts the rasterised beam off xk and biases every position test."""
     x = grid.axis_centers(0)[:, None, None]
     y = grid.axis_centers(1)[None, :, None]
     z = grid.axis_centers(2)[None, None, :]
     in_y = (y >= y_extent[0]) & (y <= y_extent[1])
     vol = np.zeros(grid.shape)
     in_beam = np.zeros(grid.shape, dtype=bool)
+    half = w / 2 + 1e-9 * grid.spacing
     for xk, kk in zip(xs, kappa, strict=True):
-        box = (np.abs(x - xk) <= w / 2) & in_y & (z >= z0) & (z <= z0 + h)
+        box = (np.abs(x - xk) <= half) & in_y & (z >= z0) & (z <= z0 + h)
         vol = np.where(box, kk, vol)
         in_beam |= box
     slab = in_y & (z > z0 + h) & (z <= z0 + h + slab_thickness)
