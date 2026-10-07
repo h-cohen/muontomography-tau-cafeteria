@@ -11,8 +11,7 @@ from pathlib import Path
 import numpy as np
 
 from cafetomo.autofocus import cv_height_scan
-from cafetomo.beamdepth import fit_beam_depth, zprofile_depth
-from cafetomo.beams import find_beams
+from cafetomo.beamdepth import estimate_beam_depth, zprofile_depth
 from cafetomo.config import Config
 from cafetomo.fitdata import FitData
 from cafetomo.reconstruct import solve_voxels
@@ -34,27 +33,15 @@ def measure(data: FitData, cfg: Config, sky: SkyGrid, *, vgrid: VoxelGrid | None
     y family's pull stays visible), pitch, the parametric beam depth and,
     with `with_volume`, the voxel z-profile that cross-checks it.
 
-    The beam-depth fit starts from the triangulated beams, so a failed
-    triangulation stops the measurement rather than seeding the fit with NaN.
-    The triangulated height lies between the beams' bottom face and their
-    centre, and the box fit has local minima: seeded at only one end it can
-    settle on a depth tens of cm off at a worse chi^2 (seen on phantoms from
-    either end). It is therefore seeded as the bottom face and as the centre
-    of a seed-depth box, and the lower chi^2 wins; both rows are the same, so
-    the chi^2 values compare directly."""
+    The beam depth comes from `estimate_beam_depth`, the same path the
+    phantom validation runs, so its validated bias is this estimator's."""
     scan = cv_height_scan(data, cfg, cache_dir=cache_dir)
-    beams = find_beams(data, cfg, sky)
-    if not beams["ok"]:
-        raise RuntimeError(f"beam triangulation failed: {beams}")
-    starts = [fit_beam_depth(data, cfg, xs_init=beams["beams_x"], z0_init=z0,
-                             angle_jitter=angle_jitter)
-              for z0 in (beams["z"], beams["z"] - cfg.beamdepth.h_init_m / 2)]
-    depth = min(starts, key=lambda f: f.chi2_per_dof)
+    beams, depth = estimate_beam_depth(data, cfg, sky, angle_jitter=angle_jitter)
     values = {"autofocus_z": scan.z_best, "beams_z": beams["z"], "beams_zx": beams["z_x"],
               "beams_pitch": beams["pitch"], "depth_h": depth.h, "depth_w": depth.w,
               "depth_zbottom": depth.z0, "depth_ztop": depth.z0 + depth.h}
     volume = None
-    details = {"autofocus": scan, "beams": beams, "depth": depth, "depth_starts": starts}
+    details = {"autofocus": scan, "beams": beams, "depth": depth}
     if with_volume:
         sol = solve_voxels(data, cfg, cache_dir=cache_dir, holdouts=False, grid=vgrid)["full"]
         zp = zprofile_depth(sol, cfg, xs=depth.xs, w=depth.w, z_ref=depth.z0)

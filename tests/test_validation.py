@@ -1,8 +1,10 @@
 import numpy as np
 import pytest
 
+from cafetomo import validation
+from cafetomo.beamdepth import estimate_beam_depth
 from cafetomo.validation import validate_autofocus, validate_depth
-from phantoms import KAPPA, XS, Z0, W, beam_phantom
+from phantoms import KAPPA, XS, Z0, W, beam_phantom, phantom_sky
 
 H_TRUE = 1.25
 NOMINAL = {"xs": list(XS), "w": W, "h": H_TRUE, "kappa": list(KAPPA), "zbottom": Z0}
@@ -15,11 +17,21 @@ def phantom(cfg):
 
 
 @pytest.mark.slow
-def test_validate_depth_shapes(phantom):
+def test_validate_depth_runs_the_reported_estimator(phantom, monkeypatch):
+    """Recovery goes through estimate_beam_depth, seeded by triangulating each
+    realisation: validation has no route to the fit that could take truth seeds."""
     c, data = phantom
-    out = validate_depth(data, c, NOMINAL)
+    calls = []
+
+    def spy(d, cf, sky, **kw):
+        calls.append(d)
+        return estimate_beam_depth(d, cf, sky, **kw)
+
+    monkeypatch.setattr(validation, "estimate_beam_depth", spy)
+    assert not hasattr(validation, "fit_beam_depth")
+    out = validate_depth(data, c, NOMINAL, sky=phantom_sky())
     n = len(c.validation.depth_h_true_m)
-    assert n == 1
+    assert n == 1 and len(calls) == n * c.validation.n_realizations
     assert all(len(out[k]) == n for k in ("depth_true", "depth_mean", "depth_spread"))
     assert np.isfinite(out["depth_max_bias"])
     assert out["depth_max_bias"] == pytest.approx(

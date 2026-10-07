@@ -31,7 +31,7 @@ class BootstrapResult:
     volume_mean: np.ndarray
     volume_sigma: np.ndarray
 
-    def summary(self) -> dict[str, float]:
+    def summary(self) -> dict[str, float | int]:
         """Mean and sigma over the finite replicas, with their count.
 
         A z-profile face can fall off the grid in some replicas (NaN by
@@ -73,5 +73,6 @@ def run_bootstrap(grid: AnalysisGrid, cfg: Config, *, live_time: dict[str, float
             values.setdefault(k, []).append(v)
         vols.append(m.volume)
     arr = np.stack(vols)
+    vsig = arr.std(axis=0, ddof=1) if len(vols) > 1 else np.full(arr.shape[1:], np.nan)
     return BootstrapResult(values={k: np.array(v) for k, v in values.items()},
-                           volume_mean=arr.mean(axis=0), volume_sigma=arr.std(axis=0))
+                           volume_mean=arr.mean(axis=0), volume_sigma=vsig)

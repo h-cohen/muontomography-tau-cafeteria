@@ -4,12 +4,20 @@ import numpy as np
 import pytest
 from scipy import optimize
 
-from cafetomo.beamdepth import beam_design, box_path_lengths, fit_beam_depth, zprofile_depth
+from cafetomo import beamdepth
+from cafetomo.beamdepth import (
+    BeamDepthFit,
+    beam_design,
+    box_path_lengths,
+    estimate_beam_depth,
+    fit_beam_depth,
+    zprofile_depth,
+)
 from cafetomo.fitdata import FitData
 from cafetomo.phantom import beam_ceiling, sky_rows
 from cafetomo.reconstruct import VoxelSolution
 from cafetomo.voxels import VoxelGrid
-from phantoms import beam_phantom
+from phantoms import beam_phantom, phantom_sky
 
 
 def test_box_path_vertical_and_oblique():
@@ -109,3 +117,46 @@ def test_zprofile_empty_selections_raise(cfg):
     far = replace(cfg, beamdepth=replace(cfg.beamdepth, y_band_m=(10.0, 11.0)))
     with pytest.raises(ValueError, match="y band"):
         zprofile_depth(_column((0.0,), 1.2), far, xs=(0.0,), w=0.3, z_ref=7.0)
+
+
+def _stub_fit(chi2):
+    return BeamDepthFit(z0=7.0, w=0.3, h=1.0, xs=(0.0,), kappa=(1.0,), chi2_per_dof=chi2,
+                        at_bound=False, n_rows=1, profiles={}, converged=True, n_eval=1)
+
+
+@pytest.mark.parametrize("winner", [0, 1])
+def test_fit_seeds_bottom_and_centre_and_keeps_lower_chisq(cfg, monkeypatch, winner):
+    seeds = []
+    chis = (1.0, 2.0) if winner == 0 else (2.0, 1.0)
+
+    def once(data, c, *, xs_init, z0_init, angle_jitter):
+        seeds.append(z0_init)
+        return _stub_fit(chis[len(seeds) - 1])
+
+    monkeypatch.setattr(beamdepth, "_fit_once", once)
+    fit = fit_beam_depth(None, cfg, xs_init=(0.0,), z0_init=7.6)
+    assert seeds == pytest.approx([7.6, 7.6 - cfg.beamdepth.h_init_m / 2])
+    assert fit.chi2_per_dof == 1.0
+
+
+def test_non_finite_chisq_raises(cfg, monkeypatch):
+    monkeypatch.setattr(beamdepth, "_fit_once", lambda *a, **k: _stub_fit(np.nan))
+    with pytest.raises(RuntimeError, match="non-finite"):
+        fit_beam_depth(None, cfg, xs_init=(0.0,), z0_init=7.6)
+
+
+@pytest.mark.slow
+def test_estimate_escapes_the_one_seed_local_minimum(cfg):
+    """Noise draw 5 of the h = 1.25 phantom: seeded only at the triangulated
+    height, the fit settled at h = 1.10 with a worse chi^2."""
+    c, data = beam_phantom(cfg, 1.25, np.random.default_rng(5))
+    beams, fit = estimate_beam_depth(data, c, phantom_sky())
+    assert beams["ok"] and fit.z0 < beams["z"]
+    assert fit.h == pytest.approx(1.25, abs=0.05)
+    assert fit.z0 == pytest.approx(7.0, abs=0.05)
+
+
+def test_estimate_raises_when_triangulation_fails(cfg, monkeypatch):
+    monkeypatch.setattr(beamdepth, "find_beams", lambda *a: {"ok": False})
+    with pytest.raises(RuntimeError, match="triangulation failed"):
+        estimate_beam_depth(None, cfg, None)

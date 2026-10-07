@@ -24,11 +24,13 @@ from dataclasses import dataclass
 import numpy as np
 from scipy import optimize
 
+from cafetomo.beams import find_beams
 from cafetomo.config import Config
 from cafetomo.fitdata import FitData, RowIndex
 from cafetomo.raycast import bundle_offsets
 from cafetomo.reconstruct import VoxelSolution
 from cafetomo.resolution import depth_resolution, position_baselines
+from cafetomo.sky import SkyGrid
 
 # The off-beam reference column for a lone beam sits half the ceiling's
 # 1.7 m beam pitch away: where the gap between neighbours would be centred.
@@ -109,6 +111,40 @@ class BeamDepthFit:
 
 def fit_beam_depth(data: FitData, cfg: Config, *, xs_init, z0_init: float,
                    angle_jitter: float = 0.0) -> BeamDepthFit:
+    """Fit the box model, seeded from the triangulated beams.
+
+    `z0_init` is the triangulated beam height, which lies between the beams'
+    bottom face and their centre; the box fit has local minima, and seeded at
+    only one end it can settle tens of cm off in h at a worse chi^2 (seen on
+    phantoms from either end). It is therefore fitted twice, with the bottom
+    face seeded at z0_init and at z0_init - h_init/2 (the seed box centred
+    there), and the lower chi^2 wins: both use the same rows, so the chi^2
+    values compare directly. A non-finite chi^2 cannot be ranked and raises."""
+    fits = [_fit_once(data, cfg, xs_init=xs_init, z0_init=z0, angle_jitter=angle_jitter)
+            for z0 in (z0_init, z0_init - cfg.beamdepth.h_init_m / 2)]
+    bad = [f.chi2_per_dof for f in fits if not np.isfinite(f.chi2_per_dof)]
+    if bad:
+        raise RuntimeError(f"beam-depth fit returned a non-finite chi^2/dof: {bad}")
+    return min(fits, key=lambda f: f.chi2_per_dof)
+
+
+def estimate_beam_depth(data: FitData, cfg: Config, sky: SkyGrid, *,
+                        angle_jitter: float = 0.0) -> tuple[dict, BeamDepthFit]:
+    """The reported beam-depth estimator: triangulate, then fit from it.
+
+    The measurement and its phantom validation both call this, so the
+    validation characterises exactly the estimator the paper quotes, seeds
+    included. A failed triangulation raises rather than seeding with NaN."""
+    beams = find_beams(data, cfg, sky)
+    if not beams["ok"]:
+        raise RuntimeError(f"beam triangulation failed: {beams}")
+    fit = fit_beam_depth(data, cfg, xs_init=beams["beams_x"], z0_init=beams["z"],
+                         angle_jitter=angle_jitter)
+    return beams, fit
+
+
+def _fit_once(data: FitData, cfg: Config, *, xs_init, z0_init: float,
+              angle_jitter: float) -> BeamDepthFit:
     s = cfg.beamdepth
     keep = (data.w > 0) & (np.abs(data.rows.sy) <= s.band_sy)
     rows = RowIndex(data.rows.position_ids, data.rows.pos_of_row[keep], data.rows.sx[keep],

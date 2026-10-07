@@ -57,3 +57,18 @@ def test_beam_is_rasterised_symmetrically_about_its_centre():
                          y_extent=(-1.0, 1.0), slab_kappa=0.0)
         col = v.sum(axis=(1, 2))
         assert float((col * xc).sum() / col.sum()) == pytest.approx(xk, abs=1e-9)
+
+
+@pytest.mark.parametrize(("slab_y", "covered"), [(..., (-1.0, 1.0)), ((-1.5, 0.5), (-1.5, 0.5)),
+                                                 (None, (-2.0, 2.0))])
+def test_slab_y_extent(slab_y, covered):
+    """Default: the slab follows the beams' y extent; None: it spans the grid."""
+    g = VoxelGrid(origin=(-2.0, -2.0, 6.0), spacing=0.1, shape=(40, 40, 30))
+    v = beam_ceiling(g, xs=(0.0,), z0=7.0, w=0.3, h=1.2, kappa=(1.0,),
+                     y_extent=(-1.0, 1.0), slab_thickness=0.2, slab_kappa=0.5,
+                     slab_y_extent=slab_y)
+    yc = g.axis_centers(1)
+    slab_layer = v[5, :, np.argmin(np.abs(g.axis_centers(2) - 8.3))]
+    inside = (yc >= covered[0]) & (yc <= covered[1])
+    assert np.all(slab_layer[inside] == 0.5) and np.all(slab_layer[~inside] == 0.0)
+    assert np.all(v[20][~((yc >= -1.0) & (yc <= 1.0))][:, g.axis_centers(2) < 8.15] == 0.0)

@@ -1,8 +1,12 @@
+from dataclasses import replace
+
 import numpy as np
 import pytest
 
+from cafetomo import bootstrap
 from cafetomo.angular import AnalysisGrid
-from cafetomo.bootstrap import BootstrapResult, resample
+from cafetomo.bootstrap import BootstrapResult, resample, run_bootstrap
+from cafetomo.measure import Measurement
 
 
 def test_resample_preserves_shapes_and_means():
@@ -57,3 +61,45 @@ def test_save_writes_values_and_volume_stats(tmp_path):
         assert d["depth_h"].tolist() == [1.0, 1.2]
     with np.load(tmp_path / "boot" / "volume_stats.npz") as d:
         assert d["snr"][0, 0, 0] == 4.0 and np.isnan(d["snr"][0, 0, 1])
+
+
+def _fake_chain(monkeypatch, outcomes):
+    """Stand-ins for opacity and measurement: run_bootstrap's own job is the
+    resampling loop and the aggregation, which these isolate."""
+    it = iter(outcomes)
+
+    def fake_measure(*a, **k):
+        o = next(it)
+        if isinstance(o, Exception):
+            raise o
+        return Measurement(values={"depth_h": o}, volume=np.full((1, 1, 2), o))
+
+    monkeypatch.setattr(bootstrap, "solve_opacity", lambda *a, **k: None)
+    monkeypatch.setattr(bootstrap, "build_fit_data", lambda *a, **k: None)
+    monkeypatch.setattr(bootstrap, "measure", fake_measure)
+
+
+def _run(cfg, n):
+    c = replace(cfg, uncertainty=replace(cfg.uncertainty, n_replicas=n))
+    grid = AnalysisGrid(edges=np.linspace(-1, 1, 3), counts={"pos0": np.ones((2, 2))})
+    return run_bootstrap(grid, c, live_time={}, sigma={}, rows=None, vgrid=None, sky=None)
+
+
+def test_run_bootstrap_volume_sigma_is_sample_sigma(cfg, monkeypatch):
+    _fake_chain(monkeypatch, [1.0, 2.0, 4.0])
+    r = _run(cfg, 3)
+    assert r.values["depth_h"].tolist() == [1.0, 2.0, 4.0]
+    assert np.allclose(r.volume_sigma, np.std([1.0, 2.0, 4.0], ddof=1))
+    assert np.allclose(r.volume_mean, 7.0 / 3)
+
+
+def test_run_bootstrap_single_replica_volume_sigma_is_nan(cfg, monkeypatch):
+    _fake_chain(monkeypatch, [1.0])
+    with np.errstate(all="raise"):
+        assert np.all(np.isnan(_run(cfg, 1).volume_sigma))
+
+
+def test_run_bootstrap_propagates_a_failed_replica(cfg, monkeypatch):
+    _fake_chain(monkeypatch, [1.0, RuntimeError("beam triangulation failed")])
+    with pytest.raises(RuntimeError, match="triangulation failed"):
+        _run(cfg, 2)

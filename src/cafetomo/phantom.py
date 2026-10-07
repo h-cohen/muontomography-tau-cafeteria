@@ -1,6 +1,8 @@
 """Synthetic ceilings with known geometry, projected through the real forward
 model: the only ground truth this campaign has."""
 
+from types import EllipsisType
+
 import numpy as np
 
 from cafetomo.fitdata import FitData, RowIndex
@@ -22,9 +24,14 @@ def sky_rows(position_ids: tuple[str, ...], t_max: float, n_bins: int) -> RowInd
 
 def beam_ceiling(grid: VoxelGrid, *, xs, z0: float, w: float, h: float, kappa,
                  y_extent: tuple[float, float], slab_thickness: float = 0.2,
-                 slab_kappa: float = 0.3) -> np.ndarray:
+                 slab_kappa: float = 0.3,
+                 slab_y_extent: tuple[float, float] | None | EllipsisType = ...) -> np.ndarray:
     """Rectangular beams along y (bottom face z0, width w, depth h, opacity
     density kappa_k) under a uniform slab whose underside is z0 + h.
+
+    The slab spans `slab_y_extent` in y: by default (`...`) the beams' own
+    y_extent; None spans the whole grid, so the slab has no y edge whose
+    sharp shadow step would bias a fit with a smooth background.
 
     Voxel centres lying exactly on a beam face are all included: a bare
     `<= w/2` keeps one face and drops the other by float rounding, which
@@ -40,7 +47,11 @@ def beam_ceiling(grid: VoxelGrid, *, xs, z0: float, w: float, h: float, kappa,
         box = (np.abs(x - xk) <= half) & in_y & (z >= z0) & (z <= z0 + h)
         vol = np.where(box, kk, vol)
         in_beam |= box
-    slab = in_y & (z > z0 + h) & (z <= z0 + h + slab_thickness)
+    if slab_y_extent is ...:
+        slab_y_extent = y_extent
+    slab_y = (np.ones_like(y, dtype=bool) if slab_y_extent is None
+              else (y >= slab_y_extent[0]) & (y <= slab_y_extent[1]))
+    slab = slab_y & (z > z0 + h) & (z <= z0 + h + slab_thickness)
     return np.where(slab & ~in_beam, slab_kappa, vol)
 
 
