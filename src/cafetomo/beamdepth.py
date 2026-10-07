@@ -13,6 +13,10 @@ is not subject to the inversion's smearing along depth. Linear parameters
 Cross-check -- the z extent of the beams in the reconstructed volume, read
 against the analytic depth resolution. Regularisation and the depth null space
 bias it; it is a consistency check, not a measurement.
+
+An unmodelled sharp feature in the background (a slab shadow that ends inside
+the band, say) is absorbed by the beam boxes and biases h, by ~3% on the test
+phantom: a systematic to budget, not a fit failure.
 """
 
 from dataclasses import dataclass
@@ -25,6 +29,10 @@ from cafetomo.fitdata import FitData, RowIndex
 from cafetomo.raycast import bundle_offsets
 from cafetomo.reconstruct import VoxelSolution
 from cafetomo.resolution import depth_resolution, position_baselines
+
+# The off-beam reference column for a lone beam sits half the ceiling's
+# 1.7 m beam pitch away: where the gap between neighbours would be centred.
+_SINGLE_BEAM_OFF_M = 0.85
 
 _GH = (np.array([-np.sqrt(3.0), 0.0, np.sqrt(3.0)]), np.array([1 / 6, 2 / 3, 1 / 6]))
 
@@ -88,12 +96,15 @@ class BeamDepthFit:
     at_bound: bool
     n_rows: int
     profiles: dict
+    converged: bool
+    n_eval: int
 
     def to_json(self) -> dict:
         return {"zbottom": self.z0, "w": self.w, "h": self.h, "ztop": self.z0 + self.h,
                 "xs": list(self.xs), "kappa": list(self.kappa),
-                "chi_per_dof": self.chi2_per_dof, "at_bound": self.at_bound,
-                "n_rows": self.n_rows, "profiles": self.profiles}
+                "chisq_per_dof": self.chi2_per_dof, "at_bound": self.at_bound,
+                "n_rows": self.n_rows, "profiles": self.profiles,
+                "converged": self.converged, "n_eval": self.n_eval}
 
 
 def fit_beam_depth(data: FitData, cfg: Config, *, xs_init, z0_init: float,
@@ -122,6 +133,8 @@ def fit_beam_depth(data: FitData, cfg: Config, *, xs_init, z0_init: float,
     lo = np.array([z0_init - 1.0, 0.05, 0.05, *(np.asarray(xs_init) - 0.3)])
     hi = np.array([z0_init + 1.0, 1.0, s.h_max_m, *(np.asarray(xs_init) + 0.3)])
     fit = optimize.least_squares(resid, np.clip(x0, lo, hi), bounds=(lo, hi), x_scale="jac")
+    if fit.status <= 0:
+        raise RuntimeError(f"beam-depth fit failed (status {fit.status}): {fit.message}")
     theta = fit.x
     X = design(theta)
     coef, *_ = np.linalg.lstsq(X * sw[:, None], lam * sw, rcond=None)
@@ -144,11 +157,15 @@ def fit_beam_depth(data: FitData, cfg: Config, *, xs_init, z0_init: float,
                         xs=tuple(float(v) for v in theta[3:]),
                         kappa=tuple(float(v) for v in coef[:nb]),
                         chi2_per_dof=float(np.sum(fit.fun**2) / dof), at_bound=at_bound,
-                        n_rows=int(rows.n_rows), profiles=profiles)
+                        n_rows=int(rows.n_rows), profiles=profiles,
+                        converged=bool(fit.success), n_eval=int(fit.nfev))
 
 
 def zprofile_depth(sol: VoxelSolution, cfg: Config, *, xs, w: float, z_ref: float) -> dict:
-    """Beam-minus-between-beam opacity vs z in the volume, and its half-maximum extent."""
+    """Beam-minus-between-beam opacity vs z in the volume, and its half-maximum extent.
+
+    A face whose half-maximum crossing lies off the grid is NaN (not measured):
+    clamping it to the grid edge would report the grid, not the beam."""
     g = sol.grid
     rho = sol.rho3()
     x = g.axis_centers(0)
@@ -159,12 +176,17 @@ def zprofile_depth(sol: VoxelSolution, cfg: Config, *, xs, w: float, z_ref: floa
     on = np.zeros(x.size, dtype=bool)
     for xk in xs:
         on |= np.abs(x - xk) <= w / 2 + g.spacing / 2
-    mids = 0.5 * (xs[:-1] + xs[1:]) if xs.size > 1 else xs + 0.85
+    mids = 0.5 * (xs[:-1] + xs[1:]) if xs.size > 1 else xs + _SINGLE_BEAM_OFF_M
     off = np.zeros(x.size, dtype=bool)
-    for m in np.atleast_1d(mids):
+    for m in mids:
         off |= np.abs(x - m) <= w / 2 + g.spacing / 2
+    for name, sel in (("y band", yb), ("beam columns", on), ("between-beam columns", off)):
+        if not sel.any():
+            raise ValueError(f"z-profile: the {name} select no voxels of the grid")
     prof = rho[on][:, yb].mean(axis=(0, 1)) - rho[off][:, yb].mean(axis=(0, 1))
     i = int(np.argmax(prof))
+    if prof[i] <= 0:
+        raise ValueError("z-profile: no beam signal (beam minus between-beam contrast <= 0)")
     half = 0.5 * prof[i]
     lo_i = i
     while lo_i > 0 and prof[lo_i - 1] >= half:
@@ -176,8 +198,8 @@ def zprofile_depth(sol: VoxelSolution, cfg: Config, *, xs, w: float, z_ref: floa
     def cross(a: int, b: int) -> float:
         return float(np.interp(half, [prof[a], prof[b]], [z[a], z[b]]))
 
-    bottom = cross(lo_i - 1, lo_i) if lo_i > 0 else float(z[0])
-    top = cross(hi_i + 1, hi_i) if hi_i < z.size - 1 else float(z[-1])
+    bottom = cross(lo_i - 1, lo_i) if lo_i > 0 else float("nan")
+    top = cross(hi_i + 1, hi_i) if hi_i < z.size - 1 else float("nan")
     baseline = max(position_baselines(cfg).values())
     sigma_t = cfg.opacity.sky_t_max * 2 / cfg.opacity.sky_n_bins / np.sqrt(12.0)
     return {"bottom": bottom, "top": top, "fwhm": top - bottom, "peak": float(z[i]),
