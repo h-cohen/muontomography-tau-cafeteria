@@ -1,0 +1,27 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-node@v4
+        with: { node-version: "24" }
+      - run: uv sync
+      - run: uv run playwright install --with-deps chromium
+      # make test already runs the browser-marked viewer tests (tests/viewer).
+      - run: make test
+  pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync
+      - run: sudo apt-get update && sudo apt-get install -y latexmk texlive-latex-extra texlive-science texlive-fonts-recommended
+      - run: make all FAST=1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paper-fast
+          path: runs/fast/generated/paper.pdf
