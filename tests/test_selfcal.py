@@ -12,6 +12,8 @@ from cafetomo.selfcal import (
     _candidate_xy,
     _objective_grids,
     _pose_from,
+    _scan_start,
+    _search_space,
     fit_pose,
     pose_bootstrap,
     pose_result,
@@ -91,6 +93,39 @@ def test_candidate_xy_spans_the_baseline_arc(cfg):
     xy = _candidate_xy(c)
     assert np.hypot(xy[:, 0], xy[:, 1]) == pytest.approx(np.full(len(xy), 2.2))
     assert xy[:, 0].max() == pytest.approx(2.2)
+
+
+def test_scan_starts_at_the_best_bearing(cfg):
+    """A stub objective with its minimum at a 40 deg bearing: the search
+    starts at the scanned bearing nearest to it, at the prior azimuth."""
+    c = replace(cfg, selfcal=replace(cfg.selfcal, baseline_m=2.42, bounds_m=2.6, scan_deg=5.0))
+    seen = []
+
+    def objective(theta):
+        seen.append(theta.copy())
+        return (np.degrees(theta[0]) - 40.0) ** 2 + 0.1 * theta[1] ** 2
+
+    x0 = _scan_start(objective, c)
+    (lo, hi), _ = _search_space(c)[1]
+    assert abs(np.degrees(x0[0]) - 40.0) <= 2.5
+    assert x0[1] == c.exposure("pos1").pose.az_deg
+    bearings = np.array([t[0] for t in seen])
+    assert bearings.min() == pytest.approx(lo) and bearings.max() == pytest.approx(hi)
+    assert np.all(np.diff(np.degrees(bearings))[:-1] == pytest.approx(5.0))
+
+
+def test_scan_skipped_with_a_free_baseline(cfg):
+    c = replace(cfg, selfcal=replace(cfg.selfcal, baseline_m=None))
+
+    def objective(theta):
+        raise AssertionError("no scan without a fixed baseline")
+
+    assert _scan_start(objective, c) == pytest.approx(_search_space(c)[0])
+
+
+def test_scan_rejects_a_non_finite_objective(cfg):
+    with pytest.raises(RuntimeError, match="non-finite"):
+        _scan_start(lambda theta: np.nan, cfg)
 
 
 def test_pose_result_keys(cfg):

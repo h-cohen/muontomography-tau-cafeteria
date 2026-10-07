@@ -69,6 +69,9 @@ selfcal:
   spacing_m: 0.4          # coarse lattice for the pose objective
   n_iter: 60
   n_bootstrap: 8
+  # With the separation fixed, the bearing is first scanned over its bounds in
+  # these steps at the prior azimuth; Powell starts from the best one.
+  scan_deg: 5.0
 
 autofocus:
   z_min_m: 6.0

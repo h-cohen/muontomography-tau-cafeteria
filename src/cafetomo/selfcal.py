@@ -136,6 +136,27 @@ def _pose_from(theta: np.ndarray, cfg: Config) -> Pose:
     return Pose(float(x), float(y), z, float(az))
 
 
+def _scan_start(objective, cfg: Config) -> np.ndarray:
+    """Start point of the pose search. With the separation fixed, the prior's
+    bearing can be far from the true one (the prior pose is along +x; the
+    data imply ~42 deg), and Powell from there can stall in a local minimum:
+    the bearing is first scanned over its bounds in `scan_deg` steps (ends
+    included) at the prior azimuth, and the best one starts the search. The
+    free-baseline search starts at the prior."""
+    x0, bounds = _search_space(cfg)
+    if cfg.selfcal.baseline_m is None:
+        return x0
+    lo, hi = bounds[0]
+    step = np.radians(cfg.selfcal.scan_deg)
+    if step <= 0:
+        raise ValueError(f"selfcal.scan_deg must be positive, got {cfg.selfcal.scan_deg}")
+    bearings = np.append(np.arange(lo, hi, step), hi)
+    scores = [objective(np.array([b, x0[1]])) for b in bearings]
+    if not np.all(np.isfinite(scores)):
+        raise RuntimeError(f"selfcal bearing scan hit a non-finite objective: {scores}")
+    return np.array([bearings[int(np.argmin(scores))], x0[1]])
+
+
 def fit_pose(grid: AnalysisGrid, cfg: Config, live_time: dict[str, float]) -> PoseFit:
     """Minimise the cross-position score over the free position's pose,
     bounded around the config's prior.
@@ -164,10 +185,10 @@ def fit_pose(grid: AnalysisGrid, cfg: Config, live_time: dict[str, float]) -> Po
         )
         return float(np.mean([cross_position_score(data, c, g) for g in vgrids]))
 
-    x0, bounds = _search_space(cfg)
+    _, bounds = _search_space(cfg)
     res = optimize.minimize(
         objective,
-        x0,
+        _scan_start(objective, cfg),
         method="Powell",
         bounds=bounds,
         options={"xtol": 1e-3, "ftol": 1e-4, "maxiter": 60},

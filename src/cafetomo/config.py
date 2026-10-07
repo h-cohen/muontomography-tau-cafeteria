@@ -98,6 +98,7 @@ class SelfcalSettings:
     spacing_m: float = 0.4
     n_iter: int = 60
     n_bootstrap: int = 8
+    scan_deg: float = 5.0
 
 
 @dataclass(frozen=True)
