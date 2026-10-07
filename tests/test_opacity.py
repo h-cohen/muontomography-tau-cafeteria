@@ -5,8 +5,10 @@ from cafetomo.angular import AnalysisGrid
 from cafetomo.opacity import (
     OpacityMaps,
     build_fit_data,
+    load_sigma,
     opacity_sigma,
     poisson_sigma,
+    save_sigma,
     solve_opacity,
 )
 from cafetomo.sky import detector_to_sky
@@ -34,8 +36,16 @@ def test_absolute_lambda_recovers_uniform_absorption(cfg):
 
 
 def test_missing_live_time_raises(cfg):
-    with pytest.raises(KeyError):
+    with pytest.raises(ValueError, match="SKY"):
         solve_opacity(_grid(cfg), cfg, {"pos0": 1.0, "pos1": 1.0})
+    with pytest.raises(ValueError, match="pos1"):
+        solve_opacity(_grid(cfg), cfg, {"SKY": 2.0, "pos0": 1.0})
+
+
+@pytest.mark.parametrize("bad", ["SKY", "pos0"])
+def test_non_positive_live_time_raises(cfg, bad):
+    with pytest.raises(ValueError, match=bad):
+        solve_opacity(_grid(cfg), cfg, {**LIVE, bad: 0.0})
 
 
 def test_bootstrap_sigma_close_to_poisson(cfg):
@@ -66,6 +76,8 @@ def test_pinned_rows_nan_gets_zero_weight(cfg):
     pinned = build_fit_data(OpacityMaps(lam=lam, sky=maps.sky), cfg, sig, rows=nominal.rows)
     assert pinned.rows is nominal.rows
     assert pinned.w[0] == 0.0 and np.isfinite(pinned.lam).all()
+    np.testing.assert_array_equal(pinned.w[1:], nominal.w[1:])
+    np.testing.assert_array_equal(pinned.lam[1:], nominal.lam[1:])
 
 
 def test_save_load_roundtrip(cfg, tmp_path):
@@ -158,3 +170,35 @@ def test_missing_sky_reference_counts_raises(cfg):
                                                  if k != cfg.sky_reference.id})
     with pytest.raises(ValueError, match="SKY"):
         solve_opacity(no_sky, cfg, LIVE)
+
+
+UNEQUAL = {"SKY": 4.0, "pos0": 1.0, "pos1": 1.0}
+
+
+def test_poisson_sigma_uses_raw_sky_counts_under_unequal_live_times(cfg):
+    g, _, (tx, ty) = _structured_scene(cfg, level=400.0)
+    sig = poisson_sigma(g, cfg, UNEQUAL)["pos0"]
+    maps = solve_opacity(g, cfg, UNEQUAL)
+    flat, ok = _detector_bins(cfg, maps, tx, ty)
+    hits = np.bincount(flat[ok], minlength=maps.sky.flat_size)
+    one = np.nonzero(ok & (hits[np.where(ok, flat, 0)] == 1)
+                     & (g.counts["SKY"] >= cfg.opacity.min_sky))
+    i, j = one[0][0], one[1][0]
+    n_p, n_s = g.counts["pos0"][i, j], g.counts["SKY"][i, j]
+    assert sig[flat[i, j]] == pytest.approx(np.sqrt(1 / n_p + 1 / n_s))
+
+
+def test_bootstrap_sigma_matches_poisson_under_unequal_live_times(cfg):
+    g = _grid(cfg, absorb=0.2)
+    a = poisson_sigma(g, cfg, UNEQUAL)["pos0"]
+    b = opacity_sigma(g, cfg, UNEQUAL, n_replicas=60, seed=2)["pos0"]
+    ok = np.isfinite(a) & np.isfinite(b) & (b > 0)
+    assert np.median(b[ok] / a[ok]) == pytest.approx(1.0, abs=0.1)
+
+
+def test_save_sigma_creates_parent_directory(cfg, tmp_path):
+    g = _grid(cfg)
+    sig = poisson_sigma(g, cfg, LIVE)
+    save_sigma(tmp_path / "new" / "sigma.npz", sig)
+    np.testing.assert_array_equal(load_sigma(tmp_path / "new" / "sigma.npz")["pos0"],
+                                  sig["pos0"])

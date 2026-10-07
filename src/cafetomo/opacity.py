@@ -55,9 +55,20 @@ def _sky_grid(cfg: Config) -> SkyGrid:
     return make_sky_grid(cfg.opacity.sky_t_max, cfg.opacity.sky_n_bins)
 
 
+def _check_live_time(cfg: Config, live_time: dict[str, float]) -> None:
+    for key in (cfg.sky_reference.id, *cfg.position_ids):
+        if key not in live_time:
+            raise ValueError(f"live time missing for {key!r}")
+        if not live_time[key] > 0:
+            raise ValueError(f"live time for {key!r} must be positive, got {live_time[key]}")
+
+
 def _accumulate(grid: AnalysisGrid, cfg: Config, sky: SkyGrid,
-                live_time: dict[str, float]) -> dict[str, tuple[np.ndarray, np.ndarray]]:
-    """Per position: (observed counts, expected open-sky counts) per sky bin."""
+                live_time: dict[str, float]
+                ) -> dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]]:
+    """Per position: (observed counts, expected open-sky counts, raw sky counts)
+    per sky bin."""
+    _check_live_time(cfg, live_time)
     sky_id = cfg.sky_reference.id
     if sky_id not in grid.counts:
         raise ValueError(f"analysis grid has no {sky_id!r} counts; ingest the sky reference")
@@ -72,9 +83,11 @@ def _accumulate(grid: AnalysisGrid, cfg: Config, sky: SkyGrid,
         live = (acc > 0) & on_sky & in_grid & (n_sky >= cfg.opacity.min_sky)
         obs = np.zeros(sky.flat_size)
         ref = np.zeros(sky.flat_size)
+        raw = np.zeros(sky.flat_size)
         np.add.at(obs, flat[live], grid.counts[pid][live].astype(np.float64))
         np.add.at(ref, flat[live], float(live_time[pid]) / t_sky * n_sky[live])
-        out[pid] = (obs, ref)
+        np.add.at(raw, flat[live], n_sky[live])
+        out[pid] = (obs, ref, raw)
     return out
 
 
@@ -83,7 +96,7 @@ def solve_opacity(grid: AnalysisGrid, cfg: Config,
     """Absolute lambda per position and sky bin."""
     sky = _sky_grid(cfg)
     lam = {}
-    for pid, (obs, ref) in _accumulate(grid, cfg, sky, live_time).items():
+    for pid, (obs, ref, _) in _accumulate(grid, cfg, sky, live_time).items():
         out = np.full(sky.flat_size, np.nan)
         seen = ref > 0
         out[seen] = -np.log(np.clip(obs[seen] / ref[seen], cfg.opacity.t_floor, None))
@@ -97,10 +110,10 @@ def poisson_sigma(grid: AnalysisGrid, cfg: Config,
     objectives evaluated many times (the pose fit)."""
     sky = _sky_grid(cfg)
     out = {}
-    for pid, (obs, ref) in _accumulate(grid, cfg, sky, live_time).items():
+    for pid, (obs, ref, raw) in _accumulate(grid, cfg, sky, live_time).items():
         s = np.full(sky.flat_size, np.nan)
         seen = ref > 0
-        s[seen] = np.sqrt(1.0 / np.maximum(obs[seen], 1.0) + 1.0 / ref[seen])
+        s[seen] = np.sqrt(1.0 / np.maximum(obs[seen], 1.0) + 1.0 / raw[seen])
         out[pid] = s
     return out
 
@@ -117,11 +130,14 @@ def opacity_sigma(grid: AnalysisGrid, cfg: Config, live_time: dict[str, float], 
         for pid, lam in maps.lam.items():
             stacks.setdefault(pid, []).append(lam)
     with warnings.catch_warnings():
-        warnings.simplefilter("ignore", RuntimeWarning)   # bins seen in no replica
+        # bins seen in no replica have no spread to report
+        warnings.filterwarnings("ignore", message="Degrees of freedom",
+                                category=RuntimeWarning)
         return {pid: np.nanstd(np.vstack(v), axis=0) for pid, v in stacks.items()}
 
 
 def save_sigma(path: str | Path, sigma: dict[str, np.ndarray]) -> None:
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(path, **sigma)
 
 
