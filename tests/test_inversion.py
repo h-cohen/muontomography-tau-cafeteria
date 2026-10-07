@@ -8,6 +8,7 @@ from cafetomo.config import Reconstruction
 from cafetomo.fitdata import FitData, RowIndex
 from cafetomo.forward import ForwardModel, build_forward_model
 from cafetomo.inversion import sirt, sirt_tv, solve
+from cafetomo.phantom import sky_rows
 from cafetomo.voxels import VoxelGrid
 
 
@@ -169,13 +170,7 @@ def test_an_all_zero_weight_fit_returns_zeros_rather_than_dividing_by_zero():
 def _noisy_ceiling(cfg, seed=0):
     """Flat slab 0.8 m thick at the top of the volume, noise growing toward the
     acceptance edge."""
-    t = (np.arange(36) + 0.5) / 36 * 1.8 - 0.9
-    sx, sy = (a.ravel() for a in np.meshgrid(t, t))
-    n = sx.size
-    rows = RowIndex(position_ids=cfg.position_ids,
-                    pos_of_row=np.repeat(np.arange(2), n),
-                    sx=np.tile(sx, 2), sy=np.tile(sy, 2),
-                    sky_flat=np.tile(np.arange(n), 2))
+    rows = sky_rows(cfg.position_ids, 0.9, 36)
     cfg = replace(cfg, volume=replace(cfg.volume, spacing_m=0.3))
     fwd = build_forward_model(rows, cfg, cache_dir=None)
     zc = fwd.grid.axis_centers(2)

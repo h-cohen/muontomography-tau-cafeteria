@@ -3,9 +3,10 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
-from cafetomo.fitdata import FitData, RowIndex
+from cafetomo.fitdata import FitData
 from cafetomo.forward import build_forward_model
 from cafetomo.inversion import solve
+from cafetomo.phantom import sky_rows
 from cafetomo.raycast import INVERSION_VERSION
 from cafetomo.reconstruct import VoxelSolution, solve_voxels
 
@@ -23,17 +24,10 @@ def cfg2(cfg):
 def _data(cfg, seed=0, sigma=None):
     """Both positions over one regular tangent grid, ~70% of rows measured."""
     rng = np.random.default_rng(seed)
-    t = (np.arange(N_SIDE) + 0.5) / N_SIDE * 2.0 - 1.0
-    sx, sy = (a.ravel() for a in np.meshgrid(t, t))
-    n = sx.size
-    n_pos = len(cfg.position_ids)
-    rows = RowIndex(position_ids=cfg.position_ids,
-                    pos_of_row=np.repeat(np.arange(n_pos), n),
-                    sx=np.tile(sx, n_pos), sy=np.tile(sy, n_pos),
-                    sky_flat=np.tile(np.arange(n), n_pos))
-    lam = rng.uniform(0.0, 2.0, n * n_pos)
-    live = rng.random(n * n_pos) < 0.7
-    sig = np.ones(n * n_pos) if sigma is None else sigma
+    rows = sky_rows(cfg.position_ids, 1.0, N_SIDE)
+    lam = rng.uniform(0.0, 2.0, rows.n_rows)
+    live = rng.random(rows.n_rows) < 0.7
+    sig = np.ones(rows.n_rows) if sigma is None else sigma
     return FitData(lam=lam, w=np.where(live, 1.0 / sig**2, 0.0), rows=rows)
 
 
@@ -119,14 +113,7 @@ def _flat_ceiling(cfg):
     vol = replace(cfg.volume, spacing_m=0.5)
     cfg = replace(cfg, volume=vol, reconstruction=replace(
         cfg.reconstruction, n_iter=150, tv_alpha=0.01, tv_z_weight=0.5))
-    n = 18
-    t = (np.arange(n) + 0.5) / n * 1.8 - 0.9
-    sx, sy = (a.ravel() for a in np.meshgrid(t, t, indexing="ij"))
-    n_pos = len(cfg.position_ids)
-    rows = RowIndex(position_ids=cfg.position_ids,
-                    pos_of_row=np.repeat(np.arange(n_pos), sx.size),
-                    sx=np.tile(sx, n_pos), sy=np.tile(sy, n_pos),
-                    sky_flat=np.tile(np.arange(sx.size), n_pos))
+    rows = sky_rows(cfg.position_ids, 0.9, 18)
     fwd = build_forward_model(rows, cfg, cache_dir=None)
     zc = fwd.grid.axis_centers(2)
     slab = (zc > 6.6) & (zc < 7.4)
