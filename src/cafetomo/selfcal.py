@@ -138,8 +138,8 @@ def _pose_from(theta: np.ndarray, cfg: Config) -> Pose:
 
 def _scan_start(objective, cfg: Config) -> np.ndarray:
     """Start point of the pose search. With the separation fixed, the prior's
-    bearing can be far from the true one (the prior pose is along +x; the
-    data imply ~42 deg), and Powell from there can stall in a local minimum:
+    bearing can be far from the true one (the prior pose is along +x), and
+    Powell from there can stall in a local minimum:
     the bearing is first scanned over its bounds in `scan_deg` steps (ends
     included) at the prior azimuth, and the best one starts the search. The
     free-baseline search starts at the prior."""
@@ -193,6 +193,8 @@ def fit_pose(grid: AnalysisGrid, cfg: Config, live_time: dict[str, float]) -> Po
         bounds=bounds,
         options={"xtol": 1e-3, "ftol": 1e-4, "maxiter": 60},
     )
+    if not res.success or not np.isfinite(res.fun) or not np.all(np.isfinite(res.x)):
+        raise RuntimeError(f"pose fit failed: {res.message}; objective={res.fun}, pose={res.x}")
     return PoseFit(
         pose=_pose_from(res.x, cfg),
         objective=float(res.fun),

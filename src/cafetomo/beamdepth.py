@@ -319,7 +319,9 @@ def _fit_once(
     x0 = np.array([z0_init, s.w_init_m, h_init, *xs_init], dtype=np.float64)
     lo = np.array([z0_init - 1.0, 0.05, 0.05, *(np.asarray(xs_init) - 0.3)])
     hi = np.array([z0_init + 1.0, 1.0, s.h_max_m, *(np.asarray(xs_init) + 0.3)])
-    fit = optimize.least_squares(resid, np.clip(x0, lo, hi), bounds=(lo, hi), x_scale="jac")
+    fit = optimize.least_squares(
+        resid, np.clip(x0, lo, hi), bounds=(lo, hi), x_scale="jac", max_nfev=5000
+    )
     if fit.status <= 0:
         raise RuntimeError(f"beam-depth fit failed (status {fit.status}): {fit.message}")
     theta = fit.x

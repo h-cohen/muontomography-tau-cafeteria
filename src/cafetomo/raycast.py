@@ -25,7 +25,7 @@ from cafetomo.voxels import VoxelGrid
 
 # Bumped whenever ray-casting logic changes. It is part of the cache key, so a
 # cache built before a fix is never served after it.
-INVERSION_VERSION = 1
+INVERSION_VERSION = 2
 
 _SAMPLES_PER_VOXEL = 3  # sampling step along a ray = spacing / this
 _ROW_BLOCK = 512  # rows processed per vectorised block
@@ -86,13 +86,15 @@ def build_system_matrix(
     # inside the grid (embedded in the volume, looking up through it) starts
     # its path at t=0, not at z0 — using z0 unconditionally would count the
     # region behind the detector as if the ray had travelled through it.
-    dz = dirs[:, 2]
-    start_z = starts[:, :, 2].mean(axis=1)
+    dz = dirs[:, 2, None]
+    start_z = starts[:, :, 2]
     t_in = np.maximum((z0 - start_z) / dz, 0.0)
     t_out = (z1 - start_z) / dz
-    length = t_out - t_in
+    length = np.maximum(t_out - t_in, 0.0)
     step = grid.spacing / _SAMPLES_PER_VOXEL
-    n_samp = np.maximum(np.ceil(length / step).astype(np.int64), 1)
+    # All sub-rays in a row share sampling fractions, but each traverses its
+    # own segment. The longest segment controls the maximum sampling step.
+    n_samp = np.maximum(np.ceil(length.max(axis=1) / step).astype(np.int64), 1)
 
     nr, ns = rows.n_rows, offs.shape[1]
     r_out, c_out, v_out = [], [], []
@@ -103,18 +105,18 @@ def build_system_matrix(
         # midpoint sampling fraction along each ray's in-slab segment
         base = np.repeat(np.concatenate([[0], np.cumsum(cn[:-1])]), cn)
         frac = (np.arange(int(cn.sum())) - base + 0.5) / np.repeat(cn, cn)
-        t = t_in[row_rep] + frac * length[row_rep]  # [Nt]
+        t = t_in[row_rep] + frac[:, None] * length[row_rep]  # [Nt, ns]
 
-        pts = starts[row_rep] + (t[:, None] * dirs[row_rep])[:, None, :]  # [Nt, ns, 3]
+        pts = starts[row_rep] + t[:, :, None] * dirs[row_rep, None, :]  # [Nt, ns, 3]
         idx = np.floor((pts - origin) / grid.spacing).astype(np.int64)
-        inside = np.all((idx >= 0) & (idx < shape), axis=-1)  # [Nt, ns]
+        inside = np.all((idx >= 0) & (idx < shape), axis=-1) & (length[row_rep] > 0)
         flat = (idx[..., 0] * grid.shape[1] + idx[..., 1]) * grid.shape[2] + idx[..., 2]
         # Divide by ns: the bundle AVERAGES path length, it does not accumulate.
-        dl = length[row_rep] / n_samp[row_rep] / ns
+        dl = length[row_rep] / n_samp[row_rep, None] / ns
 
         r_out.append(np.broadcast_to(row_rep[:, None], inside.shape)[inside])
         c_out.append(flat[inside])
-        v_out.append(np.broadcast_to(dl[:, None], inside.shape)[inside])
+        v_out.append(dl[inside])
 
     A = sparse.coo_matrix(
         (

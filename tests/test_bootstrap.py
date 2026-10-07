@@ -109,3 +109,51 @@ def test_run_bootstrap_propagates_a_failed_replica(cfg, monkeypatch):
     _fake_chain(monkeypatch, [1.0, RuntimeError("beam triangulation failed")])
     with pytest.raises(RuntimeError, match="triangulation failed"):
         _run(cfg, 2)
+
+
+def test_measurement_replicas_are_independent_of_weight_replicas_and_reproducible(cfg, monkeypatch):
+    from cafetomo import opacity
+    from cafetomo.opacity import build_fit_data, opacity_sigma, solve_opacity
+
+    grid = AnalysisGrid(
+        edges=np.linspace(-0.1, 0.1, 3),
+        counts={
+            "pos0": np.full((2, 2), 3000),
+            "pos1": np.full((2, 2), 3500),
+            "SKY": np.full((2, 2), 5000),
+        },
+    )
+    live = {"pos0": 1.0, "pos1": 1.0, "SKY": 1.0}
+    weight_draws, measurement_draws = [], []
+
+    def weight_opacity(sample, *args):
+        weight_draws.append(sample.counts["pos0"].copy())
+        return solve_opacity(sample, *args)
+
+    def measurement_sample(source, rng):
+        sample = resample(source, rng)
+        measurement_draws.append(sample.counts["pos0"].copy())
+        return sample
+
+    monkeypatch.setattr(opacity, "solve_opacity", weight_opacity)
+    sigma = opacity_sigma(grid, cfg, live, n_replicas=3, seed=cfg.uncertainty.seed)
+    maps = solve_opacity(grid, cfg, live)
+    rows = build_fit_data(maps, cfg, sigma).rows
+    monkeypatch.setattr(bootstrap, "resample", measurement_sample)
+    # The expensive geometric estimator is outside this RNG-stream contract.
+    monkeypatch.setattr(
+        bootstrap,
+        "measure",
+        lambda data, *args, **kwargs: Measurement(
+            values={"depth_h": float(data.lam.sum())},
+            volume=np.ones((1, 1, 1)),
+        ),
+    )
+    c = replace(cfg, uncertainty=replace(cfg.uncertainty, n_replicas=3))
+    for _ in range(2):
+        run_bootstrap(grid, c, live_time=live, sigma=sigma, rows=rows, vgrid=None, sky=maps.sky)
+    assert any(
+        not np.array_equal(a, b) for a, b in zip(weight_draws, measurement_draws[:3], strict=True)
+    )
+    for a, b in zip(measurement_draws[:3], measurement_draws[3:], strict=True):
+        np.testing.assert_array_equal(a, b)

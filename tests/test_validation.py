@@ -64,3 +64,18 @@ def test_validation_needs_a_finite_overburden(cfg):
     g = VoxelGrid(origin=(-3.0, -3.0, 6.0), spacing=0.1, shape=(10, 10, 10))
     with pytest.raises(ValueError, match="finite fitted density and overburden"):
         validation._truth(g, cfg, NOMINAL | {"overburden_mean": float("nan")}, z0=7.0, h=0.5)
+
+
+def test_validation_truth_contains_high_beams_and_the_complete_slab(cfg):
+    from cafetomo.fitdata import FitData
+    from cafetomo.phantom import sky_rows
+
+    rows = sky_rows(cfg.position_ids, 0.1, 2)
+    data = FitData(lam=np.zeros(rows.n_rows), w=np.ones(rows.n_rows), rows=rows)
+    nominal = NOMINAL | {"zbottom": 8.9}
+    grid = validation._truth_grid(cfg, data, nominal)
+    # 8.9 m bottom + 2 m beam + 0.3 m slab: no material may fall off the grid.
+    assert grid.extent(2)[1] >= 11.2
+    truth = validation._truth(grid, cfg, nominal, z0=8.9, h=2.0).reshape(grid.shape)
+    occupied_z = grid.axis_centers(2)[np.any(truth > 0, axis=(0, 1))]
+    assert occupied_z.max() == pytest.approx(11.175, abs=1e-6)

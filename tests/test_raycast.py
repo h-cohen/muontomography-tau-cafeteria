@@ -54,6 +54,21 @@ def test_a_tilted_ray_is_longer_by_one_over_cos_theta():
     assert A.sum() == pytest.approx(2.0 * np.sqrt(2.0), rel=1e-3)
 
 
+@pytest.mark.parametrize("sx,sy", [(0.4, 0.0), (0.8, 0.0), (0.4, 0.3)])
+def test_oblique_aperture_bundle_conserves_path_through_a_thin_uniform_layer(sx, sy):
+    grid = VoxelGrid(origin=(-8.0, -8.0, 6.85), spacing=0.05, shape=(320, 320, 6))
+    matrix = build_system_matrix(
+        _rows([sx], [sy]),
+        ORIGINS,
+        grid,
+        aperture_m=0.35375,
+        n_sub=4,
+    )
+    # Every sub-ray traverses the complete 0.3 m layer, independent of its
+    # offset in the aperture plane: length = thickness / cos(theta).
+    assert matrix.sum() == pytest.approx(0.3 * np.sqrt(1.0 + sx**2 + sy**2), rel=1e-10)
+
+
 def test_the_vertical_ray_lands_in_the_column_above_its_origin():
     grid = VoxelGrid(origin=(-1.0, -1.0, 1.0), spacing=0.5, shape=(4, 4, 4))
     A = (

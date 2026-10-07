@@ -21,12 +21,25 @@ from cafetomo.sky import SkyGrid
 from cafetomo.voxels import VoxelGrid, auto_grid
 
 
-def _truth_grid(cfg: Config, data: FitData) -> VoxelGrid:
+def _truth_grid(cfg: Config, data: FitData, nominal_depth: dict) -> VoxelGrid:
     """A fine lattice spanning every ray's footprint, so no injected slab is
     cut off by the grid edge (a step the fits' smooth background cannot follow).
     For the same reason the injected slab spans the grid in y; sensitivity to a
     sharp slab edge is a separate systematic, not part of this validation."""
-    vol = replace(cfg.volume, z_min_m=5.0, z_max_m=10.0, spacing_m=0.05)
+    rho = nominal_depth["density"]
+    overburden = nominal_depth["overburden_mean"]
+    if not (np.isfinite(rho) and rho > 0 and np.isfinite(overburden) and overburden >= 0):
+        raise ValueError("validation needs a finite positive density and nonnegative overburden")
+    heights = (*cfg.validation.focus_heights_m, nominal_depth["zbottom"])
+    depths = (*cfg.validation.depth_h_true_m, nominal_depth["h"])
+    top = max(heights) + max(depths) + overburden / (100.0 * rho)
+    vol = replace(
+        cfg.volume,
+        z_min_m=min(5.0, min(heights)),
+        z_max_m=max(10.0, top + 0.05),
+        spacing_m=0.05,
+        xy_m=None,
+    )
     return auto_grid(vol, cfg.origins(), data.rows.t_reach(), aperture_m=cfg.detector.aperture_m)
 
 
@@ -60,7 +73,7 @@ def validate_autofocus(
     The injected value is the beam layer's centre, z0 + h/2. `focus_bias` is
     the signed mean error: autofocus lands systematically below the centre,
     and only the sign tells a reader which way to correct."""
-    g = _truth_grid(cfg, data)
+    g = _truth_grid(cfg, data, nominal_depth)
     fwd = build_forward_model(data.rows, cfg, grid=g)
     rng = np.random.default_rng(cfg.uncertainty.seed)
     injected, recovered = [], []
@@ -86,7 +99,7 @@ def validate_depth(data: FitData, cfg: Config, nominal_depth: dict, *, sky: SkyG
     come from triangulating each phantom realisation, never from the truth,
     so the bias quoted is the measurement's own. `sky` is the grid the rows'
     sky indices refer to, needed by the triangulation."""
-    g = _truth_grid(cfg, data)
+    g = _truth_grid(cfg, data, nominal_depth)
     fwd = build_forward_model(data.rows, cfg, grid=g)
     rng = np.random.default_rng(cfg.uncertainty.seed + 1)
     out = {"depth_true": [], "depth_mean": [], "depth_spread": []}

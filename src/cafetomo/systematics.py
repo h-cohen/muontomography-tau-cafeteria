@@ -103,8 +103,9 @@ def flux_scale_shift(
     cache_dir: str | Path | None = None,
 ) -> dict[str, float]:
     """Shift when every opacity is scaled by the configured flux fraction. A
-    constant lambda offset is absorbed by the degree-0 background term, so
-    depth shifts are ~0 by construction."""
+    constant lambda offset can be absorbed by the background polynomial, but
+    changes its inferred grammage in the concrete-pinned estimator. Depth can
+    therefore shift or switch local solutions."""
     shifted = maps.shifted(float(np.log1p(cfg.uncertainty.flux_scale_frac)))
     m = measure(
         build_fit_data(shifted, cfg, sigma, rows=rows),

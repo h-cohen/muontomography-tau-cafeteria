@@ -124,6 +124,7 @@ def test_scan_skipped_with_a_free_baseline(cfg):
 
 
 def test_scan_rejects_a_non_finite_objective(cfg):
+    cfg = replace(cfg, selfcal=replace(cfg.selfcal, baseline_m=2.42))
     with pytest.raises(RuntimeError, match="non-finite"):
         _scan_start(lambda theta: np.nan, cfg)
 
@@ -160,6 +161,45 @@ def test_pose_result_keys(cfg):
 def test_pose_bootstrap_needs_a_spread(cfg):
     with pytest.raises(ValueError, match="at least 2"):
         pose_bootstrap(None, cfg, {}, n=1, seed=0)
+
+
+@pytest.mark.parametrize(
+    "success,objective,x",
+    [
+        (False, 1.0, [1.75, 0.0, 0.0]),
+        (True, float("nan"), [1.75, 0.0, 0.0]),
+        (True, 1.0, [float("nan"), 0.0, 0.0]),
+    ],
+)
+def test_pose_fit_rejects_failed_or_non_finite_optimizer_results(
+    cfg, monkeypatch, success, objective, x
+):
+    from scipy.optimize import OptimizeResult
+
+    from cafetomo import selfcal
+
+    grid = AnalysisGrid(
+        edges=np.linspace(-0.1, 0.1, 3),
+        counts={
+            "pos0": np.full((2, 2), 3000),
+            "pos1": np.full((2, 2), 3500),
+            "SKY": np.full((2, 2), 5000),
+        },
+    )
+    monkeypatch.setattr(
+        selfcal.optimize,
+        "minimize",
+        lambda *args, **kwargs: OptimizeResult(
+            success=success,
+            fun=objective,
+            x=np.array(x),
+            nfev=1,
+            message="test optimizer failure",
+        ),
+    )
+    c = replace(cfg, selfcal=replace(cfg.selfcal, baseline_m=None))
+    with pytest.raises(RuntimeError, match="pose fit failed"):
+        fit_pose(grid, c, {"pos0": 1.0, "pos1": 1.0, "SKY": 1.0})
 
 
 @pytest.mark.slow

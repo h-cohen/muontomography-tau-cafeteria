@@ -1,0 +1,20 @@
+{
+  "measured_beam_bottom": 7.3,
+  "measured_beam_depth": 1.2,
+  "detector_planes": 4,
+  "bars_per_plane": 23,
+  "active_width_cm": 35.375,
+  "layer_gap_cm": 38.9,
+  "concrete_density_sigma": 0.1,
+  "detector_threshold_gev": 0.03,
+  "floor_offset_prior": 1.75,
+  "analysis_tangent_bin": 0.05,
+  "volume_spacing": 0.2,
+  "focus_spacing": 0.1,
+  "flux_scale_fraction": 0.03,
+  "mcs_momentum_cut": 0.5,
+  "depth_start_low": 0.6,
+  "depth_start_middle": 1.2,
+  "depth_start_high": 1.8,
+  "aperture_samples_per_axis": 4
+}

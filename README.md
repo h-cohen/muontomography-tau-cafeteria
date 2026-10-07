@@ -1,16 +1,20 @@
 # Muon tomography of the TAU cafeteria ceiling
 
-Code, data and manuscript for *A Full-Room Voxel Model from Only Two Muon Detectors*.
+[Code and data repository](https://github.com/h-cohen/muontomography-tau-cafeteria).
+
+Code, data and manuscript for *Ceiling-Beam Geometry and a Room Voxel Model from Two Positions of One Muon Tracker*.
 Two exposures of one four-plane scintillator tracker under the cafeteria ceiling,
 normalised by an open-sky run of the same detector, yield a full-room voxel model,
 the height and pitch of the ceiling beams, and their vertical depth.
 
-The second detector position is self-calibrated from the data; a single external
-length sets the absolute scale. See the paper for the treatment and its uncertainty.
+The second detector position and separation are self-calibrated from the data;
+the free-baseline scale remains conditional on the floor-offset prior and fitting
+objective. The on-site bottom height (7.3 m) and beam depth (1.2 m) are independent
+comparison inputs, not targets of the fit. See the paper for the results and limits.
 
 ## Reproduce
 
-Requirements: [uv](https://docs.astral.sh/uv/), GNU make, a LaTeX distribution with
+Requirements: [uv](https://docs.astral.sh/uv/), GNU make >= 4.3, a LaTeX distribution with
 latexmk and bibtex (siunitx, natbib, hyperref), and Node >= 24 (viewer unit tests only).
 
     uv sync

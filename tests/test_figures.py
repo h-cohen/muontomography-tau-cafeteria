@@ -53,5 +53,18 @@ def test_depth_histogram_tolerates_non_finite_replicas():
 
     for values in ([0.4, float("nan"), 0.6], [float("nan"), float("nan")]):
         fig, ax = plt.subplots()
-        make_depth.histogram_panel(ax, np.array(values), 0.5)
+        make_depth.histogram_panel(ax, np.array(values), 0.5, 1.2)
         plt.close(fig)
+
+
+def test_depth_histogram_uses_the_supplied_on_site_measurement():
+    sys.path.insert(0, "paper/figures")
+    import matplotlib.pyplot as plt
+
+    import make_depth
+
+    fig, ax = plt.subplots()
+    make_depth.histogram_panel(ax, np.array([0.8, 1.0]), 0.9, 1.2)
+    reference = next(line for line in ax.lines if line.get_label() == "on-site measurement")
+    assert list(reference.get_xdata()) == [1.2, 1.2]
+    plt.close(fig)

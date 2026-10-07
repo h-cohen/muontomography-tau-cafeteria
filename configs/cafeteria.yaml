@@ -22,7 +22,7 @@ exposures:
   - id: pos1
     root_file: HistsOutDataCafePos1.root
     # Prior only: a ~1.75 m floor offset along +x. The separation from pos0 is
-    # measured (selfcal.baseline_m); the bearing and azimuth are fitted by
+    # estimated (selfcal.baseline_m); the bearing and azimuth are fitted by
     # `cafetomo selfcal` into results/pose.json, which is the pose used downstream.
     pose: {x: 1.75, y: 0.0, z: 0.0, az_deg: 0.0}
 
@@ -61,10 +61,10 @@ reconstruction:
 
 selfcal:
   free_pose: pos1
-  baseline_m: 2.42        # tape-measured pos0-pos1 floor separation; sets the absolute scale
+  baseline_m: null        # fit separation; absolute scale retains dependence on the floor-offset prior
   # With the separation fixed the bearing search is +-bounds_m/baseline_m rad
-  # (2.6/2.42 = +-61.5 deg), wide enough to reach the ~42 deg the free fit implies.
-  bounds_m: 2.6
+  # in fixed-baseline mode; in free mode bounds_m bounds x and y around the prior.
+  bounds_m: 1.0           # original free-baseline search bounds around the floor-offset prior
   bounds_deg: 10.0
   spacing_m: 0.4          # coarse lattice for the pose objective
   n_iter: 60

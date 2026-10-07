@@ -6,6 +6,14 @@ CLI     := uv run cafetomo $(if $(FAST),--fast,)
 RUNS    := $(if $(FAST),runs/fast,runs)
 RESULTS := $(if $(FAST),runs/fast/results,results)
 CACHE   := $(RUNS)/.cache
+# Conservative invalidation: any package or dependency change rebuilds the
+# scientific chain. Grouped targets regenerate missing companion JSON files.
+CODE    := $(wildcard src/cafetomo/*.py) pyproject.toml uv.lock
+INGEST  := $(RUNS)/ingest/meta.json $(RESULTS)/data.json
+RECON   := $(RUNS)/voxels/meta.json $(RESULTS)/reconstruction.json
+ANALYSIS := $(RESULTS)/beamdepth.json $(RESULTS)/beams.json $(RESULTS)/autofocus.json
+NUMERIC = $(RESULTS)/data.json $(POSE) $(RESULTS)/reconstruction.json $(ANALYSIS) \
+           $(RESULTS)/validation.json $(RESULTS)/uncertainty.json $(RESULTS)/inputs.json
 # main.tex reads generated/numbers.tex and generated/figures/ relative to paper/.
 # GEN is that `generated` directory: paper/generated, or runs/fast/generated
 # under FAST. latexmk runs in paper/ with TEXINPUTS led by GEN's parent, so
@@ -22,54 +30,52 @@ FIGPDF  := $(FIGS:%=$(GEN)/figures/%.pdf)
 
 all: paper viewer
 
-ingest: $(RUNS)/ingest/meta.json
-$(RUNS)/ingest/meta.json: $(CONFIG) $(wildcard data/*.root)
+$(RESULTS)/inputs.json: configs/paper-inputs.json
+	mkdir -p $(RESULTS)
+	cp $< $@
+
+ingest: $(INGEST)
+$(INGEST) &: $(CONFIG) $(wildcard data/*.root) $(CODE)
 	$(CLI) ingest --config $(CONFIG) --out $(RUNS)/ingest --results $(RESULTS)
 
 selfcal: $(POSE)
-$(POSE): $(RUNS)/ingest/meta.json
+$(POSE): $(INGEST) $(CODE)
 	$(CLI) selfcal --config $(CONFIG) --ingest $(RUNS)/ingest --out $@
 
 opacity: $(RUNS)/opacity/meta.json
-$(RUNS)/opacity/meta.json: $(POSE)
+$(RUNS)/opacity/meta.json: $(POSE) $(CODE)
 	$(CLI) opacity --config $(CONFIG) --pose $(POSE) --ingest $(RUNS)/ingest --out $(RUNS)/opacity
 
-reconstruct: $(RUNS)/voxels/meta.json
-$(RUNS)/voxels/meta.json: $(RUNS)/opacity/meta.json
+reconstruct: $(RECON)
+$(RECON) &: $(RUNS)/opacity/meta.json $(CODE)
 	$(CLI) reconstruct --config $(CONFIG) --pose $(POSE) --opacity $(RUNS)/opacity \
 	  --out $(RUNS)/voxels --results $(RESULTS) --cache $(CACHE)
 
-analysis: $(RESULTS)/beamdepth.json
-$(RESULTS)/beamdepth.json: $(RUNS)/voxels/meta.json
+analysis: $(ANALYSIS)
+$(ANALYSIS) &: $(RECON) $(CODE)
 	$(CLI) analyze --config $(CONFIG) --pose $(POSE) --opacity $(RUNS)/opacity \
 	  --voxels $(RUNS)/voxels --results $(RESULTS) --cache $(CACHE)
 
 validation: $(RESULTS)/validation.json
-$(RESULTS)/validation.json: $(RESULTS)/beamdepth.json $(RUNS)/opacity/meta.json $(POSE)
+$(RESULTS)/validation.json: $(ANALYSIS) $(RUNS)/opacity/meta.json $(POSE) $(CODE)
 	$(CLI) validate --config $(CONFIG) --pose $(POSE) --opacity $(RUNS)/opacity \
 	  --results $(RESULTS) --cache $(CACHE)
 
 uncertainty: $(RESULTS)/uncertainty.json
-$(RESULTS)/uncertainty.json: $(RESULTS)/beamdepth.json $(POSE) $(RUNS)/ingest/meta.json \
-                            $(RUNS)/opacity/meta.json $(RUNS)/voxels/meta.json
+$(RESULTS)/uncertainty.json: $(ANALYSIS) $(POSE) $(INGEST) \
+                            $(RUNS)/opacity/meta.json $(RUNS)/voxels/meta.json $(CODE)
 	$(CLI) uncertainty --config $(CONFIG) --pose $(POSE) --ingest $(RUNS)/ingest \
 	  --opacity $(RUNS)/opacity --voxels $(RUNS)/voxels --results $(RESULTS) \
 	  --out $(RUNS)/bootstrap --cache $(CACHE)
 
 export: $(RUNS)/export/meta.json
-$(RUNS)/export/meta.json: $(RESULTS)/uncertainty.json
+$(RUNS)/export/meta.json: $(RESULTS)/uncertainty.json $(CODE)
 	$(CLI) export --config $(CONFIG) --pose $(POSE) --voxels $(RUNS)/voxels \
 	  --bootstrap $(RUNS)/bootstrap --results $(RESULTS) --out $(RUNS)/export
 
 viewer: $(RUNS)/viewer.html
-$(RUNS)/viewer.html: $(RUNS)/export/meta.json $(wildcard viewer/src/*.mjs) viewer/shell.html
+$(RUNS)/viewer.html: $(RUNS)/export/meta.json $(wildcard viewer/src/*.mjs) viewer/shell.html $(CODE)
 	$(CLI) viewer --export $(RUNS)/export --out $@
-
-# Written alongside a stage's main target; listed so rules that read them can
-# depend on them.
-$(RESULTS)/data.json: $(RUNS)/ingest/meta.json ;
-$(RESULTS)/reconstruction.json: $(RUNS)/voxels/meta.json ;
-$(RESULTS)/beams.json $(RESULTS)/autofocus.json: $(RESULTS)/beamdepth.json ;
 
 figures: $(FIGPDF)
 $(GEN)/figures/%.pdf: paper/figures/make_%.py paper/figures/style.py \
@@ -80,7 +86,9 @@ $(GEN)/figures/%.pdf: paper/figures/make_%.py paper/figures/style.py \
 	uv run python paper/figures/make_$*.py --config $(CONFIG) --pose $(POSE) \
 	  --results $(RESULTS) --runs $(RUNS) --out $@
 
-$(GEN)/numbers.tex: $(RESULTS)/uncertainty.json $(RESULTS)/validation.json
+$(GEN)/figures/depth.pdf: $(RESULTS)/inputs.json
+
+$(GEN)/numbers.tex: $(NUMERIC) $(CODE)
 	$(CLI) numbers --results $(RESULTS) --out $@
 
 paper: $(GEN)/paper.pdf
@@ -97,8 +105,9 @@ test:
 	node --test viewer/test/*.test.mjs
 
 arxiv: paper
-	tar -czf $(GEN)/arxiv.tar.gz -C paper main.tex sections refs.bib -C $(TEXROOT) \
-	  generated/numbers.tex generated/main.bbl $(FIGS:%=generated/figures/%.pdf)
+	tar -czf $(GEN)/arxiv.tar.gz -C paper main.tex sections refs.bib \
+	  -C $(abspath $(GEN)) main.bbl -C $(TEXROOT) \
+	  generated/numbers.tex $(FIGS:%=generated/figures/%.pdf)
 
 clean:
 	rm -rf runs paper/generated

@@ -75,7 +75,9 @@ def run_bootstrap(
     """A replica whose measurement raises stops the bootstrap: dropping it
     would bias the spread toward the replicas the chain happens to survive."""
     u = cfg.uncertainty
-    rng = np.random.default_rng(u.seed)
+    # Weight estimation uses the root seed directly. A separate deterministic
+    # stream prevents its draws from reappearing as measurement replicas.
+    rng = np.random.default_rng(np.random.SeedSequence(u.seed, spawn_key=(1,)))
     values: dict[str, list[float]] = {}
     vols = []
     for _ in range(u.n_replicas):
