@@ -1,2 +1,17 @@
-\section{Beams}\label{sec:beams}
-% Intent: backprojection, gate, triangulation and scale closure of the ceiling beams.
+\section{Beam shadows and triangulation}\label{sec:beams}
+The measured opacity maps were backprojected onto a trial horizontal plane without using the voxel inversion. Peaks in transverse angular profiles were matched between positions. For a shared feature at world coordinate $X_k$ and height $z$, each view obeys
+\begin{equation}
+ s_{x,p,k}=\frac{X_k-x_p}{z-z_p}.
+\label{eq:triangulation}
+\end{equation}
+A joint fit to the matched peaks estimated the common height and feature coordinates. Profiles parallel to the principal beams were included only when their parallax correlation passed the configured threshold. Because those features and the pos1 $y$ coordinate are less constrained, an $x$-only height was also retained.
+
+The joint triangulation gave $z=\BeamsZ\pm\UncertaintyBeamsZTotal\,\mathrm{m}$, and the transverse-only estimate was $z_x=\BeamsZX\pm\UncertaintyBeamsZxTotal\,\mathrm{m}$. The transverse angular period was $\BeamsPeriod$, corresponding to a pitch of $\BeamsPitch\,\mathrm{m}$ at the fitted height. Ratios of height and pitch to baseline are useful scale-closure quantities; their metre-valued counterparts retain the pose scale assumptions.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.85\linewidth]{triangulation.pdf}
+\caption{Cross-position parallax correlation as a function of trial height. The peak-matching triangulation and bootstrap spread are shown for comparison with the correlation scan.}\label{fig:triangulation}
+\end{figure}
+
+A verification gate compared peaks in the raw-data backprojection with peaks in the reconstruction layer nearest the triangulated height. This avoids substituting the most massive layer, which may represent the slab above the beams. The mean absolute peak offset was $\BeamsGateMeanAbsOffset\,\mathrm{m}$. The full-resolution run passed this gate. The gate tests lateral placement at that plane; it does not independently validate beam depth or resolve the global scale.

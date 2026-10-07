@@ -1,2 +1,12 @@
-\section{Voxel model}\label{sec:volume}
-% Intent: the full-room voxel volume, SNR-gated slices and what two detectors deliver.
+\section{Room voxel model and coverage}\label{sec:volume}
+The reconstruction contained \ReconstructionVoxels{} voxels and \ReconstructionRows{} measured angular rows, with weighted residual statistic $\ReconstructionChisqPerRow$ per row. This is a residual measure rather than a reduced chi-square with a known effective number of free parameters: regularization and the large null space prevent interpreting the voxel count as a fitted-parameter count. Position-only reconstructions were retained as holdouts alongside the joint solution.
+
+Figure~\ref{fig:volume} shows orthogonal slices through the fitted beam region. The effective opacity distribution represents a regularized allocation of line-integrated attenuation. It supports lateral structural interpretation where rays from both positions cross, while diffuse vertical extent remains less identifiable. Brightness in a singly viewed or weakly covered voxel can reflect the solver's prior and nonnegativity rather than a resolved material boundary.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{volume.pdf}
+\caption{Orthogonal slices of the reconstructed effective opacity density near the fitted beams, with the figure's bootstrap signal-to-noise selection. Numerical voxel spacing should not be read as isotropic spatial resolution.}\label{fig:volume}
+\end{figure}
+
+The supplementary viewer provides volume, uncertainty and coverage layers with clipping and display controls. Its fitted beam-box overlay is derived from the same result files as the paper. The boxes summarize the parametric estimator; they are not an independent confirmation of the voxel geometry.

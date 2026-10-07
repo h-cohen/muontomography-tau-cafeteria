@@ -7,12 +7,8 @@ import numpy as np
 
 import style
 
-# Approximate on-site tape measurement of the beam depth (m). A plotted reference
-# and an input of the paper, not a result of this analysis.
-TAPE_DEPTH_M = 1.25
 
-
-def histogram_panel(ax, h_boot, h_nominal: float) -> None:
+def histogram_panel(ax, h_boot, h_nominal: float, h_measured: float) -> None:
     """Bootstrap depth histogram; non-finite replicas are dropped, none left gives a note."""
     h = np.asarray(h_boot, dtype=float)
     h = h[np.isfinite(h)]
@@ -21,7 +17,7 @@ def histogram_panel(ax, h_boot, h_nominal: float) -> None:
     else:
         ax.text(0.5, 0.5, "no finite replicas", transform=ax.transAxes, ha="center", va="center")
     ax.axvline(h_nominal, color=style.INK, lw=0.8, label="nominal fit")
-    ax.axvline(TAPE_DEPTH_M, color=style.INK_SECONDARY, lw=0.8, ls="--", label="tape (approx.)")
+    ax.axvline(h_measured, color=style.INK_SECONDARY, lw=0.8, ls="--", label="on-site measurement")
     ax.set_xlabel("beam depth h (m)")
     ax.set_ylabel("bootstrap replicas")
     ax.yaxis.get_major_locator().set_params(integer=True)
@@ -32,6 +28,7 @@ def histogram_panel(ax, h_boot, h_nominal: float) -> None:
 def main(argv=None) -> None:
     a, _ = style.setup(argv)
     bd = style.load_result(a, "beamdepth")
+    inputs = style.load_result(a, "inputs")
     h_boot = np.load(Path(a.runs) / "bootstrap" / "values.npz")["depth_h"]
 
     fig, (ax, bx, cx) = plt.subplots(
@@ -46,7 +43,7 @@ def main(argv=None) -> None:
         loc="lower left", bbox_to_anchor=(0.1, 1.0), ncols=2, columnspacing=0.8, handlelength=1.2
     )
 
-    histogram_panel(bx, h_boot, bd["h"])
+    histogram_panel(bx, h_boot, bd["h"], inputs["measured_beam_depth"])
 
     cx.axvspan(bd["zbottom"], bd["ztop"], color=style.GRID, label="fitted box")
     cx.axvspan(
@@ -57,6 +54,13 @@ def main(argv=None) -> None:
         label="half maximum",
     )
     cx.plot(bd["zprofile_profile_z"], bd["zprofile_profile"], "o-", ms=3, color=style.INK)
+    cx.axvline(
+        inputs["measured_beam_bottom"],
+        color=style.INK_SECONDARY,
+        lw=0.8,
+        ls="--",
+        label="on-site bottom",
+    )
     cx.set_xlabel("height z (m)")
     cx.set_ylabel(r"voxel opacity density $\rho$ (m$^{-1}$)")
     cx.set_ylim(top=cx.get_ylim()[1] * 1.35)

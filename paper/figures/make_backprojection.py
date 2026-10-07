@@ -24,11 +24,22 @@ def main(argv=None) -> None:
     _, mean = backproject_plane(data, cfg, z, xs, ys)
 
     fig, ax = plt.subplots(figsize=(style.COLUMN_IN, 2.9))
-    h = ax.imshow(
-        np.ma.masked_invalid(mean).T,
-        origin="lower",
-        extent=[xs[0] - RES_M / 2, xs[-1] + RES_M / 2, ys[0] - RES_M / 2, ys[-1] + RES_M / 2],
+    xx, yy = np.meshgrid(xs, ys, indexing="ij")
+    seen = np.isfinite(mean)
+    if not seen.any():
+        raise ValueError("backprojection figure has no measured ray intersections")
+    low, high = np.percentile(mean[seen], [2, 98])
+    # Show sampled intersections as visible markers, without interpolating
+    # unmeasured pixels. All points remain; extreme colours are saturated.
+    h = ax.scatter(
+        xx[seen],
+        yy[seen],
+        c=mean[seen],
+        s=6,
+        edgecolors="none",
         cmap=style.SEQUENTIAL,
+        vmin=low,
+        vmax=high,
     )
     for k, xb in enumerate(beams["beams_x"]):
         ax.axvline(
@@ -39,7 +50,14 @@ def main(argv=None) -> None:
     ax.set_ylabel("y (m)")
     ax.set_title(f"plane z = {z:.2f} m", fontsize=8)
     ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.18), handlelength=1.5)
-    fig.colorbar(h, ax=ax, shrink=0.8, pad=0.03, label=r"mean opacity $\lambda$ (dimensionless)")
+    fig.colorbar(
+        h,
+        ax=ax,
+        shrink=0.8,
+        pad=0.03,
+        extend="both",
+        label=r"mean opacity $\lambda$ (dimensionless)",
+    )
     style.save(fig, a)
 
 
