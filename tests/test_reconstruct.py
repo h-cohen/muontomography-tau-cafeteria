@@ -5,6 +5,7 @@ import pytest
 
 from cafetomo.fitdata import FitData, RowIndex
 from cafetomo.forward import build_forward_model
+from cafetomo.inversion import solve
 from cafetomo.raycast import INVERSION_VERSION
 from cafetomo.reconstruct import VoxelSolution, solve_voxels
 
@@ -111,3 +112,56 @@ def test_the_volume_reproduces_its_own_measurements_better_than_a_zero_volume(cf
     pred = fwd.predict(v.rho, v.offsets)
     flat = np.mean((data.lam[live] - np.mean(data.lam[live])) ** 2)
     assert np.mean((data.lam[live] - pred[live]) ** 2) < flat
+
+
+def _flat_ceiling(cfg):
+    """A flat slab at 6.6-7.4 m seen by both positions over a regular sky grid."""
+    vol = replace(cfg.volume, spacing_m=0.5)
+    cfg = replace(cfg, volume=vol, reconstruction=replace(
+        cfg.reconstruction, n_iter=150, tv_alpha=0.01, tv_z_weight=0.5))
+    n = 18
+    t = (np.arange(n) + 0.5) / n * 1.8 - 0.9
+    sx, sy = (a.ravel() for a in np.meshgrid(t, t, indexing="ij"))
+    n_pos = len(cfg.position_ids)
+    rows = RowIndex(position_ids=cfg.position_ids,
+                    pos_of_row=np.repeat(np.arange(n_pos), sx.size),
+                    sx=np.tile(sx, n_pos), sy=np.tile(sy, n_pos),
+                    sky_flat=np.tile(np.arange(sx.size), n_pos))
+    fwd = build_forward_model(rows, cfg, cache_dir=None)
+    zc = fwd.grid.axis_centers(2)
+    slab = (zc > 6.6) & (zc < 7.4)
+    truth = np.zeros(fwd.grid.shape)
+    truth[:, :, slab] = 0.125
+    data = FitData(lam=fwd.A @ truth.ravel(), w=np.ones(rows.n_rows), rows=rows)
+    covered = np.asarray(abs(fwd.A).sum(axis=0)).ravel().reshape(fwd.grid.shape)
+    seen = covered[:, :, slab].sum(2) > 0
+    column = float(truth[0, 0].sum() * fwd.grid.spacing)
+    return cfg, fwd, data, seen, column
+
+
+def _columns(fwd, x, seen):
+    col = x.reshape(fwd.grid.shape).sum(2) * fwd.grid.spacing
+    nx, ny = col.shape
+    centre = col[nx // 2 - 2:nx // 2 + 2, ny // 2 - 2:ny // 2 + 2].mean()
+    return centre, np.percentile(col[seen], 95)
+
+
+def test_measured_zero_point_recovers_a_flat_ceiling_flat(cfg):
+    cfg, fwd, data, seen, column = _flat_ceiling(cfg)
+    x, info = solve(fwd, data, cfg.reconstruction, fit_offsets=False)
+    centre, rim = _columns(fwd, x, seen)
+    assert info["offsets"] == {"pos0": 0.0, "pos1": 0.0}
+    assert centre == pytest.approx(column, rel=0.1)
+    assert rim == pytest.approx(centre, rel=0.15)
+
+
+def test_free_offsets_hide_the_ceiling_and_brighten_the_rim(cfg):
+    """The degeneracy a measured zero point removes: the free fit puts the
+    slab's constant opacity into c_p and only its oblique excess reaches the
+    voxels, in the outer shell."""
+    cfg, fwd, data, seen, column = _flat_ceiling(cfg)
+    x, info = solve(fwd, data, cfg.reconstruction, fit_offsets=True)
+    centre, rim = _columns(fwd, x, seen)
+    assert min(info["offsets"].values()) > 0.4 * column
+    assert centre < 0.3 * column
+    assert rim > 1.5 * centre
