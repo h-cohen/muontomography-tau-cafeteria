@@ -10,7 +10,7 @@ CACHE   := $(RUNS)/.cache
 # GEN is that `generated` directory: paper/generated, or runs/fast/generated
 # under FAST. latexmk runs in paper/ with TEXINPUTS led by GEN's parent, so
 # `generated/...` resolves to GEN before paper/ is searched, and -outdir keeps
-# every build product in GEN.
+# every build product in GEN; BIBINPUTS lets bibtex (run from GEN) find refs.bib.
 GEN     := $(if $(FAST),runs/fast/generated,paper/generated)
 TEXROOT := $(abspath $(dir $(GEN)))
 POSE    := $(RESULTS)/pose.json
@@ -86,7 +86,7 @@ $(GEN)/numbers.tex: $(RESULTS)/uncertainty.json $(RESULTS)/validation.json
 paper: $(GEN)/paper.pdf
 $(GEN)/paper.pdf: paper/main.tex $(wildcard paper/sections/*.tex) paper/refs.bib \
                   $(GEN)/numbers.tex $(FIGPDF)
-	cd paper && TEXINPUTS=$(TEXROOT): latexmk -pdf -interaction=nonstopmode -halt-on-error \
+	cd paper && TEXINPUTS=$(TEXROOT): BIBINPUTS=$(abspath paper): latexmk -pdf -interaction=nonstopmode -halt-on-error \
 	  -outdir=$(abspath $(GEN)) main.tex
 	mv $(GEN)/main.pdf $@
 
