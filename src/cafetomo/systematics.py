@@ -3,8 +3,8 @@
 flux scale -- a real flux difference between the sky run and the position runs
               shifts every lambda by ln(1 + f).
 MCS        -- the model uses straight rays; multiple Coulomb scattering in the
-              beams (Highland) blurs the detected direction by theta0. Applied
-              as an angular smear in the beam-depth model.
+              beams (Highland) blurs the detected direction by theta0. Injected
+              as an angular smear of the data, refit with the nominal model.
 pose       -- the free position moved by its self-calibration sigma along x and y.
 background -- the beam-depth fit removes a smooth background; an unmodelled
               sharp feature would bias the depth, so the polynomial degree is
@@ -21,6 +21,7 @@ from pathlib import Path
 import numpy as np
 
 from cafetomo.angular import AnalysisGrid
+from cafetomo.beamdepth import beam_design
 from cafetomo.config import Config
 from cafetomo.fitdata import FitData, RowIndex
 from cafetomo.measure import Measurement, measure
@@ -72,9 +73,25 @@ def flux_scale_shift(maps: OpacityMaps, cfg: Config, sigma: dict, rows: RowIndex
 
 def mcs_shift(data: FitData, cfg: Config, nominal: Measurement, *, sky: SkyGrid,
               jitter_tan: float, cache_dir: str | Path | None = None) -> dict[str, float]:
-    """Shift when the beam-depth model smears directions by `jitter_tan`."""
-    m = measure(data, cfg, sky, cache_dir=cache_dir, angle_jitter=jitter_tan,
-                with_volume=False)
+    """Bias multiple scattering causes in the nominal estimator.
+
+    The blur is injected into the DATA: the nominal fitted beams are seen
+    through direction-smeared paths, the difference from the straight-path
+    signal is added to lambda (the background cancels in it), and the unsmeared
+    estimator is refit. Refitting with a smeared model instead would measure
+    model mismatch, not the bias. The size depends on the momentum cut
+    (`mcs_p_min_gev`) and on the scattering length, taken as the fitted beam
+    depth."""
+    d = nominal.details["depth"]
+    s = cfg.beamdepth
+    common = dict(aperture_m=cfg.detector.aperture_m, n_sub=s.n_sub, z0=d.z0, w=d.w, h=d.h,
+                  xs=d.xs, y_extent=s.y_extent_m)
+    origins = cfg.origins()
+    kappa = np.asarray(d.kappa)
+    dlam = (beam_design(data.rows, origins, angle_jitter=jitter_tan, **common)
+            - beam_design(data.rows, origins, **common)) @ kappa
+    blurred = FitData(lam=data.lam + dlam * (data.w > 0), w=data.w, rows=data.rows)
+    m = measure(blurred, cfg, sky, cache_dir=cache_dir, with_volume=False)
     return _delta(m, nominal)
 
 
