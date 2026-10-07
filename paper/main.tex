@@ -1,0 +1,36 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage[separate-uncertainty=true]{siunitx}
+\usepackage[numbers,sort&compress]{natbib}
+\usepackage[hidelinks]{hyperref}
+\graphicspath{{generated/figures/}}
+\input{generated/numbers.tex}
+\newcommand{\TapeDepth}{1.25}% on-site tape estimate (input, not a result)
+
+\title{A Full-Room Voxel Model from Only Two Muon Detectors}
+\author{Hadar Cohen}
+\date{}
+
+\begin{document}
+\maketitle
+\begin{abstract}
+\input{sections/abstract}
+\end{abstract}
+\input{sections/intro}
+\input{sections/apparatus}
+\input{sections/method}
+\input{sections/autofocus}
+\input{sections/beams}
+\input{sections/depth}
+\input{sections/volume}
+\input{sections/uncertainties}
+\input{sections/discussion}
+\input{sections/conclusion}
+\appendix
+\input{sections/reproducibility}
+\bibliographystyle{unsrtnat}
+\bibliography{refs}
+\end{document}
