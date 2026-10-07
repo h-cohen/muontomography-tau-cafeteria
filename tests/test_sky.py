@@ -21,7 +21,7 @@ def test_yaw_rotates_the_tangent_plane_but_preserves_zenith_angle():
     sx, sy, valid = detector_to_sky(tx, ty, Pose(0, 0, 0, az_deg=241))
     assert valid.all()
     assert np.allclose(np.hypot(sx, sy), np.hypot(tx, ty))
-    assert not np.allclose(sx, tx)     # but the components do move
+    assert not np.allclose(sx, tx)  # but the components do move
 
 
 def test_sky_grid_holds_the_whole_untilted_acceptance():

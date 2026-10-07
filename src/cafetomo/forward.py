@@ -1,4 +1,5 @@
 """The one forward model shared by inversion, phantom generation and evaluation."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -23,8 +24,7 @@ class ForwardModel:
     def n_rows(self) -> int:
         return self.rows.n_rows
 
-    def predict(self, x: np.ndarray, offsets: dict[str, float] | None = None
-                ) -> np.ndarray:
+    def predict(self, x: np.ndarray, offsets: dict[str, float] | None = None) -> np.ndarray:
         """Volume (flat or 3D) -> predicted optical depth per row."""
         y = self.A @ np.asarray(x, dtype=np.float64).ravel()
         if offsets:
@@ -45,16 +45,24 @@ class ForwardModel:
         return img.reshape(n_sky, n_sky)
 
 
-def build_forward_model(rows: RowIndex, cfg: Config, *,
-                        grid: VoxelGrid | None = None,
-                        cache_dir: str | Path | None = None
-                        ) -> ForwardModel:
+def build_forward_model(
+    rows: RowIndex,
+    cfg: Config,
+    *,
+    grid: VoxelGrid | None = None,
+    cache_dir: str | Path | None = None,
+) -> ForwardModel:
     origins = cfg.origins()
     if grid is None:
-        grid = auto_grid(cfg.volume, origins, t_reach=rows.t_reach(),
-                         aperture_m=cfg.detector.aperture_m)
-    A = build_system_matrix(rows, origins, grid,
-                            aperture_m=cfg.detector.aperture_m,
-                            n_sub=cfg.volume.n_aperture_sub,
-                            cache_dir=cache_dir)
+        grid = auto_grid(
+            cfg.volume, origins, t_reach=rows.t_reach(), aperture_m=cfg.detector.aperture_m
+        )
+    A = build_system_matrix(
+        rows,
+        origins,
+        grid,
+        aperture_m=cfg.detector.aperture_m,
+        n_sub=cfg.volume.n_aperture_sub,
+        cache_dir=cache_dir,
+    )
     return ForwardModel(A=A, grid=grid, rows=rows)

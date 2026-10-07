@@ -7,9 +7,13 @@ from cafetomo.fitdata import FitData, RowIndex
 
 def _data(sx, sy, lam, pos):
     sx, sy, lam = map(np.asarray, (sx, sy, lam))
-    rows = RowIndex(position_ids=("pos0", "pos1"),
-                    pos_of_row=np.asarray(pos), sx=sx, sy=sy,
-                    sky_flat=np.arange(sx.size))
+    rows = RowIndex(
+        position_ids=("pos0", "pos1"),
+        pos_of_row=np.asarray(pos),
+        sx=sx,
+        sy=sy,
+        sky_flat=np.arange(sx.size),
+    )
     return FitData(lam=lam.astype(float), w=np.ones(sx.size), rows=rows)
 
 
@@ -32,8 +36,7 @@ def test_a_tilted_ray_lands_at_the_lever_arm_offset(cfg):
     xs = np.linspace(-1.0, 5.0, 13)
     ys = np.array([-0.5, 0.0, 0.5])
     per, _ = backproject_plane(data, cfg, z_m=5.0, xs=xs, ys=ys)
-    hit = np.unravel_index(np.nanargmax(np.nan_to_num(per["pos0"], nan=-np.inf)),
-                           per["pos0"].shape)
+    hit = np.unravel_index(np.nanargmax(np.nan_to_num(per["pos0"], nan=-np.inf)), per["pos0"].shape)
     assert xs[hit[0]] == pytest.approx(2.0, abs=0.3)
 
 

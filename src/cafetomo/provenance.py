@@ -10,14 +10,17 @@ from cafetomo import __version__
 
 def _git_commit() -> str:
     def git(*args: str) -> str:
-        return subprocess.run(["git", *args], capture_output=True, text=True,
-                              check=True).stdout.strip()
+        return subprocess.run(
+            ["git", *args], capture_output=True, text=True, check=True
+        ).stdout.strip()
+
     commit = git("rev-parse", "HEAD")
     return commit + ("+dirty" if git("status", "--porcelain", "--untracked-files=no") else "")
 
 
-def write_meta(out_dir: str | Path, *, config_path: str | Path, stage: str,
-               extra: dict | None = None) -> Path:
+def write_meta(
+    out_dir: str | Path, *, config_path: str | Path, stage: str, extra: dict | None = None
+) -> Path:
     """meta.json: which code and which config produced this directory."""
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)

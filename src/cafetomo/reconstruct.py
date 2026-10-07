@@ -5,6 +5,7 @@ ALONE. With two positions, agreement between those single-view fits is the only
 direct evidence that the depth structure is measured rather than assumed, so
 they are produced by default and not as an opt-in diagnostic.
 """
+
 from __future__ import annotations
 
 import json
@@ -23,7 +24,7 @@ from cafetomo.voxels import VoxelGrid
 
 @dataclass(frozen=True)
 class VoxelSolution:
-    rho: np.ndarray                     # [n_voxels] opacity density, 1/m, >= 0
+    rho: np.ndarray  # [n_voxels] opacity density, 1/m, >= 0
     grid: VoxelGrid
     offsets: dict[str, float]
     position_ids: tuple[str, ...]
@@ -43,20 +44,26 @@ class VoxelSolution:
             spacing=np.asarray(self.grid.spacing, dtype=np.float64),
             shape=np.asarray(self.grid.shape, dtype=np.int64),
             version=np.asarray(self.version, dtype=np.int64),
-            meta=np.array(json.dumps({
-                "offsets": self.offsets,
-                "position_ids": list(self.position_ids),
-                "info": self.info,
-            })),
+            meta=np.array(
+                json.dumps(
+                    {
+                        "offsets": self.offsets,
+                        "position_ids": list(self.position_ids),
+                        "info": self.info,
+                    }
+                )
+            ),
         )
 
     @staticmethod
     def load(path: str | Path) -> VoxelSolution:
         d = np.load(path, allow_pickle=False)
         meta = json.loads(str(d["meta"]))
-        grid = VoxelGrid(origin=tuple(float(v) for v in d["origin"]),
-                         spacing=float(d["spacing"]),
-                         shape=tuple(int(v) for v in d["shape"]))
+        grid = VoxelGrid(
+            origin=tuple(float(v) for v in d["origin"]),
+            spacing=float(d["spacing"]),
+            shape=tuple(int(v) for v in d["shape"]),
+        )
         return VoxelSolution(
             rho=d["rho"].astype(np.float64).ravel(),
             grid=grid,
@@ -67,10 +74,14 @@ class VoxelSolution:
         )
 
 
-def solve_voxels(data: FitData, cfg: Config, *,
-                 cache_dir: str | Path | None = None,
-                 holdouts: bool = True,
-                 grid: VoxelGrid | None = None) -> dict[str, VoxelSolution]:
+def solve_voxels(
+    data: FitData,
+    cfg: Config,
+    *,
+    cache_dir: str | Path | None = None,
+    holdouts: bool = True,
+    grid: VoxelGrid | None = None,
+) -> dict[str, VoxelSolution]:
     """Full fit plus one single-position fit per position.
 
     Every fit shares one system matrix; a holdout is a row-weight mask, not a
@@ -86,8 +97,13 @@ def solve_voxels(data: FitData, cfg: Config, *,
         x, info = solve(fwd, restricted, rc, fit_offsets=False)
         info["n_rows_used"] = int(np.count_nonzero(restricted.w))
         info["algorithm"] = rc.algorithm
-        return VoxelSolution(rho=x, grid=fwd.grid, offsets=info.pop("offsets"),
-                             position_ids=fwd.rows.position_ids, info=info)
+        return VoxelSolution(
+            rho=x,
+            grid=fwd.grid,
+            offsets=info.pop("offsets"),
+            position_ids=fwd.rows.position_ids,
+            info=info,
+        )
 
     out = {"full": run(np.ones(data.rows.n_rows, dtype=bool))}
     if holdouts:

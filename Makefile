@@ -91,7 +91,7 @@ $(GEN)/paper.pdf: paper/main.tex $(wildcard paper/sections/*.tex) paper/refs.bib
 	mv $(GEN)/main.pdf $@
 
 test:
-	uv run ruff check .
+	uv run ruff check . && uv run ruff format --check .
 	uv run vulture
 	uv run pytest -m "not slow"
 	node --test viewer/test/*.test.mjs

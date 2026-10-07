@@ -61,9 +61,14 @@ def _search_space(cfg: Config) -> tuple[np.ndarray, list[tuple[float, float]]]:
     prior = cfg.exposure(s.free_pose).pose
     az = (prior.az_deg - s.bounds_deg, prior.az_deg + s.bounds_deg)
     if s.baseline_m is None:
-        return (np.array([prior.x, prior.y, prior.az_deg]),
-                [(prior.x - s.bounds_m, prior.x + s.bounds_m),
-                 (prior.y - s.bounds_m, prior.y + s.bounds_m), az])
+        return (
+            np.array([prior.x, prior.y, prior.az_deg]),
+            [
+                (prior.x - s.bounds_m, prior.x + s.bounds_m),
+                (prior.y - s.bounds_m, prior.y + s.bounds_m),
+                az,
+            ],
+        )
     b0 = float(np.arctan2(prior.y, prior.x))
     db = s.bounds_m / s.baseline_m
     return np.array([b0, prior.az_deg]), [(b0 - db, b0 + db), az]
@@ -101,14 +106,23 @@ def _objective_grids(cfg: Config, data: FitData) -> tuple[VoxelGrid, VoxelGrid]:
         origins[f"{s.free_pose}@{k}"] = (float(x), float(y), z)
     d = np.radians(min(s.bounds_deg, 45.0))
     reach = min(data.rows.t_reach() * (np.cos(d) + np.sin(d)), cfg.opacity.max_tan)
-    g = auto_grid(replace(cfg.volume, spacing_m=s.spacing_m, xy_m=None), origins, reach,
-                  aperture_m=cfg.detector.aperture_m)
+    g = auto_grid(
+        replace(cfg.volume, spacing_m=s.spacing_m, xy_m=None),
+        origins,
+        reach,
+        aperture_m=cfg.detector.aperture_m,
+    )
     nx, ny, nz = g.shape
     shape = (nx + 1, ny + 1, nz)
     half = 0.5 * g.spacing
-    return (VoxelGrid(origin=g.origin, spacing=g.spacing, shape=shape),
-            VoxelGrid(origin=(g.origin[0] - half, g.origin[1] - half, g.origin[2]),
-                      spacing=g.spacing, shape=shape))
+    return (
+        VoxelGrid(origin=g.origin, spacing=g.spacing, shape=shape),
+        VoxelGrid(
+            origin=(g.origin[0] - half, g.origin[1] - half, g.origin[2]),
+            spacing=g.spacing,
+            shape=shape,
+        ),
+    )
 
 
 def _pose_from(theta: np.ndarray, cfg: Config) -> Pose:
@@ -138,25 +152,37 @@ def fit_pose(grid: AnalysisGrid, cfg: Config, live_time: dict[str, float]) -> Po
       only through a min-norm reconstruction), and that geometric part can
       pull the minimum; nothing here measures that pull."""
     s = cfg.selfcal
-    nominal = build_fit_data(solve_opacity(grid, cfg, live_time), cfg,
-                             poisson_sigma(grid, cfg, live_time))
+    nominal = build_fit_data(
+        solve_opacity(grid, cfg, live_time), cfg, poisson_sigma(grid, cfg, live_time)
+    )
     vgrids = _objective_grids(cfg, nominal)
 
     def objective(theta: np.ndarray) -> float:
         c = cfg.with_pose(s.free_pose, _pose_from(theta, cfg))
-        data = build_fit_data(solve_opacity(grid, c, live_time), c,
-                              poisson_sigma(grid, c, live_time))
+        data = build_fit_data(
+            solve_opacity(grid, c, live_time), c, poisson_sigma(grid, c, live_time)
+        )
         return float(np.mean([cross_position_score(data, c, g) for g in vgrids]))
 
     x0, bounds = _search_space(cfg)
-    res = optimize.minimize(objective, x0, method="Powell", bounds=bounds,
-                            options={"xtol": 1e-3, "ftol": 1e-4, "maxiter": 60})
-    return PoseFit(pose=_pose_from(res.x, cfg), objective=float(res.fun),
-                   n_eval=int(res.nfev), converged=bool(res.success))
+    res = optimize.minimize(
+        objective,
+        x0,
+        method="Powell",
+        bounds=bounds,
+        options={"xtol": 1e-3, "ftol": 1e-4, "maxiter": 60},
+    )
+    return PoseFit(
+        pose=_pose_from(res.x, cfg),
+        objective=float(res.fun),
+        n_eval=int(res.nfev),
+        converged=bool(res.success),
+    )
 
 
-def pose_bootstrap(grid: AnalysisGrid, cfg: Config, live_time: dict[str, float], *,
-                   n: int, seed: int) -> dict[str, float]:
+def pose_bootstrap(
+    grid: AnalysisGrid, cfg: Config, live_time: dict[str, float], *, n: int, seed: int
+) -> dict[str, float]:
     """Spread of the fitted pose over Poisson replicas of every histogram.
 
     This is the counting-statistics spread only. It inherits the limits listed
@@ -170,8 +196,7 @@ def pose_bootstrap(grid: AnalysisGrid, cfg: Config, live_time: dict[str, float],
     poses = []
     for _ in range(n):
         counts = {k: rng.poisson(v).astype(np.int64) for k, v in grid.counts.items()}
-        poses.append(fit_pose(AnalysisGrid(edges=grid.edges, counts=counts), cfg,
-                              live_time).pose)
+        poses.append(fit_pose(AnalysisGrid(edges=grid.edges, counts=counts), cfg, live_time).pose)
     arr = np.array([[p.x, p.y, p.az_deg] for p in poses])
     sd = arr.std(axis=0, ddof=1)
     return {"x": float(sd[0]), "y": float(sd[1]), "az_deg": float(sd[2])}
@@ -184,10 +209,17 @@ def pose_result(fit: PoseFit, sigma: dict[str, float], cfg: Config) -> dict:
     return {
         "free_pose": cfg.selfcal.free_pose,
         "pose": {"x": p.x, "y": p.y, "z": p.z, "az_deg": p.az_deg},
-        "x": p.x, "x_sigma": sigma["x"], "y": p.y, "y_sigma": sigma["y"],
-        "az": p.az_deg, "az_sigma": sigma["az_deg"],
+        "x": p.x,
+        "x_sigma": sigma["x"],
+        "y": p.y,
+        "y_sigma": sigma["y"],
+        "az": p.az_deg,
+        "az_sigma": sigma["az_deg"],
         "baseline": float(np.hypot(p.x, p.y)),
         "baseline_fixed": cfg.selfcal.baseline_m is not None,
-        "prior_x": prior.x, "prior_y": prior.y,
-        "objective": fit.objective, "n_eval": fit.n_eval, "converged": fit.converged,
+        "prior_x": prior.x,
+        "prior_y": prior.y,
+        "objective": fit.objective,
+        "n_eval": fit.n_eval,
+        "converged": fit.converged,
     }

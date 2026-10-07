@@ -157,8 +157,9 @@ def test_poisson_sigma_is_the_ratio_error(cfg):
     flat, ok = _detector_bins(cfg, maps, tx, ty)
     # a sky bin fed by exactly one detector bin: the analytic form is exact there
     hits = np.bincount(flat[ok], minlength=maps.sky.flat_size)
-    one = np.nonzero(ok & (hits[np.where(ok, flat, 0)] == 1)
-                     & (g.counts["SKY"] >= cfg.opacity.min_sky))
+    one = np.nonzero(
+        ok & (hits[np.where(ok, flat, 0)] == 1) & (g.counts["SKY"] >= cfg.opacity.min_sky)
+    )
     i, j = one[0][0], one[1][0]
     n_p, n_s = g.counts["pos0"][i, j], g.counts["SKY"][i, j]
     assert sig[flat[i, j]] == pytest.approx(np.sqrt(1 / n_p + 1 / n_s))
@@ -166,8 +167,9 @@ def test_poisson_sigma_is_the_ratio_error(cfg):
 
 def test_missing_sky_reference_counts_raises(cfg):
     g, _, _ = _structured_scene(cfg)
-    no_sky = AnalysisGrid(edges=g.edges, counts={k: v for k, v in g.counts.items()
-                                                 if k != cfg.sky_reference.id})
+    no_sky = AnalysisGrid(
+        edges=g.edges, counts={k: v for k, v in g.counts.items() if k != cfg.sky_reference.id}
+    )
     with pytest.raises(ValueError, match="SKY"):
         solve_opacity(no_sky, cfg, LIVE)
 
@@ -181,8 +183,9 @@ def test_poisson_sigma_uses_raw_sky_counts_under_unequal_live_times(cfg):
     maps = solve_opacity(g, cfg, UNEQUAL)
     flat, ok = _detector_bins(cfg, maps, tx, ty)
     hits = np.bincount(flat[ok], minlength=maps.sky.flat_size)
-    one = np.nonzero(ok & (hits[np.where(ok, flat, 0)] == 1)
-                     & (g.counts["SKY"] >= cfg.opacity.min_sky))
+    one = np.nonzero(
+        ok & (hits[np.where(ok, flat, 0)] == 1) & (g.counts["SKY"] >= cfg.opacity.min_sky)
+    )
     i, j = one[0][0], one[1][0]
     n_p, n_s = g.counts["pos0"][i, j], g.counts["SKY"][i, j]
     assert sig[flat[i, j]] == pytest.approx(np.sqrt(1 / n_p + 1 / n_s))
@@ -200,5 +203,4 @@ def test_save_sigma_creates_parent_directory(cfg, tmp_path):
     g = _grid(cfg)
     sig = poisson_sigma(g, cfg, LIVE)
     save_sigma(tmp_path / "new" / "sigma.npz", sig)
-    np.testing.assert_array_equal(load_sigma(tmp_path / "new" / "sigma.npz")["pos0"],
-                                  sig["pos0"])
+    np.testing.assert_array_equal(load_sigma(tmp_path / "new" / "sigma.npz")["pos0"], sig["pos0"])

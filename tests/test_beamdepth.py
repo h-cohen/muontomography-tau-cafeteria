@@ -25,7 +25,7 @@ def test_box_path_vertical_and_oblique():
     dirs = np.array([[0.0, 0.0, 1.0], [1.0, 0.0, 1.0]]) / np.array([[1.0], [np.sqrt(2)]])
     L = box_path_lengths(starts, dirs, np.array([-0.5, -1, 7.0]), np.array([0.5, 1, 8.0]))
     assert L[0] == pytest.approx(1.0)
-    assert L[1] == pytest.approx(0.0)        # passes x = 7..8 at z = 7..8: misses the box
+    assert L[1] == pytest.approx(0.0)  # passes x = 7..8 at z = 7..8: misses the box
 
 
 def test_box_path_clips_corner():
@@ -53,8 +53,9 @@ def test_at_bound_flag(cfg):
 
 def test_zprofile_measures_column_extent(cfg):
     g = VoxelGrid(origin=(-3.0, -3.0, 5.0), spacing=0.1, shape=(60, 60, 50))
-    rho = beam_ceiling(g, xs=(0.0,), z0=7.0, w=0.3, h=1.2, kappa=(1.0,), y_extent=(-3, 3),
-                       slab_thickness=0.0)
+    rho = beam_ceiling(
+        g, xs=(0.0,), z0=7.0, w=0.3, h=1.2, kappa=(1.0,), y_extent=(-3, 3), slab_thickness=0.0
+    )
     sol = VoxelSolution(rho=rho.ravel(), grid=g, offsets={}, position_ids=("pos0", "pos1"))
     zp = zprofile_depth(sol, cfg, xs=(0.0,), w=0.3, z_ref=7.0)
     assert zp["bottom"] == pytest.approx(7.0, abs=0.1)
@@ -65,8 +66,17 @@ def _analytic(cfg):
     """Noiseless lambda from the fit's own box model: a cheap stand-in for a phantom."""
     rows = sky_rows(cfg.position_ids, 0.9, 24)
     xs = (-1.7, 0.0, 1.7)
-    L = beam_design(rows, cfg.origins(), aperture_m=cfg.detector.aperture_m, n_sub=2,
-                    z0=7.0, w=0.3, h=1.0, xs=xs, y_extent=(-5.0, 5.0))
+    L = beam_design(
+        rows,
+        cfg.origins(),
+        aperture_m=cfg.detector.aperture_m,
+        n_sub=2,
+        z0=7.0,
+        w=0.3,
+        h=1.0,
+        xs=xs,
+        y_extent=(-5.0, 5.0),
+    )
     lam = L @ np.full(len(xs), 1.2) + 0.1
     c = replace(cfg, beamdepth=replace(cfg.beamdepth, n_sub=2))
     return c, FitData(lam=lam, w=np.full(rows.n_rows, 1 / 0.02**2), rows=rows), xs
@@ -85,16 +95,16 @@ def test_fit_reports_convergence_and_json_keys(cfg):
 def test_failed_solve_raises(cfg, monkeypatch):
     c, data, xs = _analytic(cfg)
     real = optimize.least_squares
-    monkeypatch.setattr(optimize, "least_squares",
-                        lambda *a, **k: real(*a, **{**k, "max_nfev": 1}))
+    monkeypatch.setattr(optimize, "least_squares", lambda *a, **k: real(*a, **{**k, "max_nfev": 1}))
     with pytest.raises(RuntimeError, match="beam-depth fit failed"):
         fit_beam_depth(data, c, xs_init=xs, z0_init=7.5)
 
 
 def _column(xs, h, *, z0=7.0):
     g = VoxelGrid(origin=(-3.0, -3.0, 5.0), spacing=0.1, shape=(60, 60, 50))
-    rho = beam_ceiling(g, xs=xs, z0=z0, w=0.3, h=h, kappa=(1.0,) * len(xs), y_extent=(-3, 3),
-                       slab_thickness=0.0)
+    rho = beam_ceiling(
+        g, xs=xs, z0=z0, w=0.3, h=h, kappa=(1.0,) * len(xs), y_extent=(-3, 3), slab_thickness=0.0
+    )
     return VoxelSolution(rho=rho.ravel(), grid=g, offsets={}, position_ids=("pos0", "pos1"))
 
 
@@ -120,8 +130,19 @@ def test_zprofile_empty_selections_raise(cfg):
 
 
 def _stub_fit(chi2):
-    return BeamDepthFit(z0=7.0, w=0.3, h=1.0, xs=(0.0,), kappa=(1.0,), chi2_per_dof=chi2,
-                        at_bound=False, n_rows=1, profiles={}, converged=True, n_eval=1)
+    return BeamDepthFit(
+        z0=7.0,
+        w=0.3,
+        h=1.0,
+        xs=(0.0,),
+        kappa=(1.0,),
+        chi2_per_dof=chi2,
+        at_bound=False,
+        n_rows=1,
+        profiles={},
+        converged=True,
+        n_eval=1,
+    )
 
 
 @pytest.mark.parametrize("winner", [0, 1])

@@ -27,14 +27,13 @@ def test_auto_grid_covers_every_ray_footprint():
     g = auto_grid(vol, origins, t_reach=1.0, aperture_m=0.35)
 
     x0, x1 = g.extent(0)
-    assert x0 <= -5.0 - 0.175 + 1e-9     # pos0, t = -1 at z = 5, minus half aperture
+    assert x0 <= -5.0 - 0.175 + 1e-9  # pos0, t = -1 at z = 5, minus half aperture
     assert x1 >= 2.2 + 5.0 + 0.175 - 1e-9
     assert g.extent(2) == pytest.approx((1.0, 5.0), abs=0.5)
 
 
 def test_auto_grid_honours_an_explicit_xy_box():
-    vol = Volume(z_min_m=1.0, z_max_m=3.0, spacing_m=0.5,
-                 xy_m=((-2.0, 2.0), (-1.0, 1.0)))
+    vol = Volume(z_min_m=1.0, z_max_m=3.0, spacing_m=0.5, xy_m=((-2.0, 2.0), (-1.0, 1.0)))
     g = auto_grid(vol, {"pos0": (0.0, 0.0, 0.0)}, t_reach=10.0, aperture_m=0.35)
     assert g.origin[0] == pytest.approx(-2.0)
     assert g.shape[:2] == (8, 4)

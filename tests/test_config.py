@@ -28,8 +28,9 @@ def test_data_dir_relative_to_config(tmp_path, cfg):
 
 def test_pose_file_overrides_free_pose(tmp_path):
     p = tmp_path / "pose.json"
-    p.write_text(json.dumps({"free_pose": "pos1",
-                             "pose": {"x": 1.8, "y": 0.7, "z": 0.0, "az_deg": 0.1}}))
+    p.write_text(
+        json.dumps({"free_pose": "pos1", "pose": {"x": 1.8, "y": 0.7, "z": 0.0, "az_deg": 0.1}})
+    )
     c = load_config(CONFIG, pose_file=p)
     assert c.exposure("pos1").pose == Pose(1.8, 0.7, 0.0, 0.1)
     assert c.origins()["pos1"] == (1.8, 0.7, 0.0)

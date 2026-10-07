@@ -32,8 +32,12 @@ class FocusScan:
 
 def layer_grid(cfg: Config, t_reach: float, z: float) -> VoxelGrid:
     s = cfg.autofocus
-    vol = replace(cfg.volume, z_min_m=z - s.layer_thickness_m / 2,
-                  z_max_m=z + s.layer_thickness_m / 2, spacing_m=s.spacing_m)
+    vol = replace(
+        cfg.volume,
+        z_min_m=z - s.layer_thickness_m / 2,
+        z_max_m=z + s.layer_thickness_m / 2,
+        spacing_m=s.spacing_m,
+    )
     return auto_grid(vol, cfg.origins(), t_reach, aperture_m=cfg.detector.aperture_m)
 
 
@@ -49,20 +53,28 @@ def layer_grids(cfg: Config, t_reach: float, z: float) -> tuple[VoxelGrid, Voxel
     nx, ny, nz = g.shape
     shape = (nx + 1, ny + 1, nz)
     half = 0.5 * g.spacing
-    return (VoxelGrid(origin=g.origin, spacing=g.spacing, shape=shape),
-            VoxelGrid(origin=(g.origin[0] - half, g.origin[1] - half, g.origin[2]),
-                      spacing=g.spacing, shape=shape))
+    return (
+        VoxelGrid(origin=g.origin, spacing=g.spacing, shape=shape),
+        VoxelGrid(
+            origin=(g.origin[0] - half, g.origin[1] - half, g.origin[2]),
+            spacing=g.spacing,
+            shape=shape,
+        ),
+    )
 
 
 def _require_rows(data: FitData) -> None:
     for pid in data.rows.position_ids:
         if not np.any(data.rows.mask_for(pid) & (data.w > 0)):
-            raise ValueError(f"position {pid!r} has no positive-weight rows; "
-                             "cross-position validation needs every position")
+            raise ValueError(
+                f"position {pid!r} has no positive-weight rows; "
+                "cross-position validation needs every position"
+            )
 
 
-def _lattice_cv_score(data: FitData, cfg: Config, grid: VoxelGrid,
-                      cache_dir: str | Path | None) -> float:
+def _lattice_cv_score(
+    data: FitData, cfg: Config, grid: VoxelGrid, cache_dir: str | Path | None
+) -> float:
     fwd = build_forward_model(data.rows, cfg, grid=grid, cache_dir=cache_dir)
     rc = replace(cfg.reconstruction, algorithm="tv", tv_z_weight=0.0)
     scores = []
@@ -80,13 +92,20 @@ def _lattice_cv_score(data: FitData, cfg: Config, grid: VoxelGrid,
     return float(np.mean(scores))
 
 
-def layer_cv_score(data: FitData, cfg: Config, z: float, *,
-                   cache_dir: str | Path | None = None) -> float:
+def layer_cv_score(
+    data: FitData, cfg: Config, z: float, *, cache_dir: str | Path | None = None
+) -> float:
     """Trimmed held-out residual of a layer at z fitted to each position alone,
     averaged over both lattice phases (see layer_grids)."""
     _require_rows(data)
-    return float(np.mean([_lattice_cv_score(data, cfg, g, cache_dir)
-                          for g in layer_grids(cfg, data.rows.t_reach(), z)]))
+    return float(
+        np.mean(
+            [
+                _lattice_cv_score(data, cfg, g, cache_dir)
+                for g in layer_grids(cfg, data.rows.t_reach(), z)
+            ]
+        )
+    )
 
 
 def parabola_min(zs: np.ndarray, scores: np.ndarray) -> float:
@@ -97,16 +116,15 @@ def parabola_min(zs: np.ndarray, scores: np.ndarray) -> float:
     i = int(np.argmin(scores))
     if i == 0 or i == len(zs) - 1:
         return float(zs[i])
-    z0, z1, z2 = (float(v) for v in zs[i - 1:i + 2])
-    y0, y1, y2 = (float(v) for v in scores[i - 1:i + 2])
+    z0, z1, z2 = (float(v) for v in zs[i - 1 : i + 2])
+    y0, y1, y2 = (float(v) for v in scores[i - 1 : i + 2])
     h0, h1 = z1 - z0, z2 - z1
     num = h0**2 * (y1 - y2) - h1**2 * (y1 - y0)
     den = h0 * (y1 - y2) + h1 * (y1 - y0)
     return float(z1 - 0.5 * num / den)
 
 
-def cv_height_scan(data: FitData, cfg: Config, *,
-                   cache_dir: str | Path | None = None) -> FocusScan:
+def cv_height_scan(data: FitData, cfg: Config, *, cache_dir: str | Path | None = None) -> FocusScan:
     """Coarse sweep over the configured band, then a fine sweep around its minimum."""
     s = cfg.autofocus
     scored: dict[float, float] = {}

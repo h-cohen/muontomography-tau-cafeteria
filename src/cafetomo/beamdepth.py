@@ -39,8 +39,9 @@ _SINGLE_BEAM_OFF_M = 0.85
 _GH = (np.array([-np.sqrt(3.0), 0.0, np.sqrt(3.0)]), np.array([1 / 6, 2 / 3, 1 / 6]))
 
 
-def box_path_lengths(starts: np.ndarray, dirs: np.ndarray, lo: np.ndarray,
-                     hi: np.ndarray) -> np.ndarray:
+def box_path_lengths(
+    starts: np.ndarray, dirs: np.ndarray, lo: np.ndarray, hi: np.ndarray
+) -> np.ndarray:
     """Length of each ray (start, unit direction, forward only) inside the
     axis-aligned box [lo, hi]: the slab method."""
     with np.errstate(divide="ignore", invalid="ignore"):
@@ -56,8 +57,19 @@ def box_path_lengths(starts: np.ndarray, dirs: np.ndarray, lo: np.ndarray,
     return np.clip(leave - enter, 0.0, None)
 
 
-def beam_design(rows: RowIndex, origins: dict, *, aperture_m: float, n_sub: int, z0: float,
-                w: float, h: float, xs, y_extent, angle_jitter: float = 0.0) -> np.ndarray:
+def beam_design(
+    rows: RowIndex,
+    origins: dict,
+    *,
+    aperture_m: float,
+    n_sub: int,
+    z0: float,
+    w: float,
+    h: float,
+    xs,
+    y_extent,
+    angle_jitter: float = 0.0,
+) -> np.ndarray:
     """Bundle-averaged path length of every row through every beam box,
     [n_rows, n_beams]. `angle_jitter` (tan units) smears directions along x
     by a 3-point Gauss-Hermite rule: the MCS systematic."""
@@ -102,15 +114,25 @@ class BeamDepthFit:
     n_eval: int
 
     def to_json(self) -> dict:
-        return {"zbottom": self.z0, "w": self.w, "h": self.h, "ztop": self.z0 + self.h,
-                "xs": list(self.xs), "kappa": list(self.kappa),
-                "chisq_per_dof": self.chi2_per_dof, "at_bound": self.at_bound,
-                "n_rows": self.n_rows, "profiles": self.profiles,
-                "converged": self.converged, "n_eval": self.n_eval}
+        return {
+            "zbottom": self.z0,
+            "w": self.w,
+            "h": self.h,
+            "ztop": self.z0 + self.h,
+            "xs": list(self.xs),
+            "kappa": list(self.kappa),
+            "chisq_per_dof": self.chi2_per_dof,
+            "at_bound": self.at_bound,
+            "n_rows": self.n_rows,
+            "profiles": self.profiles,
+            "converged": self.converged,
+            "n_eval": self.n_eval,
+        }
 
 
-def fit_beam_depth(data: FitData, cfg: Config, *, xs_init, z0_init: float,
-                   angle_jitter: float = 0.0) -> BeamDepthFit:
+def fit_beam_depth(
+    data: FitData, cfg: Config, *, xs_init, z0_init: float, angle_jitter: float = 0.0
+) -> BeamDepthFit:
     """Fit the box model, seeded from the triangulated beams.
 
     `z0_init` is the triangulated beam height, which lies between the beams'
@@ -120,16 +142,19 @@ def fit_beam_depth(data: FitData, cfg: Config, *, xs_init, z0_init: float,
     face seeded at z0_init and at z0_init - h_init/2 (the seed box centred
     there), and the lower chi^2 wins: both use the same rows, so the chi^2
     values compare directly. A non-finite chi^2 cannot be ranked and raises."""
-    fits = [_fit_once(data, cfg, xs_init=xs_init, z0_init=z0, angle_jitter=angle_jitter)
-            for z0 in (z0_init, z0_init - cfg.beamdepth.h_init_m / 2)]
+    fits = [
+        _fit_once(data, cfg, xs_init=xs_init, z0_init=z0, angle_jitter=angle_jitter)
+        for z0 in (z0_init, z0_init - cfg.beamdepth.h_init_m / 2)
+    ]
     bad = [f.chi2_per_dof for f in fits if not np.isfinite(f.chi2_per_dof)]
     if bad:
         raise RuntimeError(f"beam-depth fit returned a non-finite chi^2/dof: {bad}")
     return min(fits, key=lambda f: f.chi2_per_dof)
 
 
-def estimate_beam_depth(data: FitData, cfg: Config, sky: SkyGrid, *,
-                        angle_jitter: float = 0.0) -> tuple[dict, BeamDepthFit]:
+def estimate_beam_depth(
+    data: FitData, cfg: Config, sky: SkyGrid, *, angle_jitter: float = 0.0
+) -> tuple[dict, BeamDepthFit]:
     """The reported beam-depth estimator: triangulate, then fit from it.
 
     The measurement and its phantom validation both call this, so the
@@ -138,17 +163,24 @@ def estimate_beam_depth(data: FitData, cfg: Config, sky: SkyGrid, *,
     beams = find_beams(data, cfg, sky)
     if not beams["ok"]:
         raise RuntimeError(f"beam triangulation failed: {beams}")
-    fit = fit_beam_depth(data, cfg, xs_init=beams["beams_x"], z0_init=beams["z"],
-                         angle_jitter=angle_jitter)
+    fit = fit_beam_depth(
+        data, cfg, xs_init=beams["beams_x"], z0_init=beams["z"], angle_jitter=angle_jitter
+    )
     return beams, fit
 
 
-def _fit_once(data: FitData, cfg: Config, *, xs_init, z0_init: float,
-              angle_jitter: float) -> BeamDepthFit:
+def _fit_once(
+    data: FitData, cfg: Config, *, xs_init, z0_init: float, angle_jitter: float
+) -> BeamDepthFit:
     s = cfg.beamdepth
     keep = (data.w > 0) & (np.abs(data.rows.sy) <= s.band_sy)
-    rows = RowIndex(data.rows.position_ids, data.rows.pos_of_row[keep], data.rows.sx[keep],
-                    data.rows.sy[keep], data.rows.sky_flat[keep])
+    rows = RowIndex(
+        data.rows.position_ids,
+        data.rows.pos_of_row[keep],
+        data.rows.sx[keep],
+        data.rows.sy[keep],
+        data.rows.sky_flat[keep],
+    )
     lam, sw = data.lam[keep], np.sqrt(data.w[keep])
     bg = _background(rows, s.bg_degree)
     origins = cfg.origins()
@@ -156,9 +188,23 @@ def _fit_once(data: FitData, cfg: Config, *, xs_init, z0_init: float,
 
     def design(theta):
         z0, w, h, *xs = theta
-        return np.hstack([beam_design(rows, origins, aperture_m=cfg.detector.aperture_m,
-                                      n_sub=s.n_sub, z0=z0, w=w, h=h, xs=xs,
-                                      y_extent=s.y_extent_m, angle_jitter=angle_jitter), bg])
+        return np.hstack(
+            [
+                beam_design(
+                    rows,
+                    origins,
+                    aperture_m=cfg.detector.aperture_m,
+                    n_sub=s.n_sub,
+                    z0=z0,
+                    w=w,
+                    h=h,
+                    xs=xs,
+                    y_extent=s.y_extent_m,
+                    angle_jitter=angle_jitter,
+                ),
+                bg,
+            ]
+        )
 
     def resid(theta):
         X = design(theta) * sw[:, None]
@@ -189,12 +235,19 @@ def _fit_once(data: FitData, cfg: Config, *, xs_init, z0_init: float,
         prof_d = [float(np.mean(lam[sel][sx == e])) for e in edges]
         prof_m = [float(np.mean(model[sel][sx == e])) for e in edges]
         profiles[pid] = {"s": edges.tolist(), "data": prof_d, "model": prof_m}
-    return BeamDepthFit(z0=float(theta[0]), w=float(theta[1]), h=float(theta[2]),
-                        xs=tuple(float(v) for v in theta[3:]),
-                        kappa=tuple(float(v) for v in coef[:nb]),
-                        chi2_per_dof=float(np.sum(fit.fun**2) / dof), at_bound=at_bound,
-                        n_rows=int(rows.n_rows), profiles=profiles,
-                        converged=bool(fit.success), n_eval=int(fit.nfev))
+    return BeamDepthFit(
+        z0=float(theta[0]),
+        w=float(theta[1]),
+        h=float(theta[2]),
+        xs=tuple(float(v) for v in theta[3:]),
+        kappa=tuple(float(v) for v in coef[:nb]),
+        chi2_per_dof=float(np.sum(fit.fun**2) / dof),
+        at_bound=at_bound,
+        n_rows=int(rows.n_rows),
+        profiles=profiles,
+        converged=bool(fit.success),
+        n_eval=int(fit.nfev),
+    )
 
 
 def zprofile_depth(sol: VoxelSolution, cfg: Config, *, xs, w: float, z_ref: float) -> dict:
@@ -238,6 +291,12 @@ def zprofile_depth(sol: VoxelSolution, cfg: Config, *, xs, w: float, z_ref: floa
     top = cross(hi_i + 1, hi_i) if hi_i < z.size - 1 else float("nan")
     baseline = max(position_baselines(cfg).values())
     sigma_t = cfg.opacity.sky_t_max * 2 / cfg.opacity.sky_n_bins / np.sqrt(12.0)
-    return {"bottom": bottom, "top": top, "fwhm": top - bottom, "peak": float(z[i]),
-            "resolution": depth_resolution(z_ref, baseline, sigma_t),
-            "profile_z": z.tolist(), "profile": prof.tolist()}
+    return {
+        "bottom": bottom,
+        "top": top,
+        "fwhm": top - bottom,
+        "peak": float(z[i]),
+        "resolution": depth_resolution(z_ref, baseline, sigma_t),
+        "profile_z": z.tolist(),
+        "profile": prof.tolist(),
+    }

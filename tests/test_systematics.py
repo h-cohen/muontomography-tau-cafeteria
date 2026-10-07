@@ -48,18 +48,31 @@ def test_zero_jitter_injects_zero_dlam(cfg):
 
 
 def test_budget_adds_in_quadrature_including_background():
-    b = error_budget({"depth_h_sigma": 0.3}, {"depth_h": 0.0}, {"depth_h": 0.4},
-                     {"depth_h": 0.0}, {"depth_h": 0.0}, ["depth_h"])
+    b = error_budget(
+        {"depth_h_sigma": 0.3},
+        {"depth_h": 0.0},
+        {"depth_h": 0.4},
+        {"depth_h": 0.0},
+        {"depth_h": 0.0},
+        ["depth_h"],
+    )
     assert b["depth_h_total"] == pytest.approx(0.5)
-    b = error_budget({"depth_h_sigma": 0.3}, {"depth_h": 0.0}, {"depth_h": 0.0},
-                     {"depth_h": 0.0}, {"depth_h": -0.4}, ["depth_h"])
+    b = error_budget(
+        {"depth_h_sigma": 0.3},
+        {"depth_h": 0.0},
+        {"depth_h": 0.0},
+        {"depth_h": 0.0},
+        {"depth_h": -0.4},
+        ["depth_h"],
+    )
     assert b["depth_h_bg"] == 0.4 and b["depth_h_total"] == pytest.approx(0.5)
 
 
 def test_budget_keeps_nan_instead_of_zero():
     ok = {"a": 0.1, "b": 0.1}
-    b = error_budget({"a_sigma": 0.1, "b_sigma": 0.1}, ok, ok, ok, {"a": np.nan, "b": 0.1},
-                     ["a", "b"])
+    b = error_budget(
+        {"a_sigma": 0.1, "b_sigma": 0.1}, ok, ok, ok, {"a": np.nan, "b": 0.1}, ["a", "b"]
+    )
     assert np.isnan(b["a_bg"]) and np.isnan(b["a_total"])
     assert np.isfinite(b["b_total"])
 

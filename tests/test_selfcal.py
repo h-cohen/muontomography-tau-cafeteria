@@ -32,8 +32,9 @@ def _campaign(cfg, true_pose: Pose):
     acc = c.detector.acceptance(tx, ty)
     sky_counts = np.round(4e5 * acc / acc.sum()).astype(np.int64) * 10
     g = VoxelGrid(origin=(-6.0, -6.0, 6.5), spacing=0.1, shape=(140, 120, 20))
-    truth = beam_ceiling(g, xs=(-1.7, 0.0, 1.7, 3.4), z0=7.0, w=0.3, h=0.8,
-                         kappa=(1.5,) * 4, y_extent=(-4.0, 4.0))
+    truth = beam_ceiling(
+        g, xs=(-1.7, 0.0, 1.7, 3.4), z0=7.0, w=0.3, h=0.8, kappa=(1.5,) * 4, y_extent=(-4.0, 4.0)
+    )
     counts = {"SKY": sky_counts}
     rng = np.random.default_rng(1)
     for pid in ("pos0", "pos1"):
@@ -94,9 +95,23 @@ def test_candidate_xy_spans_the_baseline_arc(cfg):
 def test_pose_result_keys(cfg):
     fit = PoseFit(pose=Pose(1.8, 0.6, 0.0, 1.5), objective=0.9, n_eval=40, converged=True)
     out = pose_result(fit, {"x": 0.02, "y": 0.03, "az_deg": 0.4}, cfg)
-    assert set(out) == {"free_pose", "pose", "x", "x_sigma", "y", "y_sigma", "az",
-                        "az_sigma", "baseline", "baseline_fixed", "prior_x", "prior_y",
-                        "objective", "n_eval", "converged"}
+    assert set(out) == {
+        "free_pose",
+        "pose",
+        "x",
+        "x_sigma",
+        "y",
+        "y_sigma",
+        "az",
+        "az_sigma",
+        "baseline",
+        "baseline_fixed",
+        "prior_x",
+        "prior_y",
+        "objective",
+        "n_eval",
+        "converged",
+    }
     assert out["free_pose"] == "pos1"
     assert out["pose"] == {"x": 1.8, "y": 0.6, "z": 0.0, "az_deg": 1.5}
     assert (out["x_sigma"], out["y_sigma"], out["az_sigma"]) == (0.02, 0.03, 0.4)

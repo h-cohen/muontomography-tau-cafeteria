@@ -2,6 +2,7 @@
 
 World frame: z up, lengths in METRES, origin at detector position pos0.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -13,9 +14,9 @@ from cafetomo.config import Volume
 
 @dataclass(frozen=True)
 class VoxelGrid:
-    origin: tuple          # (x0, y0, z0) of the grid CORNER, metres
-    spacing: float         # cubic voxel edge, metres
-    shape: tuple           # (nx, ny, nz)
+    origin: tuple  # (x0, y0, z0) of the grid CORNER, metres
+    spacing: float  # cubic voxel edge, metres
+    shape: tuple  # (nx, ny, nz)
 
     @property
     def n_voxels(self) -> int:
@@ -32,8 +33,13 @@ class VoxelGrid:
         return f"{self.origin}-{self.spacing}-{self.shape}"
 
 
-def auto_grid(vol: Volume, origins: dict[str, tuple[float, float, float]],
-              t_reach: float, *, aperture_m: float) -> VoxelGrid:
+def auto_grid(
+    vol: Volume,
+    origins: dict[str, tuple[float, float, float]],
+    t_reach: float,
+    *,
+    aperture_m: float,
+) -> VoxelGrid:
     """Lattice covering the union of every position's ray footprint.
 
     `t_reach` is the largest |tangent| that carries a constrained measurement —

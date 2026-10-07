@@ -72,10 +72,11 @@ def test_recovers_phantom_height(cfg):
     cfg = cfg.with_pose("pos1", Pose(1.78, 0.72, 0.0, 0.0))
     rows = sky_rows(cfg.position_ids, 0.9, 36)
     g = VoxelGrid(origin=(-6.0, -6.0, 6.0), spacing=0.1, shape=(140, 120, 26))
-    truth = beam_ceiling(g, xs=(-1.7, 0.0, 1.7, 3.4), z0=7.0, w=0.3, h=0.4,
-                         kappa=(1.5,) * 4, y_extent=(-4.0, 4.0))
+    truth = beam_ceiling(
+        g, xs=(-1.7, 0.0, 1.7, 3.4), z0=7.0, w=0.3, h=0.4, kappa=(1.5,) * 4, y_extent=(-4.0, 4.0)
+    )
     fwd = build_forward_model(rows, cfg, grid=g)
     like = FitData(lam=np.zeros(rows.n_rows), w=np.full(rows.n_rows, 1 / 0.03**2), rows=rows)
     data = phantom_data(fwd, truth, like, np.random.default_rng(0))
     scan = cv_height_scan(data, cfg)
-    assert scan.z_best == pytest.approx(7.2, abs=0.25)   # layer centre: z0 + h/2
+    assert scan.z_best == pytest.approx(7.2, abs=0.25)  # layer centre: z0 + h/2

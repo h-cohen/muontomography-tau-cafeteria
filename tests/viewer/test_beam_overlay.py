@@ -3,6 +3,7 @@
 Shown by default when the run has a beams block, absent (control and legend
 hidden) when it does not.
 """
+
 import pytest
 
 from .conftest import BEAMS, assert_run_loaded, canvas_data

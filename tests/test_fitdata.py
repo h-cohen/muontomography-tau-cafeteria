@@ -6,10 +6,13 @@ from cafetomo.fitdata import FitData, RowIndex
 
 def _rows(sx, sy, pos) -> RowIndex:
     sx = np.asarray(sx, dtype=float)
-    return RowIndex(position_ids=("pos0", "pos1"),
-                    pos_of_row=np.asarray(pos, dtype=np.int64),
-                    sx=sx, sy=np.asarray(sy, dtype=float),
-                    sky_flat=np.arange(sx.size, dtype=np.int64))
+    return RowIndex(
+        position_ids=("pos0", "pos1"),
+        pos_of_row=np.asarray(pos, dtype=np.int64),
+        sx=sx,
+        sy=np.asarray(sy, dtype=float),
+        sky_flat=np.arange(sx.size, dtype=np.int64),
+    )
 
 
 def test_mask_for_selects_one_positions_rows():

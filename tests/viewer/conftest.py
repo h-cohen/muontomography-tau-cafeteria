@@ -3,6 +3,7 @@
 `run_fixture` writes a tiny synthetic exported run (not campaign data), so
 tests are fast and self-contained.
 """
+
 from __future__ import annotations
 
 import json
@@ -18,8 +19,9 @@ VIEWER_DIR = Path(__file__).resolve().parents[2] / "viewer"
 # Two beams inside the default fixture volume (x 0..3, y 0..2.5, z 1..3 m),
 # shaped like meta.json's `beams` block from cafetomo.export.
 BEAMS = {
-    "boxes": [{"x": x, "w": 0.3, "zbottom": 1.6, "ztop": 2.8, "y_extent": [0.2, 2.3]}
-              for x in (0.9, 2.1)],
+    "boxes": [
+        {"x": x, "w": 0.3, "zbottom": 1.6, "ztop": 2.8, "y_extent": [0.2, 2.3]} for x in (0.9, 2.1)
+    ],
     "h": 1.2,
     "h_sigma": 0.15,
 }
@@ -33,8 +35,15 @@ def dist_path(tmp_path_factory) -> Path:
 @pytest.fixture
 def run_fixture(tmp_path):
     """Write a synthetic run dir; returns its Path. shape/layers/beams overridable."""
-    def _make(shape=(6, 5, 4), layers=("volume",), spacing_m=0.5,
-              origin_m=(0.0, 0.0, 1.0), depth_resolved=False, beams=None):
+
+    def _make(
+        shape=(6, 5, 4),
+        layers=("volume",),
+        spacing_m=0.5,
+        origin_m=(0.0, 0.0, 1.0),
+        depth_resolved=False,
+        beams=None,
+    ):
         run = tmp_path / "run"
         run.mkdir()
         rng = np.random.default_rng(0)
@@ -54,20 +63,24 @@ def run_fixture(tmp_path):
             "suggested_iso": [float(vol.max()) * 0.3, float(vol.max()) * 0.6],
             "run": "run",
             "layers": list(layers),
-            "detectors": [{"id": "pos0", "x": 0.0, "y": 0.0, "z": 0.0, "az_deg": 0.0},
-                          {"id": "pos1", "x": 1.75, "y": 0.0, "z": 0.0, "az_deg": 0.0}],
+            "detectors": [
+                {"id": "pos0", "x": 0.0, "y": 0.0, "z": 0.0, "az_deg": 0.0},
+                {"id": "pos1", "x": 1.75, "y": 0.0, "z": 0.0, "az_deg": 0.0},
+            ],
             "resolution": {
                 "max_baseline_m": 1.75,
                 "n_positions": 2,
                 "depth_resolved": depth_resolved,
                 "verdict": "depth NOT resolved: synthetic fixture verdict"
-                if not depth_resolved else "depth resolved: synthetic fixture verdict",
+                if not depth_resolved
+                else "depth resolved: synthetic fixture verdict",
             },
         }
         if beams is not None:
             meta["beams"] = beams
         (run / "meta.json").write_text(json.dumps(meta))
         return run
+
     return _make
 
 
@@ -90,8 +103,9 @@ def canvas_is_blank(page, selector) -> bool:
 def assert_run_loaded(page):
     """What every successful load must show: no load error, a drawn volume,
     gizmo and colour bar, and the resolution verdict unedited."""
-    page.wait_for_function("() => window.__viewerState && window.__viewerState.ready",
-                           timeout=15000)
+    page.wait_for_function(
+        "() => window.__viewerState && window.__viewerState.ready", timeout=15000
+    )
     assert page.evaluate("() => window.__viewerError || null") is None
     assert not canvas_is_blank(page, "#gl-canvas"), "the volume must render"
     assert not canvas_is_blank(page, "#gizmo-canvas"), "axis gizmo must render"

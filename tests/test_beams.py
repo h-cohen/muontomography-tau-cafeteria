@@ -58,8 +58,14 @@ def test_sky_images_leave_unweighted_rows_unmeasured():
 def test_triangulate_needs_two_positions():
     img = np.zeros((10, 10))
     with pytest.raises(ValueError, match="two positions"):
-        triangulate({"pos0": img}, {"pos0": (0.0, 0.0, 0.0)}, np.linspace(-1, 1, 10),
-                    7.0, 0.01, BeamSettings())
+        triangulate(
+            {"pos0": img},
+            {"pos0": (0.0, 0.0, 0.0)},
+            np.linspace(-1, 1, 10),
+            7.0,
+            0.01,
+            BeamSettings(),
+        )
 
 
 def _comb_images(origins, centers, xs, z):
@@ -79,8 +85,9 @@ def test_verify_gate_passes_matching_reconstruction():
     xs = (-3.4, -1.7, 0.0, 1.7, 3.4)
     images = _comb_images(origins, centers, xs, 7.0)
     g = VoxelGrid(origin=(-6.0, -4.0, 6.0), spacing=0.1, shape=(120, 80, 20))
-    truth = beam_ceiling(g, xs=xs, z0=6.9, w=0.2, h=0.2, kappa=(1.0,) * 5,
-                         y_extent=(-4.0, 4.0), slab_kappa=0.0)
+    truth = beam_ceiling(
+        g, xs=xs, z0=6.9, w=0.2, h=0.2, kappa=(1.0,) * 5, y_extent=(-4.0, 4.0), slab_kappa=0.0
+    )
     sol = VoxelSolution(rho=truth.ravel(), grid=g, offsets={}, position_ids=tuple(origins))
     gate = verify_gate(images, origins, centers, 7.0, sol, BeamSettings())
     assert gate["passed"] and gate["n_beams_data"] >= 3
@@ -89,15 +96,18 @@ def test_verify_gate_passes_matching_reconstruction():
 
 def _grid_data(images, sky, pids):
     rows = sky_rows(pids, float(sky.edges[-1]), sky.n_bins)
-    lam = np.concatenate([images[pid].ravel()[rows.sky_flat[rows.pos_of_row == k]]
-                          for k, pid in enumerate(pids)])
+    lam = np.concatenate(
+        [images[pid].ravel()[rows.sky_flat[rows.pos_of_row == k]] for k, pid in enumerate(pids)]
+    )
     return FitData(lam=lam, w=np.ones(rows.n_rows), rows=rows)
 
 
 @pytest.mark.parametrize(("min_y_corr", "used"), [(-1.0, True), (1.01, False)])
 def test_y_features_enter_the_joint_fit_only_above_min_y_corr(cfg, min_y_corr, used):
-    cfg = replace(cfg.with_pose("pos1", cfg.exposure("pos1").pose.__class__(1.78, 0.72, 0.0, 0.0)),
-                  beams=replace(cfg.beams, min_y_corr=min_y_corr))
+    cfg = replace(
+        cfg.with_pose("pos1", cfg.exposure("pos1").pose.__class__(1.78, 0.72, 0.0, 0.0)),
+        beams=replace(cfg.beams, min_y_corr=min_y_corr),
+    )
     sky = make_sky_grid(cfg.opacity.sky_t_max, cfg.opacity.sky_n_bins)
     origins = cfg.origins()
     xs_img = _comb_images(origins, sky.centers, (-3.4, -1.7, 0.0, 1.7, 3.4), 7.0)
@@ -118,11 +128,19 @@ def test_triangulates_phantom_ceiling(cfg):
     sky = make_sky_grid(cfg.opacity.sky_t_max, cfg.opacity.sky_n_bins)
     rows = sky_rows(cfg.position_ids, cfg.opacity.sky_t_max, cfg.opacity.sky_n_bins)
     keep = (np.abs(rows.sx) <= 0.9) & (np.abs(rows.sy) <= 0.9)
-    rows = rows.__class__(rows.position_ids, rows.pos_of_row[keep], rows.sx[keep],
-                          rows.sy[keep], rows.sky_flat[keep])
+    rows = rows.__class__(
+        rows.position_ids, rows.pos_of_row[keep], rows.sx[keep], rows.sy[keep], rows.sky_flat[keep]
+    )
     g = VoxelGrid(origin=(-7.0, -7.0, 6.5), spacing=0.1, shape=(160, 140, 15))
-    truth = beam_ceiling(g, xs=(-3.4, -1.7, 0.0, 1.7, 3.4), z0=7.0, w=0.3, h=0.3,
-                         kappa=(2.0,) * 5, y_extent=(-5.0, 5.0))
+    truth = beam_ceiling(
+        g,
+        xs=(-3.4, -1.7, 0.0, 1.7, 3.4),
+        z0=7.0,
+        w=0.3,
+        h=0.3,
+        kappa=(2.0,) * 5,
+        y_extent=(-5.0, 5.0),
+    )
     fwd = build_forward_model(rows, cfg, grid=g)
     like = FitData(lam=np.zeros(rows.n_rows), w=np.full(rows.n_rows, 1 / 0.02**2), rows=rows)
     res = find_beams(phantom_data(fwd, truth, like, np.random.default_rng(0)), cfg, sky)

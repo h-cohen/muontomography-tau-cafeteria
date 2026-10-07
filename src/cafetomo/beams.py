@@ -27,8 +27,8 @@ from cafetomo.fitdata import FitData
 from cafetomo.reconstruct import VoxelSolution
 from cafetomo.sky import SkyGrid
 
-_GATE_Y_BAND_M = 2.0       # |y| range of the reconstruction slice profiled by the gate
-_GATE_SMOOTH_M = 0.12      # Gaussian sigma on that profile, so voxel noise is not a beam
+_GATE_Y_BAND_M = 2.0  # |y| range of the reconstruction slice profiled by the gate
+_GATE_SMOOTH_M = 0.12  # Gaussian sigma on that profile, so voxel noise is not a beam
 
 
 def _axis_index(axis: str) -> int:
@@ -61,8 +61,9 @@ def sky_images(data: FitData, sky: SkyGrid) -> dict[str, np.ndarray]:
     return out
 
 
-def profile(img: np.ndarray, centers: np.ndarray, axis: str,
-            band: float) -> tuple[np.ndarray, np.ndarray]:
+def profile(
+    img: np.ndarray, centers: np.ndarray, axis: str, band: float
+) -> tuple[np.ndarray, np.ndarray]:
     """Opacity profile vs tan(theta_axis), averaged over |t_other| < band.
 
     Images are indexed [i_x, j_y], so the x profile averages over axis 1.
@@ -73,8 +74,9 @@ def profile(img: np.ndarray, centers: np.ndarray, axis: str,
     return centers, _nanmean(img[sel, :], axis=0)
 
 
-def world_profile(t: np.ndarray, prof: np.ndarray, origin: tuple, axis: str, z: float,
-                  grid: np.ndarray) -> np.ndarray:
+def world_profile(
+    t: np.ndarray, prof: np.ndarray, origin: tuple, axis: str, z: float, grid: np.ndarray
+) -> np.ndarray:
     """A tangent profile resampled onto world coordinates of the plane at height z;
     NaN outside what the position sees."""
     w = origin[_axis_index(axis)] + t * (z - origin[2])
@@ -82,9 +84,15 @@ def world_profile(t: np.ndarray, prof: np.ndarray, origin: tuple, axis: str, z: 
     return np.interp(grid, w[ok], prof[ok], left=np.nan, right=np.nan)
 
 
-def parallax_scan(images: dict, origins: dict, centers: np.ndarray, axis: str,
-                  grid: np.ndarray, zs: np.ndarray,
-                  band: float) -> tuple[np.ndarray, float, float]:
+def parallax_scan(
+    images: dict,
+    origins: dict,
+    centers: np.ndarray,
+    axis: str,
+    grid: np.ndarray,
+    zs: np.ndarray,
+    band: float,
+) -> tuple[np.ndarray, float, float]:
     """Correlation of the first two positions' world-projected profiles vs height.
 
     Returns (correlations, best_z, best_corr); correlation is NaN at heights where
@@ -142,7 +150,7 @@ def beam_peaks_subbin(grid: np.ndarray, prof: np.ndarray, prom_sigmas: float = 0
     out = []
     for i in idx:
         if 0 < i < len(p) - 1:
-            q = np.clip(p[i - 1: i + 2] - min(p[i - 1], p[i + 1]), 0.0, None)
+            q = np.clip(p[i - 1 : i + 2] - min(p[i - 1], p[i + 1]), 0.0, None)
             delta = 0.5 * (q[2] - q[0]) / q[1] if q[1] > 0 else 0.0
             step = g[i + 1] - g[i] if delta > 0 else g[i] - g[i - 1]
             out.append(g[i] + float(np.clip(delta, -0.5, 0.5)) * step)
@@ -165,8 +173,9 @@ def match_peaks(peaks: dict, origins: dict, axis: str, z0: float, tol_m: float) 
     ref = pids[0]
     o0 = origins[ref]
     base = o0[ax] + np.asarray(peaks[ref]) * (z0 - o0[2])
-    feats = [{"world0": float(w), "obs": {ref: float(t)}}
-             for w, t in zip(base, peaks[ref], strict=True)]
+    feats = [
+        {"world0": float(w), "obs": {ref: float(t)}} for w, t in zip(base, peaks[ref], strict=True)
+    ]
     for pid in pids[1:]:
         o = origins[pid]
         for t in peaks[pid]:
@@ -180,8 +189,15 @@ def match_peaks(peaks: dict, origins: dict, axis: str, z0: float, tol_m: float) 
     return [f for f in feats if len(f["obs"]) >= 2]
 
 
-def triangulate(images: dict, origins: dict, centers: np.ndarray, z0: float,
-                sigma_t: float, s: BeamSettings, axes: tuple[str, ...] = ("x", "y")) -> dict:
+def triangulate(
+    images: dict,
+    origins: dict,
+    centers: np.ndarray,
+    z0: float,
+    sigma_t: float,
+    s: BeamSettings,
+    axes: tuple[str, ...] = ("x", "y"),
+) -> dict:
     """Joint least-squares ray intersection over every matched beam, both axes.
 
     Each (position, beam) peak fixes a ray; a beam at height z and world position X
@@ -203,21 +219,36 @@ def triangulate(images: dict, origins: dict, centers: np.ndarray, z0: float,
     feats = {"x": [], "y": []}
     for axis in axes:
         band = bands[axis]
-        peaks = {pid: beam_peaks_subbin(*profile(img, centers, axis, band), s.prominence_sigmas)
-                 for pid, img in images.items()}
+        peaks = {
+            pid: beam_peaks_subbin(*profile(img, centers, axis, band), s.prominence_sigmas)
+            for pid, img in images.items()
+        }
         feats[axis] = match_peaks(peaks, origins, axis, z0, s.match_tol_m)
     nx, ny = len(feats["x"]), len(feats["y"])
     n_obs = sum(len(f["obs"]) for a in feats for f in feats[a])
     n_par = 1 + nx + ny
-    counts = {"n_features_x": nx, "n_features_y": ny, "n_observations": n_obs,
-              "dof": n_obs - n_par, "sigma_t_assumed": float(sigma_t)}
+    counts = {
+        "n_features_x": nx,
+        "n_features_y": ny,
+        "n_observations": n_obs,
+        "dof": n_obs - n_par,
+        "sigma_t_assumed": float(sigma_t),
+    }
     if nx + ny < 1 or n_obs <= n_par:
         nan = float("nan")
-        return {"ok": False, "z": nan, "z_sigma": nan, **counts, "chi_per_dof": nan,
-                "resid_rms_tan": nan, "beams_x": [], "beams_y": []}
+        return {
+            "ok": False,
+            "z": nan,
+            "z_sigma": nan,
+            **counts,
+            "chi_per_dof": nan,
+            "resid_rms_tan": nan,
+            "beams_x": [],
+            "beams_y": [],
+        }
 
     def unpack(p):
-        return p[0], p[1: 1 + nx], p[1 + nx:]
+        return p[0], p[1 : 1 + nx], p[1 + nx :]
 
     def resid(p):
         z, xs, ys = unpack(p)
@@ -230,8 +261,9 @@ def triangulate(images: dict, origins: dict, centers: np.ndarray, z0: float,
                     out.append(((w - o[ax]) / (z - o[2]) - t) / sigma_t)
         return np.asarray(out)
 
-    p0 = np.concatenate([[z0], [f["world0"] for f in feats["x"]],
-                         [f["world0"] for f in feats["y"]]])
+    p0 = np.concatenate(
+        [[z0], [f["world0"] for f in feats["x"]], [f["world0"] for f in feats["y"]]]
+    )
     fit = optimize.least_squares(resid, p0, method="lm")
     z, xs, ys = unpack(fit.x)
 
@@ -244,14 +276,21 @@ def triangulate(images: dict, origins: dict, centers: np.ndarray, z0: float,
         sigma_z = float(np.sqrt(max(cov[0, 0], 0.0)))
     except np.linalg.LinAlgError:
         sigma_z = float("nan")
-    return {"ok": True, "z": float(z), "z_sigma": sigma_z, **counts,
-            "chi_per_dof": ssr / dof,
-            "resid_rms_tan": float(np.sqrt(ssr / n_obs) * sigma_t),
-            "beams_x": [float(v) for v in xs], "beams_y": [float(v) for v in ys]}
+    return {
+        "ok": True,
+        "z": float(z),
+        "z_sigma": sigma_z,
+        **counts,
+        "chi_per_dof": ssr / dof,
+        "resid_rms_tan": float(np.sqrt(ssr / n_obs) * sigma_t),
+        "beams_x": [float(v) for v in xs],
+        "beams_y": [float(v) for v in ys],
+    }
 
 
-def angular_beam_period(img: np.ndarray, centers: np.ndarray, axis: str = "x",
-                        t_window: float = 0.6, *, band: float) -> float:
+def angular_beam_period(
+    img: np.ndarray, centers: np.ndarray, axis: str = "x", t_window: float = 0.6, *, band: float
+) -> float:
     """Dominant angular period of the beam pattern in one position, in tan-units.
 
     Measured by the FFT peak of the detrended opacity profile with parabolic sub-bin
@@ -277,8 +316,9 @@ def angular_beam_period(img: np.ndarray, centers: np.ndarray, axis: str = "x",
     return float(1.0 / f_pk) if f_pk > 0 else float("nan")
 
 
-def scale_closure(images: dict, origins: dict, centers: np.ndarray, z_m: float, *,
-                  band: float) -> dict:
+def scale_closure(
+    images: dict, origins: dict, centers: np.ndarray, z_m: float, *, band: float
+) -> dict:
     """Close the (baseline, ceiling height, beam pitch) scale triangle.
 
     Triangulation fixes only a RATIO: z = d / (t_1 - t_2), so the height scales with
@@ -305,14 +345,25 @@ def scale_closure(images: dict, origins: dict, centers: np.ndarray, z_m: float, 
     # z and pitch both scale linearly with the assumed baseline; these let a reader
     # rescale to any surveyed d without re-running anything.
     has_d = np.isfinite(d) and d > 0
-    return {"baseline": d, "period": period, "period_per_position": per, "z": float(z_m),
-            "pitch": pitch,
-            "z_per_baseline": z_m / d if has_d else float("nan"),
-            "pitch_per_baseline": pitch / d if has_d else float("nan")}
+    return {
+        "baseline": d,
+        "period": period,
+        "period_per_position": per,
+        "z": float(z_m),
+        "pitch": pitch,
+        "z_per_baseline": z_m / d if has_d else float("nan"),
+        "pitch_per_baseline": pitch / d if has_d else float("nan"),
+    }
 
 
-def verify_gate(images: dict, origins: dict, centers: np.ndarray, z_m: float,
-                sol: VoxelSolution, s: BeamSettings) -> dict:
+def verify_gate(
+    images: dict,
+    origins: dict,
+    centers: np.ndarray,
+    z_m: float,
+    sol: VoxelSolution,
+    s: BeamSettings,
+) -> dict:
     """Do the reconstruction's beams sit where the raw data put them?
 
     Data beams are peaks of the positions' mean x-profile projected to the plane
@@ -327,8 +378,10 @@ def verify_gate(images: dict, origins: dict, centers: np.ndarray, z_m: float,
     ys_r = g.axis_centers(1)
     xgrid = np.linspace(xs_r[0], xs_r[-1], 400)
 
-    world = [world_profile(*profile(img, centers, "x", s.band_x), origins[pid], "x", z_m, xgrid)
-             for pid, img in images.items()]
+    world = [
+        world_profile(*profile(img, centers, "x", s.band_x), origins[pid], "x", z_m, xgrid)
+        for pid, img in images.items()
+    ]
     data_prof = _nanmean(np.stack(world), axis=0)
     pk_data = beam_peaks(xgrid, data_prof, s.prominence_sigmas)
 
@@ -340,13 +393,20 @@ def verify_gate(images: dict, origins: dict, centers: np.ndarray, z_m: float,
     recon = np.where(np.isfinite(data_prof), np.interp(xgrid, xs_r, prof_r), np.nan)
     pk_recon = beam_peaks(xgrid, recon, s.prominence_sigmas)
 
-    offsets = ([float(pk_recon[np.argmin(np.abs(pk_recon - p))] - p) for p in pk_data]
-               if len(pk_recon) else [])
+    offsets = (
+        [float(pk_recon[np.argmin(np.abs(pk_recon - p))] - p) for p in pk_data]
+        if len(pk_recon)
+        else []
+    )
     mean_abs = float(np.mean(np.abs(offsets))) if offsets else float("nan")
-    return {"offsets": offsets, "mean_abs_offset": mean_abs,
-            "passed": bool(np.isfinite(mean_abs) and mean_abs <= s.gate_max_offset_m),
-            "n_beams_data": int(len(pk_data)), "n_beams_recon": int(len(pk_recon)),
-            "recon_layer_z": float(g.axis_centers(2)[iz])}
+    return {
+        "offsets": offsets,
+        "mean_abs_offset": mean_abs,
+        "passed": bool(np.isfinite(mean_abs) and mean_abs <= s.gate_max_offset_m),
+        "n_beams_data": int(len(pk_data)),
+        "n_beams_recon": int(len(pk_recon)),
+        "recon_layer_z": float(g.axis_centers(2)[iz]),
+    }
 
 
 def find_beams(data: FitData, cfg: Config, sky: SkyGrid) -> dict:
@@ -373,10 +433,20 @@ def find_beams(data: FitData, cfg: Config, sky: SkyGrid) -> dict:
     tri_x = tri if not y_used else triangulate(images, origins, c, zx, sigma_t, s, ("x",))
     z = tri["z"] if tri["ok"] else zx
     closure = scale_closure(images, origins, c, z, band=s.band_x)
-    return {"ok": tri["ok"],
-            "parallax_x_z": zx, "parallax_x_corr": rx, "parallax_y_z": zy, "parallax_y_corr": ry,
-            "scan_z": zs.tolist(), "scan_corr_x": cx.tolist(), "scan_corr_y": cy.tolist(),
-            **{k: v for k, v in tri.items() if k != "ok"},
-            "y_used": y_used, "z_x": tri_x["z"], "z_x_sigma": tri_x["z_sigma"],
-            **{k: v for k, v in closure.items() if k != "z"},
-            "n_beams_x": len(tri["beams_x"]), "n_beams_y": len(tri["beams_y"])}
+    return {
+        "ok": tri["ok"],
+        "parallax_x_z": zx,
+        "parallax_x_corr": rx,
+        "parallax_y_z": zy,
+        "parallax_y_corr": ry,
+        "scan_z": zs.tolist(),
+        "scan_corr_x": cx.tolist(),
+        "scan_corr_y": cy.tolist(),
+        **{k: v for k, v in tri.items() if k != "ok"},
+        "y_used": y_used,
+        "z_x": tri_x["z"],
+        "z_x_sigma": tri_x["z_sigma"],
+        **{k: v for k, v in closure.items() if k != "z"},
+        "n_beams_x": len(tri["beams_x"]),
+        "n_beams_y": len(tri["beams_y"]),
+    }

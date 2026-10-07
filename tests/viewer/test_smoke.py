@@ -3,6 +3,7 @@
 The run carries every layer the exporter can write and a beams block, so no
 control is left disabled for lack of data.
 """
+
 import pytest
 
 from .conftest import BEAMS, assert_run_loaded, canvas_data
@@ -73,8 +74,9 @@ def test_every_control_is_operable_without_console_errors(page, dist_path, run_f
     page.locator("#render-mode").select_option("fog")
 
     canvas_box = page.locator("#gl-canvas").bounding_box()
-    page.mouse.move(canvas_box["x"] + canvas_box["width"] / 2,
-                    canvas_box["y"] + canvas_box["height"] / 2)
+    page.mouse.move(
+        canvas_box["x"] + canvas_box["width"] / 2, canvas_box["y"] + canvas_box["height"] / 2
+    )
     page.wait_for_timeout(100)
 
     # Shortcut keys are ignored while a form control has focus.
@@ -110,7 +112,9 @@ def test_every_control_is_operable_without_console_errors(page, dist_path, run_f
     def clear_color():
         return page.evaluate(
             "() => { const gl = document.querySelector('#gl-canvas').getContext('webgl2'); "
-            "return Array.from(gl.getParameter(gl.COLOR_CLEAR_VALUE)); }")
+            "return Array.from(gl.getParameter(gl.COLOR_CLEAR_VALUE)); }"
+        )
+
     theme = page.evaluate("() => document.documentElement.getAttribute('data-theme')")
     before_clear = clear_color()
     page.locator("#theme-toggle").click()

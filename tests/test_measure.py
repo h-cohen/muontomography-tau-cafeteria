@@ -5,8 +5,16 @@ from cafetomo.measure import measure
 from phantoms import KAPPA, XS, beam_phantom, phantom_sky
 
 H_TRUE = 1.25
-BASE_KEYS = {"autofocus_z", "beams_z", "beams_zx", "beams_pitch", "depth_h", "depth_w",
-             "depth_zbottom", "depth_ztop"}
+BASE_KEYS = {
+    "autofocus_z",
+    "beams_z",
+    "beams_zx",
+    "beams_pitch",
+    "depth_h",
+    "depth_w",
+    "depth_zbottom",
+    "depth_ztop",
+}
 VOLUME_KEYS = {"zprofile_fwhm", "zprofile_bottom", "zprofile_top"}
 
 

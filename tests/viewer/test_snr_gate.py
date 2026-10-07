@@ -10,6 +10,7 @@ the other gates: shader AND hover, window from the kept voxels.
 The fixture's snr layer is 1 (gated) for i < nx/2 and 10 elsewhere, so a
 gate that does nothing, or gates the wrong half, fails.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -47,7 +48,9 @@ def _picks(page):
             const r = document.querySelector('#gl-canvas').getBoundingClientRect();
             return pts.map(([fx, fy]) =>
                 window.__viewerState.pick(r.left + fx * r.width, r.top + fy * r.height));
-        }""", _GRID)
+        }""",
+        _GRID,
+    )
 
 
 def _frame(page):
@@ -78,7 +81,7 @@ def test_snr_gate_changes_render_and_threshold_is_live(page, dist_path, run_fixt
     page.locator("#snr-gate-enabled").uncheck()
     assert _frame(page) != gated
     page.locator("#snr-gate-enabled").check()
-    page.locator("#snr-gate-value").fill("20")        # above every voxel
+    page.locator("#snr-gate-value").fill("20")  # above every voxel
     page.locator("#snr-gate-value").dispatch_event("input")
     assert all(p is None for p in _picks(page))
 

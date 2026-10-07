@@ -24,8 +24,11 @@ def test_resample_preserves_shapes_and_means():
 
 def _result(values):
     vol = np.zeros((2, 2, 2))
-    return BootstrapResult(values={k: np.asarray(v, dtype=float) for k, v in values.items()},
-                           volume_mean=vol, volume_sigma=vol)
+    return BootstrapResult(
+        values={k: np.asarray(v, dtype=float) for k, v in values.items()},
+        volume_mean=vol,
+        volume_sigma=vol,
+    )
 
 
 def test_summary_keys_and_single_replica_sigma():
@@ -54,8 +57,11 @@ def test_summary_keys_are_digit_free():
 
 
 def test_save_writes_values_and_volume_stats(tmp_path):
-    r = BootstrapResult(values={"depth_h": np.array([1.0, 1.2])},
-                        volume_mean=np.array([[[2.0, 0.0]]]), volume_sigma=np.array([[[0.5, 0.0]]]))
+    r = BootstrapResult(
+        values={"depth_h": np.array([1.0, 1.2])},
+        volume_mean=np.array([[[2.0, 0.0]]]),
+        volume_sigma=np.array([[[0.5, 0.0]]]),
+    )
     r.save(tmp_path / "boot")
     with np.load(tmp_path / "boot" / "values.npz") as d:
         assert d["depth_h"].tolist() == [1.0, 1.2]

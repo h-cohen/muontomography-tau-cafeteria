@@ -23,12 +23,14 @@ def _toy(n_rows=40, shape=(4, 4, 2), seed=0):
     n_vox = int(np.prod(shape))
     A = sparse.csr_matrix(rng.random((n_rows, n_vox)) * (rng.random((n_rows, n_vox)) < 0.5))
     truth = np.abs(rng.normal(size=n_vox))
-    rows = RowIndex(position_ids=("pos0", "pos1"),
-                    pos_of_row=np.arange(n_rows) % 2,
-                    sx=np.zeros(n_rows), sy=np.zeros(n_rows),
-                    sky_flat=np.arange(n_rows))
-    fwd = ForwardModel(A=A, grid=VoxelGrid(origin=(0, 0, 0), spacing=1.0, shape=shape),
-                       rows=rows)
+    rows = RowIndex(
+        position_ids=("pos0", "pos1"),
+        pos_of_row=np.arange(n_rows) % 2,
+        sx=np.zeros(n_rows),
+        sy=np.zeros(n_rows),
+        sky_flat=np.arange(n_rows),
+    )
+    fwd = ForwardModel(A=A, grid=VoxelGrid(origin=(0, 0, 0), spacing=1.0, shape=shape), rows=rows)
     lam = A @ truth
     return fwd, truth, FitData(lam=lam, w=np.ones(n_rows), rows=rows)
 
@@ -44,19 +46,23 @@ def test_sirt_recovers_a_noiseless_solution():
 def test_sirt_never_returns_a_negative_voxel():
     fwd, truth, data = _toy()
     rng = np.random.default_rng(1)
-    noisy = FitData(lam=data.lam + rng.normal(scale=0.5, size=data.lam.size),
-                    w=data.w, rows=data.rows)
-    x, _ = sirt(fwd, noisy, _rc(algorithm="sirt", n_iter=200,
-                                           chi2_target=1e-12, nonneg=True),
-                  fit_offsets=True)
+    noisy = FitData(
+        lam=data.lam + rng.normal(scale=0.5, size=data.lam.size), w=data.w, rows=data.rows
+    )
+    x, _ = sirt(
+        fwd,
+        noisy,
+        _rc(algorithm="sirt", n_iter=200, chi2_target=1e-12, nonneg=True),
+        fit_offsets=True,
+    )
     assert x.min() >= 0.0
 
 
 def test_sirt_stops_early_at_the_discrepancy_target():
     fwd, truth, data = _toy()
-    x, info = sirt(fwd, data, _rc(algorithm="sirt", n_iter=5000,
-                                             chi2_target=1e-2),
-                    fit_offsets=True)
+    x, info = sirt(
+        fwd, data, _rc(algorithm="sirt", n_iter=5000, chi2_target=1e-2), fit_offsets=True
+    )
     assert info["n_iter_used"] < 5000
 
 
@@ -104,27 +110,32 @@ def test_tv_denoises_a_piecewise_constant_volume_better_than_plain_sirt():
     truth = truth3.ravel()
 
     A = sparse.csr_matrix(rng.random((300, n_vox)) * (rng.random((300, n_vox)) < 0.3))
-    rows = RowIndex(position_ids=("pos0",), pos_of_row=np.zeros(300, dtype=int),
-                    sx=np.zeros(300), sy=np.zeros(300), sky_flat=np.arange(300))
-    fwd = ForwardModel(A=A, grid=VoxelGrid(origin=(0, 0, 0), spacing=1.0, shape=shape),
-                       rows=rows)
+    rows = RowIndex(
+        position_ids=("pos0",),
+        pos_of_row=np.zeros(300, dtype=int),
+        sx=np.zeros(300),
+        sy=np.zeros(300),
+        sky_flat=np.arange(300),
+    )
+    fwd = ForwardModel(A=A, grid=VoxelGrid(origin=(0, 0, 0), spacing=1.0, shape=shape), rows=rows)
     lam = A @ truth + rng.normal(scale=0.4, size=300)
     data = FitData(lam=lam, w=np.ones(300), rows=rows)
 
-    plain, _ = sirt(fwd, data, _rc(algorithm="sirt", n_iter=300,
-                                              chi2_target=1e-12),
-                  fit_offsets=True)
-    tv, _ = sirt_tv(fwd, data, _rc(algorithm="tv", n_iter=300,
-                                              tv_alpha=0.001, tv_z_weight=0.5),
-                 fit_offsets=True)
+    plain, _ = sirt(
+        fwd, data, _rc(algorithm="sirt", n_iter=300, chi2_target=1e-12), fit_offsets=True
+    )
+    tv, _ = sirt_tv(
+        fwd,
+        data,
+        _rc(algorithm="tv", n_iter=300, tv_alpha=0.001, tv_z_weight=0.5),
+        fit_offsets=True,
+    )
     assert np.linalg.norm(tv - truth) < np.linalg.norm(plain - truth)
 
 
 def test_tv_returns_the_best_iterate_not_the_last():
     fwd, truth, data = _toy()
-    x, info = sirt_tv(fwd, data, _rc(algorithm="tv", n_iter=120,
-                                                tv_alpha=0.01),
-                    fit_offsets=True)
+    x, info = sirt_tv(fwd, data, _rc(algorithm="tv", n_iter=120, tv_alpha=0.01), fit_offsets=True)
     assert info["best_chi2"] <= min(info["chi2_history"])
 
 
@@ -137,32 +148,24 @@ def test_tv_with_zero_alpha_tracks_plain_sirt():
     returns the one after n_iter. The gap is one sweep, by construction.
     """
     fwd, truth, data = _toy()
-    a, _ = sirt(fwd, data, _rc(algorithm="sirt", n_iter=50,
-                                          chi2_target=-1.0),
-                fit_offsets=True)
-    b, _ = sirt_tv(fwd, data, _rc(algorithm="tv", n_iter=50,
-                                             tv_alpha=0.0),
-                   fit_offsets=True)
+    a, _ = sirt(fwd, data, _rc(algorithm="sirt", n_iter=50, chi2_target=-1.0), fit_offsets=True)
+    b, _ = sirt_tv(fwd, data, _rc(algorithm="tv", n_iter=50, tv_alpha=0.0), fit_offsets=True)
     assert np.corrcoef(a, b)[0, 1] > 0.999
     assert np.linalg.norm(b - a) < 0.05 * np.linalg.norm(a)
 
 
 def test_solve_dispatches_on_the_algorithm_name():
     fwd, truth, data = _toy()
-    x, _ = solve(fwd, data, _rc(algorithm="tv", n_iter=20),
-                 fit_offsets=True)
+    x, _ = solve(fwd, data, _rc(algorithm="tv", n_iter=20), fit_offsets=True)
     assert x.shape == (fwd.grid.n_voxels,)
     with pytest.raises(ValueError, match="unknown algorithm"):
-        solve(fwd, data, _rc(algorithm="mlem", n_iter=5),
-              fit_offsets=True)
+        solve(fwd, data, _rc(algorithm="mlem", n_iter=5), fit_offsets=True)
 
 
 def test_an_all_zero_weight_fit_returns_zeros_rather_than_dividing_by_zero():
     fwd, truth, data = _toy()
     dead = data.restricted(np.zeros(data.rows.n_rows, dtype=bool))
-    x, info = sirt(fwd, dead, _rc(algorithm="sirt", n_iter=10,
-                                             chi2_target=-1.0),
-                 fit_offsets=True)
+    x, info = sirt(fwd, dead, _rc(algorithm="sirt", n_iter=10, chi2_target=-1.0), fit_offsets=True)
     assert np.all(x == 0.0)
     assert np.all(np.isfinite(list(info["offsets"].values())))
 
@@ -195,6 +198,6 @@ def test_coverage_damping_removes_the_noise_shell_without_losing_the_fit(cfg):
     x1, info1 = sirt_tv(fwd, data, replace(rc, coverage_damping=0.05), fit_offsets=False)
     shell0 = x0[low].mean() / x0[cov].mean()
     shell1 = x1[low].mean() / x1[cov].mean()
-    assert shell0 > 2.0                       # the artifact exists without damping
-    assert shell1 < 0.5                       # and is gone with it
+    assert shell0 > 2.0  # the artifact exists without damping
+    assert shell1 < 0.5  # and is gone with it
     assert info1["best_chi2"] <= info0["best_chi2"] + 0.15

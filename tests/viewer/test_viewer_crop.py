@@ -5,6 +5,7 @@ cropping only the display does not. The fixture
 volume spans x 0..3 m, y 0..2.5 m (origin 0,0; 6x5 voxels at 0.5 m), so the
 crop x 0.75..2.25, y 0.5..2.0 is fractions x 0.25..0.75, y 0.2..0.8.
 """
+
 from __future__ import annotations
 
 import json
@@ -30,7 +31,9 @@ def _picks(page):
             const r = document.querySelector('#gl-canvas').getBoundingClientRect();
             return pts.map(([fx, fy]) =>
                 window.__viewerState.pick(r.left + fx * r.width, r.top + fy * r.height));
-        }""", _GRID)
+        }""",
+        _GRID,
+    )
 
 
 def test_crop_sets_the_initial_clip_box_and_hover_stays_inside(page, dist_path, run_fixture):
@@ -43,7 +46,7 @@ def test_crop_sets_the_initial_clip_box_and_hover_stays_inside(page, dist_path, 
     lo = page.evaluate("() => window.__viewerState.clipMin")
     hi = page.evaluate("() => window.__viewerState.clipMax")
     assert lo[:2] == pytest.approx([0.25, 0.2]) and hi[:2] == pytest.approx([0.75, 0.8])
-    assert lo[2] == 0 and hi[2] == 1                       # z untouched
+    assert lo[2] == 0 and hi[2] == 1  # z untouched
     assert float(page.locator("#clip-x-min").input_value()) == pytest.approx(0.25, abs=0.01)
     assert float(page.locator("#clip-y-max").input_value()) == pytest.approx(0.8, abs=0.01)
     picks = [p for p in _picks(page) if p]

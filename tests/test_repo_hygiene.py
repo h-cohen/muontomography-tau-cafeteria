@@ -9,8 +9,9 @@ FORBIDDEN = re.compile(r"\b(megid\w*|muontomo|cafeteria_3d\w*)\b", re.I)
 
 
 def test_no_predecessor_names():
-    tracked = subprocess.run(["git", "ls-files"], cwd=ROOT, capture_output=True,
-                             text=True, check=True).stdout.split()
+    tracked = subprocess.run(
+        ["git", "ls-files"], cwd=ROOT, capture_output=True, text=True, check=True
+    ).stdout.split()
     hits = []
     for rel in tracked:
         if rel == "tests/test_repo_hygiene.py":

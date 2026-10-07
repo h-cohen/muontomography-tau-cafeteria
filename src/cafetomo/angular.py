@@ -1,5 +1,6 @@
 """Angular count histograms over (tan θx, tan θy), axis 0 = tan θx, and the coarser
 analysis grid the opacity is solved on."""
+
 from __future__ import annotations
 
 import json
@@ -30,8 +31,9 @@ def save_counts(hist: AngularHist, out_dir: Path, exposure_id: str, meta: dict) 
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / f"counts_{exposure_id}.npz"
-    np.savez_compressed(path, values=hist.values, xedges=hist.xedges,
-                        yedges=hist.yedges, name=np.array(hist.name))
+    np.savez_compressed(
+        path, values=hist.values, xedges=hist.xedges, yedges=hist.yedges, name=np.array(hist.name)
+    )
 
     meta_path = out_dir / "meta.json"
     doc = json.loads(meta_path.read_text()) if meta_path.exists() else {"exposures": {}}
@@ -42,8 +44,9 @@ def save_counts(hist: AngularHist, out_dir: Path, exposure_id: str, meta: dict) 
 
 def load_counts(path: Path) -> AngularHist:
     with np.load(path) as d:
-        return AngularHist(values=d["values"], xedges=d["xedges"],
-                           yedges=d["yedges"], name=str(d["name"]))
+        return AngularHist(
+            values=d["values"], xedges=d["xedges"], yedges=d["yedges"], name=str(d["name"])
+        )
 
 
 def rebin(hist: AngularHist, factor: int) -> AngularHist:
@@ -58,8 +61,7 @@ def rebin(hist: AngularHist, factor: int) -> AngularHist:
     m = n // factor
     values = hist.values.reshape(m, factor, m, factor).sum(axis=(1, 3))
     edges = hist.xedges[::factor]
-    return AngularHist(values=values.astype(np.int64), xedges=edges,
-                       yedges=edges, name=hist.name)
+    return AngularHist(values=values.astype(np.int64), xedges=edges, yedges=edges, name=hist.name)
 
 
 @dataclass(frozen=True)
@@ -82,8 +84,9 @@ class AnalysisGrid:
         return np.meshgrid(c, c, indexing="ij")
 
 
-def load_analysis_grid(ingest_dir: str | Path, ids: Sequence[str],
-                       factor: int = 10) -> AnalysisGrid:
+def load_analysis_grid(
+    ingest_dir: str | Path, ids: Sequence[str], factor: int = 10
+) -> AnalysisGrid:
     ingest_dir = Path(ingest_dir)
     edges = None
     counts: dict[str, np.ndarray] = {}

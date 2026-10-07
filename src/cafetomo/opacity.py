@@ -27,7 +27,7 @@ from cafetomo.sky import SkyGrid, detector_to_sky, make_sky_grid
 
 @dataclass(frozen=True)
 class OpacityMaps:
-    lam: dict[str, np.ndarray]   # per position, flat over the sky grid; NaN = not measured
+    lam: dict[str, np.ndarray]  # per position, flat over the sky grid; NaN = not measured
     sky: SkyGrid
 
     def image(self, pid: str) -> np.ndarray:
@@ -39,16 +39,20 @@ class OpacityMaps:
 
     def save(self, path: str | Path) -> None:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
-        np.savez_compressed(path, sky_edges=self.sky.edges,
-                            positions=np.array(json.dumps(sorted(self.lam))),
-                            **{f"lam__{p}": v for p, v in self.lam.items()})
+        np.savez_compressed(
+            path,
+            sky_edges=self.sky.edges,
+            positions=np.array(json.dumps(sorted(self.lam))),
+            **{f"lam__{p}": v for p, v in self.lam.items()},
+        )
 
     @staticmethod
     def load(path: str | Path) -> "OpacityMaps":
         with np.load(path) as d:
             pids = json.loads(str(d["positions"]))
-            return OpacityMaps(lam={p: d[f"lam__{p}"] for p in pids},
-                               sky=SkyGrid(edges=d["sky_edges"]))
+            return OpacityMaps(
+                lam={p: d[f"lam__{p}"] for p in pids}, sky=SkyGrid(edges=d["sky_edges"])
+            )
 
 
 def _sky_grid(cfg: Config) -> SkyGrid:
@@ -63,9 +67,9 @@ def _check_live_time(cfg: Config, live_time: dict[str, float]) -> None:
             raise ValueError(f"live time for {key!r} must be positive, got {live_time[key]}")
 
 
-def _accumulate(grid: AnalysisGrid, cfg: Config, sky: SkyGrid,
-                live_time: dict[str, float]
-                ) -> dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]]:
+def _accumulate(
+    grid: AnalysisGrid, cfg: Config, sky: SkyGrid, live_time: dict[str, float]
+) -> dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]]:
     """Per position: (observed counts, expected open-sky counts, raw sky counts)
     per sky bin."""
     _check_live_time(cfg, live_time)
@@ -91,8 +95,7 @@ def _accumulate(grid: AnalysisGrid, cfg: Config, sky: SkyGrid,
     return out
 
 
-def solve_opacity(grid: AnalysisGrid, cfg: Config,
-                  live_time: dict[str, float]) -> OpacityMaps:
+def solve_opacity(grid: AnalysisGrid, cfg: Config, live_time: dict[str, float]) -> OpacityMaps:
     """Absolute lambda per position and sky bin."""
     sky = _sky_grid(cfg)
     lam = {}
@@ -104,8 +107,9 @@ def solve_opacity(grid: AnalysisGrid, cfg: Config,
     return OpacityMaps(lam=lam, sky=sky)
 
 
-def poisson_sigma(grid: AnalysisGrid, cfg: Config,
-                  live_time: dict[str, float]) -> dict[str, np.ndarray]:
+def poisson_sigma(
+    grid: AnalysisGrid, cfg: Config, live_time: dict[str, float]
+) -> dict[str, np.ndarray]:
     """Analytic sigma of lambda, sqrt(1/n_pos + 1/n_sky): cheap weights for
     objectives evaluated many times (the pose fit)."""
     sky = _sky_grid(cfg)
@@ -118,8 +122,9 @@ def poisson_sigma(grid: AnalysisGrid, cfg: Config,
     return out
 
 
-def opacity_sigma(grid: AnalysisGrid, cfg: Config, live_time: dict[str, float], *,
-                  n_replicas: int, seed: int) -> dict[str, np.ndarray]:
+def opacity_sigma(
+    grid: AnalysisGrid, cfg: Config, live_time: dict[str, float], *, n_replicas: int, seed: int
+) -> dict[str, np.ndarray]:
     """Per-bin sigma of lambda from a Poisson bootstrap of every histogram,
     sky run included: the weights of the delivered fits."""
     rng = np.random.default_rng(seed)
@@ -131,8 +136,7 @@ def opacity_sigma(grid: AnalysisGrid, cfg: Config, live_time: dict[str, float], 
             stacks.setdefault(pid, []).append(lam)
     with warnings.catch_warnings():
         # bins seen in no replica have no spread to report
-        warnings.filterwarnings("ignore", message="Degrees of freedom",
-                                category=RuntimeWarning)
+        warnings.filterwarnings("ignore", message="Degrees of freedom", category=RuntimeWarning)
         return {pid: np.nanstd(np.vstack(v), axis=0) for pid, v in stacks.items()}
 
 
@@ -146,8 +150,9 @@ def load_sigma(path: str | Path) -> dict[str, np.ndarray]:
         return {k: d[k] for k in d.files}
 
 
-def build_fit_data(maps: OpacityMaps, cfg: Config, sigma: dict[str, np.ndarray], *,
-                   rows: RowIndex | None = None) -> FitData:
+def build_fit_data(
+    maps: OpacityMaps, cfg: Config, sigma: dict[str, np.ndarray], *, rows: RowIndex | None = None
+) -> FitData:
     """Flatten opacity maps into (lambda, 1/sigma^2) over live rows.
 
     With `rows` the row set is PINNED (bootstrap replicas, systematics): every
@@ -186,5 +191,10 @@ def _live_rows(maps: OpacityMaps, cfg: Config, sigma: dict[str, np.ndarray]) -> 
     flat_all = np.concatenate(flat)
     if flat_all.size == 0:
         raise ValueError("no constrained sky directions: every lambda or sigma is non-finite")
-    return RowIndex(position_ids=cfg.position_ids, pos_of_row=np.concatenate(pos),
-                    sx=all_sx[flat_all], sy=all_sy[flat_all], sky_flat=flat_all)
+    return RowIndex(
+        position_ids=cfg.position_ids,
+        pos_of_row=np.concatenate(pos),
+        sx=all_sx[flat_all],
+        sy=all_sy[flat_all],
+        sky_flat=flat_all,
+    )

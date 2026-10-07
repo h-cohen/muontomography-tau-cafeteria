@@ -34,8 +34,7 @@ def test_validate_depth_runs_the_reported_estimator(phantom, monkeypatch):
     assert n == 1 and len(calls) == n * c.validation.n_realizations
     assert all(len(out[k]) == n for k in ("depth_true", "depth_mean", "depth_spread"))
     assert np.isfinite(out["depth_max_bias"])
-    assert out["depth_max_bias"] == pytest.approx(
-        abs(out["depth_mean"][0] - out["depth_true"][0]))
+    assert out["depth_max_bias"] == pytest.approx(abs(out["depth_mean"][0] - out["depth_true"][0]))
     assert not any(ch.isdigit() for k in out for ch in k)
 
 

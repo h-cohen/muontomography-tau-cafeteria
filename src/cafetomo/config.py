@@ -26,9 +26,9 @@ class Pose:
 
     def rotation(self) -> np.ndarray:
         a = np.radians(self.az_deg)
-        return np.array([[np.cos(a), -np.sin(a), 0.0],
-                         [np.sin(a), np.cos(a), 0.0],
-                         [0.0, 0.0, 1.0]])
+        return np.array(
+            [[np.cos(a), -np.sin(a), 0.0], [np.sin(a), np.cos(a), 0.0], [0.0, 0.0, 1.0]]
+        )
 
 
 @dataclass(frozen=True)
@@ -179,8 +179,7 @@ class Config:
         return tuple(e.id for e in self.exposures)
 
     def origins(self) -> dict[str, tuple[float, float, float]]:
-        return {e.id: (float(e.pose.x), float(e.pose.y), float(e.pose.z))
-                for e in self.exposures}
+        return {e.id: (float(e.pose.x), float(e.pose.y), float(e.pose.z)) for e in self.exposures}
 
     def with_pose(self, eid: str, pose: Pose) -> "Config":
         self.exposure(eid)
@@ -197,8 +196,9 @@ class Config:
             selfcal=replace(self.selfcal, n_iter=20, n_bootstrap=2),
             autofocus=replace(self.autofocus, coarse_m=0.4, fine_m=0.2),
             uncertainty=replace(self.uncertainty, n_replicas=2),
-            validation=ValidationSettings(focus_heights_m=(7.0,), depth_h_true_m=(1.25,),
-                                          n_realizations=2),
+            validation=ValidationSettings(
+                focus_heights_m=(7.0,), depth_h_true_m=(1.25,), n_realizations=2
+            ),
         )
 
 
@@ -218,19 +218,31 @@ def _build(cls, raw: dict | None, section: str):
 def load_config(path: str | Path, pose_file: str | Path | None = None) -> Config:
     path = Path(path).resolve()
     raw = yaml.safe_load(path.read_text())
-    sections = {"binning": Binning, "opacity": OpacitySettings, "volume": Volume,
-                "reconstruction": Reconstruction, "selfcal": SelfcalSettings,
-                "autofocus": AutofocusSettings, "beams": BeamSettings,
-                "beamdepth": BeamDepthSettings, "uncertainty": UncertaintySettings,
-                "validation": ValidationSettings}
+    sections = {
+        "binning": Binning,
+        "opacity": OpacitySettings,
+        "volume": Volume,
+        "reconstruction": Reconstruction,
+        "selfcal": SelfcalSettings,
+        "autofocus": AutofocusSettings,
+        "beams": BeamSettings,
+        "beamdepth": BeamDepthSettings,
+        "uncertainty": UncertaintySettings,
+        "validation": ValidationSettings,
+    }
     top = {"site", "data_dir", "detector", "sky_reference", "exposures", *sections}
     unknown = sorted(set(raw) - top)
     if unknown:
         raise ValueError(f"config {path.name}: unknown top-level keys {unknown}")
     exposures = tuple(
-        Exposure(id=b["id"], root_file=b["root_file"], pose=_build(Pose, b["pose"], "pose"),
-                 root_hist=b.get("root_hist", "txty"))
-        for b in raw["exposures"])
+        Exposure(
+            id=b["id"],
+            root_file=b["root_file"],
+            pose=_build(Pose, b["pose"], "pose"),
+            root_hist=b.get("root_hist", "txty"),
+        )
+        for b in raw["exposures"]
+    )
     cfg = Config(
         site=raw["site"],
         data_dir=(path.parent / raw["data_dir"]).resolve(),

@@ -11,6 +11,7 @@ No pose rotation is applied: every measurement is already in the world frame,
 so a row's direction is just normalize(sx, sy, 1); rotating again would rotate
 twice.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -26,12 +27,11 @@ from cafetomo.voxels import VoxelGrid
 # cache built before a fix is never served after it.
 INVERSION_VERSION = 1
 
-_SAMPLES_PER_VOXEL = 3          # sampling step along a ray = spacing / this
-_ROW_BLOCK = 512                # rows processed per vectorised block
+_SAMPLES_PER_VOXEL = 3  # sampling step along a ray = spacing / this
+_ROW_BLOCK = 512  # rows processed per vectorised block
 
 
-def bundle_offsets(directions: np.ndarray, aperture_m: float,
-                   n_sub: int) -> np.ndarray:
+def bundle_offsets(directions: np.ndarray, aperture_m: float, n_sub: int) -> np.ndarray:
     """Sub-ray start offsets, [n_rows, n_sub**2, 3], perpendicular to each ray.
 
     A square of side `aperture_m` perpendicular to the ray stands in for the
@@ -49,18 +49,21 @@ def bundle_offsets(directions: np.ndarray, aperture_m: float,
     u /= np.linalg.norm(u, axis=-1, keepdims=True)
     v = np.cross(d, u)
 
-    g = (np.arange(n_sub) + 0.5) / n_sub - 0.5          # centred, in [-0.5, 0.5)
+    g = (np.arange(n_sub) + 0.5) / n_sub - 0.5  # centred, in [-0.5, 0.5)
     gx, gy = np.meshgrid(g, g, indexing="ij")
     gx, gy = gx.ravel() * aperture_m, gy.ravel() * aperture_m
     return gx[None, :, None] * u[:, None, :] + gy[None, :, None] * v[:, None, :]
 
 
-def build_system_matrix(rows: RowIndex,
-                        origins: dict[str, tuple[float, float, float]],
-                        grid: VoxelGrid, *,
-                        aperture_m: float,
-                        n_sub: int = 4,
-                        cache_dir: str | Path | None = None) -> sparse.csr_matrix:
+def build_system_matrix(
+    rows: RowIndex,
+    origins: dict[str, tuple[float, float, float]],
+    grid: VoxelGrid,
+    *,
+    aperture_m: float,
+    n_sub: int = 4,
+    cache_dir: str | Path | None = None,
+) -> sparse.csr_matrix:
     """A[row, voxel] in METRES, shape [rows.n_rows, grid.n_voxels]."""
     if cache_dir is not None:
         key = _cache_key(rows, origins, grid, aperture_m, n_sub)
@@ -68,10 +71,10 @@ def build_system_matrix(rows: RowIndex,
         if cache.exists():
             return sparse.load_npz(cache)
 
-    dirs = rows.directions()                                    # [nr, 3]
-    offs = bundle_offsets(dirs, aperture_m, n_sub)              # [nr, ns, 3]
+    dirs = rows.directions()  # [nr, 3]
+    offs = bundle_offsets(dirs, aperture_m, n_sub)  # [nr, ns, 3]
     starts = np.array([origins[rows.position_ids[i]] for i in rows.pos_of_row])
-    starts = starts[:, None, :] + offs                          # [nr, ns, 3]
+    starts = starts[:, None, :] + offs  # [nr, ns, 3]
 
     origin = np.asarray(grid.origin, dtype=np.float64)
     shape = np.asarray(grid.shape, dtype=np.int64)
@@ -96,15 +99,15 @@ def build_system_matrix(rows: RowIndex,
     for lo in range(0, nr, _ROW_BLOCK):
         hi = min(lo + _ROW_BLOCK, nr)
         cn = n_samp[lo:hi]
-        row_rep = np.repeat(np.arange(lo, hi), cn)                        # [Nt]
+        row_rep = np.repeat(np.arange(lo, hi), cn)  # [Nt]
         # midpoint sampling fraction along each ray's in-slab segment
         base = np.repeat(np.concatenate([[0], np.cumsum(cn[:-1])]), cn)
         frac = (np.arange(int(cn.sum())) - base + 0.5) / np.repeat(cn, cn)
-        t = t_in[row_rep] + frac * length[row_rep]                        # [Nt]
+        t = t_in[row_rep] + frac * length[row_rep]  # [Nt]
 
         pts = starts[row_rep] + (t[:, None] * dirs[row_rep])[:, None, :]  # [Nt, ns, 3]
         idx = np.floor((pts - origin) / grid.spacing).astype(np.int64)
-        inside = np.all((idx >= 0) & (idx < shape), axis=-1)              # [Nt, ns]
+        inside = np.all((idx >= 0) & (idx < shape), axis=-1)  # [Nt, ns]
         flat = (idx[..., 0] * grid.shape[1] + idx[..., 1]) * grid.shape[2] + idx[..., 2]
         # Divide by ns: the bundle AVERAGES path length, it does not accumulate.
         dl = length[row_rep] / n_samp[row_rep] / ns
@@ -114,9 +117,13 @@ def build_system_matrix(rows: RowIndex,
         v_out.append(np.broadcast_to(dl[:, None], inside.shape)[inside])
 
     A = sparse.coo_matrix(
-        (np.concatenate(v_out) if v_out else np.zeros(0),
-         (np.concatenate(r_out) if r_out else np.zeros(0, dtype=np.int64),
-          np.concatenate(c_out) if c_out else np.zeros(0, dtype=np.int64))),
+        (
+            np.concatenate(v_out) if v_out else np.zeros(0),
+            (
+                np.concatenate(r_out) if r_out else np.zeros(0, dtype=np.int64),
+                np.concatenate(c_out) if c_out else np.zeros(0, dtype=np.int64),
+            ),
+        ),
         shape=(nr, grid.n_voxels),
     ).tocsr()
     A.sum_duplicates()
@@ -127,8 +134,9 @@ def build_system_matrix(rows: RowIndex,
     return A
 
 
-def _cache_key(rows: RowIndex, origins: dict, grid: VoxelGrid,
-               aperture_m: float, n_sub: int) -> str:
+def _cache_key(
+    rows: RowIndex, origins: dict, grid: VoxelGrid, aperture_m: float, n_sub: int
+) -> str:
     h = hashlib.sha256()
     h.update(f"v{INVERSION_VERSION}|".encode())
     h.update(rows.key().encode())

@@ -9,8 +9,17 @@ from cafetomo.voxels import VoxelGrid
 
 def test_beam_ceiling_geometry():
     g = VoxelGrid(origin=(-2.0, -2.0, 6.0), spacing=0.1, shape=(40, 40, 30))
-    v = beam_ceiling(g, xs=(0.0,), z0=7.0, w=0.3, h=1.2, kappa=(1.0,),
-                     y_extent=(-1.0, 1.0), slab_thickness=0.2, slab_kappa=0.5)
+    v = beam_ceiling(
+        g,
+        xs=(0.0,),
+        z0=7.0,
+        w=0.3,
+        h=1.2,
+        kappa=(1.0,),
+        y_extent=(-1.0, 1.0),
+        slab_thickness=0.2,
+        slab_kappa=0.5,
+    )
     zc = g.axis_centers(2)
     col = v[20, 20]
     assert col[(zc > 7.05) & (zc < 8.15)].min() == 1.0
@@ -43,8 +52,17 @@ def test_zero_weight_rows_stay_unmeasured(cfg):
 
 def test_a_zero_kappa_beam_is_not_overwritten_by_the_slab():
     g = VoxelGrid(origin=(-2.0, -2.0, 6.0), spacing=0.1, shape=(40, 40, 30))
-    v = beam_ceiling(g, xs=(0.0,), z0=7.0, w=0.3, h=1.2, kappa=(0.0,),
-                     y_extent=(-1.0, 1.0), slab_thickness=0.2, slab_kappa=0.5)
+    v = beam_ceiling(
+        g,
+        xs=(0.0,),
+        z0=7.0,
+        w=0.3,
+        h=1.2,
+        kappa=(0.0,),
+        y_extent=(-1.0, 1.0),
+        slab_thickness=0.2,
+        slab_kappa=0.5,
+    )
     zc = g.axis_centers(2)
     assert np.all(v[20, 20][(zc > 7.05) & (zc < 8.15)] == 0.0)
 
@@ -53,20 +71,31 @@ def test_beam_is_rasterised_symmetrically_about_its_centre():
     g = VoxelGrid(origin=(-7.0, -2.0, 6.5), spacing=0.1, shape=(140, 40, 15))
     xc = g.axis_centers(0)
     for xk in (0.0, 0.05, -1.7, 1.75):
-        v = beam_ceiling(g, xs=(xk,), z0=7.0, w=0.3, h=0.3, kappa=(1.0,),
-                         y_extent=(-1.0, 1.0), slab_kappa=0.0)
+        v = beam_ceiling(
+            g, xs=(xk,), z0=7.0, w=0.3, h=0.3, kappa=(1.0,), y_extent=(-1.0, 1.0), slab_kappa=0.0
+        )
         col = v.sum(axis=(1, 2))
         assert float((col * xc).sum() / col.sum()) == pytest.approx(xk, abs=1e-9)
 
 
-@pytest.mark.parametrize(("slab_y", "covered"), [(..., (-1.0, 1.0)), ((-1.5, 0.5), (-1.5, 0.5)),
-                                                 (None, (-2.0, 2.0))])
+@pytest.mark.parametrize(
+    ("slab_y", "covered"), [(..., (-1.0, 1.0)), ((-1.5, 0.5), (-1.5, 0.5)), (None, (-2.0, 2.0))]
+)
 def test_slab_y_extent(slab_y, covered):
     """Default: the slab follows the beams' y extent; None: it spans the grid."""
     g = VoxelGrid(origin=(-2.0, -2.0, 6.0), spacing=0.1, shape=(40, 40, 30))
-    v = beam_ceiling(g, xs=(0.0,), z0=7.0, w=0.3, h=1.2, kappa=(1.0,),
-                     y_extent=(-1.0, 1.0), slab_thickness=0.2, slab_kappa=0.5,
-                     slab_y_extent=slab_y)
+    v = beam_ceiling(
+        g,
+        xs=(0.0,),
+        z0=7.0,
+        w=0.3,
+        h=1.2,
+        kappa=(1.0,),
+        y_extent=(-1.0, 1.0),
+        slab_thickness=0.2,
+        slab_kappa=0.5,
+        slab_y_extent=slab_y,
+    )
     yc = g.axis_centers(1)
     slab_layer = v[5, :, np.argmin(np.abs(g.axis_centers(2) - 8.3))]
     inside = (yc >= covered[0]) & (yc <= covered[1])

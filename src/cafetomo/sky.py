@@ -9,6 +9,7 @@ Directions are tangents (tx, ty) meaning the unit vector along (tx, ty, 1).
 Rotation is applied to the unit vector, not to the tangents, which is why the
 map is carried through the unit sphere rather than done in tangent space.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -20,8 +21,9 @@ from cafetomo.config import Pose
 _HORIZON_EPS = 1e-6
 
 
-def detector_to_sky(tx: np.ndarray, ty: np.ndarray,
-                    pose: Pose) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def detector_to_sky(
+    tx: np.ndarray, ty: np.ndarray, pose: Pose
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Map detector-frame tangents to sky-frame tangents.
 
     Returns (sx, sy, valid). `valid` is False where the rotated ray points at or

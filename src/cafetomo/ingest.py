@@ -8,6 +8,7 @@ binning and written with the live time, which sets the absolute opacity gauge.
 The ROOT bins must coincide with the configured binning after cropping: a
 mismatch is an error, never a silent resample.
 """
+
 from __future__ import annotations
 
 import json
@@ -32,12 +33,13 @@ class IngestResult:
 
 def _crop_index(file_edges: np.ndarray, target: np.ndarray, axis: str) -> int:
     i0 = int(np.argmin(np.abs(file_edges - target[0])))
-    sl = file_edges[i0:i0 + target.size]
+    sl = file_edges[i0 : i0 + target.size]
     if sl.size != target.size or not np.allclose(sl, target, atol=1e-9):
         raise ValueError(
             f"ROOT {axis} bins ({file_edges.size - 1} over {file_edges[0]:g}..{file_edges[-1]:g}) "
             f"do not contain the configured binning ({target.size - 1} over "
-            f"{target[0]:g}..{target[-1]:g}) on a common edge set")
+            f"{target[0]:g}..{target[-1]:g}) on a common edge set"
+        )
     return i0
 
 
@@ -56,9 +58,11 @@ def read_root_counts(path: Path, hist: str, edges: np.ndarray) -> tuple[AngularH
     i0 = _crop_index(xe, edges, "x")
     j0 = _crop_index(ye, edges, "y")
     n = edges.size - 1
-    kept = np.round(values[i0:i0 + n, j0:j0 + n]).astype(np.int64)
-    return (AngularHist(values=kept, xedges=edges.copy(), yedges=edges.copy(), name=hist),
-            int(round(values.sum())))
+    kept = np.round(values[i0 : i0 + n, j0 : j0 + n]).astype(np.int64)
+    return (
+        AngularHist(values=kept, xedges=edges.copy(), yedges=edges.copy(), name=hist),
+        int(round(values.sum())),
+    )
 
 
 def read_live_time(path: Path, hist: str = "dT") -> float:
@@ -81,8 +85,10 @@ def read_live_time(path: Path, hist: str = "dT") -> float:
         e = np.asarray(h.axes[0].edges(), dtype=np.float64)
         overflow = float(h.values(flow=True)[-1])
     if overflow > 0:
-        raise ValueError(f"{Path(path).name}:{hist} has {overflow:g} overflow intervals; "
-                         "their durations are unknown, so the live time is not measured")
+        raise ValueError(
+            f"{Path(path).name}:{hist} has {overflow:g} overflow intervals; "
+            "their durations are unknown, so the live time is not measured"
+        )
     return float((0.5 * (e[:-1] + e[1:]) * v).sum())
 
 
@@ -95,7 +101,8 @@ def ingest(cfg: Config, out_dir: Path) -> list[IngestResult]:
     out_dir = Path(out_dir)
     edges = cfg.binning.edges()
     sources: list[tuple[str, str, str, dict]] = [
-        (e.id, e.root_file, e.root_hist, {"pose": vars(e.pose)}) for e in cfg.exposures]
+        (e.id, e.root_file, e.root_hist, {"pose": vars(e.pose)}) for e in cfg.exposures
+    ]
     s = cfg.sky_reference
     sources.append((s.id, s.root_file, s.root_hist, {"role": "open_sky_reference"}))
 
@@ -106,15 +113,27 @@ def ingest(cfg: Config, out_dir: Path) -> list[IngestResult]:
         try:
             live = read_live_time(path)
         except KeyError as exc:
-            raise ValueError(f"{path.name}: no 'dT' histogram; the absolute opacity gauge "
-                             "needs a measured live time") from exc
+            raise ValueError(
+                f"{path.name}: no 'dT' histogram; the absolute opacity gauge "
+                "needs a measured live time"
+            ) from exc
         loaded.append((sid, fname, hist, meta, h, total, live))
 
     results = []
     for sid, fname, hist, meta, h, total, live in loaded:
-        out = save_counts(h, out_dir, sid, dict(meta, exposure=sid, source=fname,
-                                                 root_hist=hist, total_in_file=total,
-                                                 live_time_s=live))
+        out = save_counts(
+            h,
+            out_dir,
+            sid,
+            dict(
+                meta,
+                exposure=sid,
+                source=fname,
+                root_hist=hist,
+                total_in_file=total,
+                live_time_s=live,
+            ),
+        )
         results.append(IngestResult(sid, out, total, h.total, live))
     return results
 

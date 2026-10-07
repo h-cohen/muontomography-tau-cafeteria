@@ -82,20 +82,33 @@ def _worst(acc: dict[str, float], delta: dict[str, float]) -> dict[str, float]:
     """Running max of |delta| per key; NaN once any term is NaN."""
     for k, v in delta.items():
         a = abs(v)
-        acc[k] = a if k not in acc else (np.nan if np.isnan(a) or np.isnan(acc[k])
-                                         else max(acc[k], a))
+        acc[k] = (
+            a if k not in acc else (np.nan if np.isnan(a) or np.isnan(acc[k]) else max(acc[k], a))
+        )
     return acc
 
 
-def flux_scale_shift(maps: OpacityMaps, cfg: Config, sigma: dict, rows: RowIndex,
-                     nominal: Measurement, *, sky: SkyGrid,
-                     cache_dir: str | Path | None = None) -> dict[str, float]:
+def flux_scale_shift(
+    maps: OpacityMaps,
+    cfg: Config,
+    sigma: dict,
+    rows: RowIndex,
+    nominal: Measurement,
+    *,
+    sky: SkyGrid,
+    cache_dir: str | Path | None = None,
+) -> dict[str, float]:
     """Shift when every opacity is scaled by the configured flux fraction. A
     constant lambda offset is absorbed by the degree-0 background term, so
     depth shifts are ~0 by construction."""
     shifted = maps.shifted(float(np.log1p(cfg.uncertainty.flux_scale_frac)))
-    m = measure(build_fit_data(shifted, cfg, sigma, rows=rows), cfg, sky,
-                cache_dir=cache_dir, with_volume=False)
+    m = measure(
+        build_fit_data(shifted, cfg, sigma, rows=rows),
+        cfg,
+        sky,
+        cache_dir=cache_dir,
+        with_volume=False,
+    )
     return _delta(m, nominal)
 
 
@@ -103,15 +116,31 @@ def mcs_dlam(data: FitData, cfg: Config, depth, jitter_tan: float) -> np.ndarray
     """Change of lambda when the nominal fitted beams (`depth`) are seen through
     direction-smeared paths; the background cancels in the difference."""
     s = cfg.beamdepth
-    common = dict(aperture_m=cfg.detector.aperture_m, n_sub=s.n_sub, z0=depth.z0, w=depth.w,
-                  h=depth.h, xs=depth.xs, y_extent=s.y_extent_m)
+    common = dict(
+        aperture_m=cfg.detector.aperture_m,
+        n_sub=s.n_sub,
+        z0=depth.z0,
+        w=depth.w,
+        h=depth.h,
+        xs=depth.xs,
+        y_extent=s.y_extent_m,
+    )
     origins = cfg.origins()
-    return (beam_design(data.rows, origins, angle_jitter=jitter_tan, **common)
-            - beam_design(data.rows, origins, **common)) @ np.asarray(depth.kappa)
+    return (
+        beam_design(data.rows, origins, angle_jitter=jitter_tan, **common)
+        - beam_design(data.rows, origins, **common)
+    ) @ np.asarray(depth.kappa)
 
 
-def mcs_shift(data: FitData, cfg: Config, nominal: Measurement, *, sky: SkyGrid,
-              jitter_tan: float, cache_dir: str | Path | None = None) -> dict[str, float]:
+def mcs_shift(
+    data: FitData,
+    cfg: Config,
+    nominal: Measurement,
+    *,
+    sky: SkyGrid,
+    jitter_tan: float,
+    cache_dir: str | Path | None = None,
+) -> dict[str, float]:
     """Bias multiple scattering causes in the nominal estimator.
 
     The blur is injected into the DATA (`mcs_dlam`) and the unsmeared
@@ -129,17 +158,32 @@ def mcs_shift(data: FitData, cfg: Config, nominal: Measurement, *, sky: SkyGrid,
     return worst
 
 
-def background_shift(data: FitData, cfg: Config, nominal: Measurement, *, sky: SkyGrid,
-                     cache_dir: str | Path | None = None) -> dict[str, float]:
+def background_shift(
+    data: FitData,
+    cfg: Config,
+    nominal: Measurement,
+    *,
+    sky: SkyGrid,
+    cache_dir: str | Path | None = None,
+) -> dict[str, float]:
     """Shift when the beam-depth background polynomial gains one degree."""
     s = replace(cfg.beamdepth, bg_degree=cfg.beamdepth.bg_degree + 1)
     m = measure(data, replace(cfg, beamdepth=s), sky, cache_dir=cache_dir, with_volume=False)
     return _delta(m, nominal)
 
 
-def pose_shift(grid: AnalysisGrid, cfg: Config, live_time: dict[str, float], sigma: dict,
-               pose_sigma: dict[str, float], nominal: Measurement, *, sky: SkyGrid,
-               rows: RowIndex, cache_dir: str | Path | None = None) -> dict[str, float]:
+def pose_shift(
+    grid: AnalysisGrid,
+    cfg: Config,
+    live_time: dict[str, float],
+    sigma: dict,
+    pose_sigma: dict[str, float],
+    nominal: Measurement,
+    *,
+    sky: SkyGrid,
+    rows: RowIndex,
+    cache_dir: str | Path | None = None,
+) -> dict[str, float]:
     """Largest |shift| over the free position moved by +-1 sigma along x and y.
     A key that is NaN in any variant stays NaN. `rows` pins the row set to the
     nominal one, as in the bootstrap and flux paths."""
@@ -147,11 +191,13 @@ def pose_shift(grid: AnalysisGrid, cfg: Config, live_time: dict[str, float], sig
     p = cfg.exposure(free).pose
     worst: dict[str, float] = {}
     for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
-        c = cfg.with_pose(free, replace(p, x=p.x + dx * pose_sigma["x"],
-                                        y=p.y + dy * pose_sigma["y"]))
+        c = cfg.with_pose(
+            free, replace(p, x=p.x + dx * pose_sigma["x"], y=p.y + dy * pose_sigma["y"])
+        )
         data = build_fit_data(solve_opacity(grid, c, live_time), c, sigma, rows=rows)
-        worst = _worst(worst, _delta(measure(data, c, sky, cache_dir=cache_dir,
-                                            with_volume=False), nominal))
+        worst = _worst(
+            worst, _delta(measure(data, c, sky, cache_dir=cache_dir, with_volume=False), nominal)
+        )
     return worst
 
 
@@ -160,8 +206,13 @@ def error_budget(stat: dict, flux: dict, mcs_d: dict, pose: dict, bg: dict, keys
     is NaN when any component is NaN."""
     out = {}
     for k in keys:
-        parts = {"stat": stat[f"{k}_sigma"], "flux": flux[k], "mcs": mcs_d[k],
-                 "pose": pose[k], "bg": bg[k]}
+        parts = {
+            "stat": stat[f"{k}_sigma"],
+            "flux": flux[k],
+            "mcs": mcs_d[k],
+            "pose": pose[k],
+            "bg": bg[k],
+        }
         parts = {src: abs(float(v)) for src, v in parts.items()}
         for src, v in parts.items():
             out[f"{k}_{src}"] = v

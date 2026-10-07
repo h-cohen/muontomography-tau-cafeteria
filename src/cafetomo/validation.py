@@ -25,8 +25,9 @@ def _truth_grid(cfg: Config, data: FitData) -> VoxelGrid:
     return auto_grid(vol, cfg.origins(), data.rows.t_reach(), aperture_m=cfg.detector.aperture_m)
 
 
-def validate_autofocus(data: FitData, cfg: Config, nominal_depth: dict, *,
-                       cache_dir: str | Path | None = None) -> dict:
+def validate_autofocus(
+    data: FitData, cfg: Config, nominal_depth: dict, *, cache_dir: str | Path | None = None
+) -> dict:
     """Inject the fitted beams at each configured height; recover it by the CV scan.
 
     The injected value is the beam layer's centre, z0 + h/2. `focus_bias` is
@@ -37,15 +38,26 @@ def validate_autofocus(data: FitData, cfg: Config, nominal_depth: dict, *,
     rng = np.random.default_rng(cfg.uncertainty.seed)
     injected, recovered = [], []
     for z0 in cfg.validation.focus_heights_m:
-        truth = beam_ceiling(g, xs=nominal_depth["xs"], z0=z0, w=nominal_depth["w"],
-                             h=nominal_depth["h"], kappa=nominal_depth["kappa"],
-                             y_extent=cfg.beamdepth.y_extent_m, slab_y_extent=None)
+        truth = beam_ceiling(
+            g,
+            xs=nominal_depth["xs"],
+            z0=z0,
+            w=nominal_depth["w"],
+            h=nominal_depth["h"],
+            kappa=nominal_depth["kappa"],
+            y_extent=cfg.beamdepth.y_extent_m,
+            slab_y_extent=None,
+        )
         scan = cv_height_scan(phantom_data(fwd, truth, data, rng), cfg, cache_dir=cache_dir)
         injected.append(z0 + nominal_depth["h"] / 2)
         recovered.append(scan.z_best)
     err = np.array(recovered) - np.array(injected)
-    return {"focus_injected": injected, "focus_recovered": recovered,
-            "focus_bias": float(err.mean()), "focus_max_error": float(np.abs(err).max())}
+    return {
+        "focus_injected": injected,
+        "focus_recovered": recovered,
+        "focus_bias": float(err.mean()),
+        "focus_max_error": float(np.abs(err).max()),
+    }
 
 
 def validate_depth(data: FitData, cfg: Config, nominal_depth: dict, *, sky: SkyGrid) -> dict:
@@ -60,11 +72,20 @@ def validate_depth(data: FitData, cfg: Config, nominal_depth: dict, *, sky: SkyG
     rng = np.random.default_rng(cfg.uncertainty.seed + 1)
     out = {"depth_true": [], "depth_mean": [], "depth_spread": []}
     for h in cfg.validation.depth_h_true_m:
-        truth = beam_ceiling(g, xs=nominal_depth["xs"], z0=nominal_depth["zbottom"],
-                             w=nominal_depth["w"], h=h, kappa=nominal_depth["kappa"],
-                             y_extent=cfg.beamdepth.y_extent_m, slab_y_extent=None)
-        hs = [estimate_beam_depth(phantom_data(fwd, truth, data, rng), cfg, sky)[1].h
-              for _ in range(cfg.validation.n_realizations)]
+        truth = beam_ceiling(
+            g,
+            xs=nominal_depth["xs"],
+            z0=nominal_depth["zbottom"],
+            w=nominal_depth["w"],
+            h=h,
+            kappa=nominal_depth["kappa"],
+            y_extent=cfg.beamdepth.y_extent_m,
+            slab_y_extent=None,
+        )
+        hs = [
+            estimate_beam_depth(phantom_data(fwd, truth, data, rng), cfg, sky)[1].h
+            for _ in range(cfg.validation.n_realizations)
+        ]
         out["depth_true"].append(h)
         out["depth_mean"].append(float(np.mean(hs)))
         out["depth_spread"].append(float(np.std(hs, ddof=1)) if len(hs) > 1 else float("nan"))

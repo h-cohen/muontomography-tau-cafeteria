@@ -19,8 +19,8 @@ def _write_th2(path, values, edges, with_dt=False):
 def test_crop_keeps_each_count_at_its_own_tangent(tmp_path):
     edges = np.linspace(-2, 2, 801)
     v = np.zeros((800, 800))
-    v[150, 649] = 7          # tx bin [-1.25, -1.245), ty bin [1.245, 1.25)
-    v[0, 0] = 99             # outside +-1.25: dropped
+    v[150, 649] = 7  # tx bin [-1.25, -1.245), ty bin [1.245, 1.25)
+    v[0, 0] = 99  # outside +-1.25: dropped
     _write_th2(tmp_path / "a.root", v, edges)
     target = Binning(t_max=1.25, n_bins=500).edges()
     h, total = read_root_counts(tmp_path / "a.root", "txty", target)

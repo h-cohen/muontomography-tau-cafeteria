@@ -9,6 +9,7 @@ c_p is held at zero; when it is only a gauge, c_p is fitted.
 Fits are selected by zeroing weights over the shared row layout, so one cached
 system matrix serves the full fit and every holdout fit alike.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -19,8 +20,9 @@ from cafetomo.fitdata import FitData
 from cafetomo.forward import ForwardModel
 
 
-def _update_offsets(resid: np.ndarray, w: np.ndarray,
-                    pos_of_row: np.ndarray, n_pos: int) -> np.ndarray:
+def _update_offsets(
+    resid: np.ndarray, w: np.ndarray, pos_of_row: np.ndarray, n_pos: int
+) -> np.ndarray:
     """Closed-form weighted-mean residual per position (the c_p nuisance)."""
     c = np.zeros(n_pos)
     for i in range(n_pos):
@@ -67,8 +69,9 @@ def _named(c: np.ndarray, position_ids) -> dict[str, float]:
     return {pid: float(v) for pid, v in zip(position_ids, c, strict=True)}
 
 
-def sirt(fwd: ForwardModel, data: FitData, rc: Reconstruction, *,
-         fit_offsets: bool) -> tuple[np.ndarray, dict]:
+def sirt(
+    fwd: ForwardModel, data: FitData, rc: Reconstruction, *, fit_offsets: bool
+) -> tuple[np.ndarray, dict]:
     """Weighted SIRT with nonnegativity and per-position offset refinement.
 
     Stops at rc.chi2_target by the discrepancy principle: fitting past the noise
@@ -102,11 +105,13 @@ def sirt(fwd: ForwardModel, data: FitData, rc: Reconstruction, *,
             x /= damp
         n_updates = k + 1
     history.append(chi2)
-    return x, {"offsets": _named(c, fwd.rows.position_ids),
-               "chi2_history": history,
-               "best_chi2": float(min(history)),
-               "n_iter_used": n_updates,
-               "best_iter": n_updates}
+    return x, {
+        "offsets": _named(c, fwd.rows.position_ids),
+        "chi2_history": history,
+        "best_chi2": float(min(history)),
+        "n_iter_used": n_updates,
+        "best_iter": n_updates,
+    }
 
 
 def _grad3(x3: np.ndarray, z_weight: float) -> np.ndarray:
@@ -130,8 +135,9 @@ def _div3(p: np.ndarray, z_weight: float) -> np.ndarray:
     return d
 
 
-def _prox_tv(v: np.ndarray, gamma: float, zw: float, dual: np.ndarray,
-             n_inner: int = 10) -> np.ndarray:
+def _prox_tv(
+    v: np.ndarray, gamma: float, zw: float, dual: np.ndarray, n_inner: int = 10
+) -> np.ndarray:
     """Chambolle dual projection for prox of gamma * ||grad .||_1 under x >= 0.
 
     `dual` is warm-started across outer iterations and mutated in place, which is
@@ -146,8 +152,9 @@ def _prox_tv(v: np.ndarray, gamma: float, zw: float, dual: np.ndarray,
     return np.maximum(v + _div3(dual, zw), 0.0)
 
 
-def sirt_tv(fwd: ForwardModel, data: FitData, rc: Reconstruction, *,
-            fit_offsets: bool) -> tuple[np.ndarray, dict]:
+def sirt_tv(
+    fwd: ForwardModel, data: FitData, rc: Reconstruction, *, fit_offsets: bool
+) -> tuple[np.ndarray, dict]:
     """SIRT with a per-iteration anisotropic-TV proximal (denoising) step.
 
     tv_alpha is a fraction of the reconstructed scale (x's p95), so it transfers
@@ -190,18 +197,21 @@ def sirt_tv(fwd: ForwardModel, data: FitData, rc: Reconstruction, *,
         x = _prox_tv(x.reshape(shape), gamma, rc.tv_z_weight, dual).ravel()
 
     history.append(best[0])
-    return best[1], {"offsets": _named(best[2], fwd.rows.position_ids),
-                     "chi2_history": history,
-                     "best_chi2": float(best[0]),
-                     "n_iter_used": rc.n_iter,
-                     "best_iter": int(best[3])}
+    return best[1], {
+        "offsets": _named(best[2], fwd.rows.position_ids),
+        "chi2_history": history,
+        "best_chi2": float(best[0]),
+        "n_iter_used": rc.n_iter,
+        "best_iter": int(best[3]),
+    }
 
 
 SOLVERS = {"sirt": sirt, "tv": sirt_tv}
 
 
-def solve(fwd: ForwardModel, data: FitData, rc: Reconstruction, *,
-          fit_offsets: bool) -> tuple[np.ndarray, dict]:
+def solve(
+    fwd: ForwardModel, data: FitData, rc: Reconstruction, *, fit_offsets: bool
+) -> tuple[np.ndarray, dict]:
     """Run the configured algorithm.
 
     `fit_offsets=False` holds every c_p at 0: use it when the opacity zero

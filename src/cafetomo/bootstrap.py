@@ -21,8 +21,10 @@ from cafetomo.voxels import VoxelGrid
 
 
 def resample(grid: AnalysisGrid, rng: np.random.Generator) -> AnalysisGrid:
-    return AnalysisGrid(edges=grid.edges,
-                        counts={k: rng.poisson(v).astype(np.int64) for k, v in grid.counts.items()})
+    return AnalysisGrid(
+        edges=grid.edges,
+        counts={k: rng.poisson(v).astype(np.int64) for k, v in grid.counts.items()},
+    )
 
 
 @dataclass(frozen=True)
@@ -51,14 +53,25 @@ class BootstrapResult:
         np.savez_compressed(out / "values.npz", **self.values)
         with np.errstate(divide="ignore", invalid="ignore"):
             snr = np.where(self.volume_sigma > 0, self.volume_mean / self.volume_sigma, np.nan)
-        np.savez_compressed(out / "volume_stats.npz", mean=self.volume_mean.astype(np.float32),
-                            sigma=self.volume_sigma.astype(np.float32),
-                            snr=snr.astype(np.float32))
+        np.savez_compressed(
+            out / "volume_stats.npz",
+            mean=self.volume_mean.astype(np.float32),
+            sigma=self.volume_sigma.astype(np.float32),
+            snr=snr.astype(np.float32),
+        )
 
 
-def run_bootstrap(grid: AnalysisGrid, cfg: Config, *, live_time: dict[str, float],
-                  sigma: dict[str, np.ndarray], rows: RowIndex, vgrid: VoxelGrid,
-                  sky: SkyGrid, cache_dir: str | Path | None = None) -> BootstrapResult:
+def run_bootstrap(
+    grid: AnalysisGrid,
+    cfg: Config,
+    *,
+    live_time: dict[str, float],
+    sigma: dict[str, np.ndarray],
+    rows: RowIndex,
+    vgrid: VoxelGrid,
+    sky: SkyGrid,
+    cache_dir: str | Path | None = None,
+) -> BootstrapResult:
     """A replica whose measurement raises stops the bootstrap: dropping it
     would bias the spread toward the replicas the chain happens to survive."""
     u = cfg.uncertainty
@@ -67,12 +80,16 @@ def run_bootstrap(grid: AnalysisGrid, cfg: Config, *, live_time: dict[str, float
     vols = []
     for _ in range(u.n_replicas):
         maps = solve_opacity(resample(grid, rng), cfg, live_time)
-        m = measure(build_fit_data(maps, cfg, sigma, rows=rows), cfg, sky, vgrid=vgrid,
-                    cache_dir=cache_dir)
+        m = measure(
+            build_fit_data(maps, cfg, sigma, rows=rows), cfg, sky, vgrid=vgrid, cache_dir=cache_dir
+        )
         for k, v in m.values.items():
             values.setdefault(k, []).append(v)
         vols.append(m.volume)
     arr = np.stack(vols)
     vsig = arr.std(axis=0, ddof=1) if len(vols) > 1 else np.full(arr.shape[1:], np.nan)
-    return BootstrapResult(values={k: np.array(v) for k, v in values.items()},
-                           volume_mean=arr.mean(axis=0), volume_sigma=vsig)
+    return BootstrapResult(
+        values={k: np.array(v) for k, v in values.items()},
+        volume_mean=arr.mean(axis=0),
+        volume_sigma=vsig,
+    )

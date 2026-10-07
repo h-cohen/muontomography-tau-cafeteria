@@ -2,6 +2,7 @@
 
 One opacity λ and one weight per (position, sky direction) row.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -13,11 +14,12 @@ import numpy as np
 @dataclass(frozen=True)
 class RowIndex:
     """Which (position, sky direction) pairs are inverted, and in what order."""
+
     position_ids: tuple[str, ...]
-    pos_of_row: np.ndarray      # [n_rows] index into position_ids
-    sx: np.ndarray              # [n_rows] world-frame tangent, x
-    sy: np.ndarray              # [n_rows] world-frame tangent, y
-    sky_flat: np.ndarray        # [n_rows] flat index into the sky grid
+    pos_of_row: np.ndarray  # [n_rows] index into position_ids
+    sx: np.ndarray  # [n_rows] world-frame tangent, x
+    sy: np.ndarray  # [n_rows] world-frame tangent, y
+    sky_flat: np.ndarray  # [n_rows] flat index into the sky grid
 
     @property
     def n_rows(self) -> int:
@@ -45,8 +47,8 @@ class RowIndex:
 
 @dataclass(frozen=True)
 class FitData:
-    lam: np.ndarray             # [n_rows] measured optical depth
-    w: np.ndarray               # [n_rows] 1/sigma^2, zero on excluded rows
+    lam: np.ndarray  # [n_rows] measured optical depth
+    w: np.ndarray  # [n_rows] 1/sigma^2, zero on excluded rows
     rows: RowIndex
 
     def restricted(self, keep: np.ndarray) -> FitData:

@@ -15,8 +15,7 @@ from cafetomo.angular import (
 
 def _hist(n=500, fill=1):
     edges = np.linspace(-1.25, 1.25, n + 1)
-    return AngularHist(values=np.full((n, n), fill, dtype=np.int64),
-                       xedges=edges, yedges=edges)
+    return AngularHist(values=np.full((n, n), fill, dtype=np.int64), xedges=edges, yedges=edges)
 
 
 def test_save_and_load_roundtrip(tmp_path):
@@ -60,8 +59,8 @@ def test_rebin_sums_the_right_neighbours():
     """A single count must land in the bin containing its original bin."""
     h = _hist(fill=0)
     values = np.array(h.values)
-    values[0, 0] = 7          # first original bin
-    values[499, 499] = 3      # last original bin
+    values[0, 0] = 7  # first original bin
+    values[499, 499] = 3  # last original bin
     h = AngularHist(values=values, xedges=h.xedges, yedges=h.yedges)
     r = rebin(h, 10)
     assert r.values[0, 0] == 7
@@ -75,8 +74,9 @@ def test_rebin_rejects_a_non_divisor_factor():
 
 
 def test_grid_centres_and_mesh():
-    g = AnalysisGrid(edges=np.linspace(-1.25, 1.25, 51),
-                     counts={"P0": np.zeros((50, 50), np.int64)})
+    g = AnalysisGrid(
+        edges=np.linspace(-1.25, 1.25, 51), counts={"P0": np.zeros((50, 50), np.int64)}
+    )
     assert g.n_bins == 50
     assert g.centers[0] == pytest.approx(-1.225)
     tx, ty = g.tan_mesh()

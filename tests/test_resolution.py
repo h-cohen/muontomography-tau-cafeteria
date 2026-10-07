@@ -30,8 +30,9 @@ def test_depth_resolution_grows_with_the_square_of_distance():
 
 
 def test_depth_resolution_improves_with_a_longer_baseline():
-    assert (depth_resolution(8.0, baseline_m=5.0, sigma_t=0.05)
-            < depth_resolution(8.0, baseline_m=2.2, sigma_t=0.05))
+    assert depth_resolution(8.0, baseline_m=5.0, sigma_t=0.05) < depth_resolution(
+        8.0, baseline_m=2.2, sigma_t=0.05
+    )
 
 
 def test_depth_resolution_matches_the_closed_form():
@@ -46,8 +47,7 @@ def test_a_zero_baseline_has_no_depth_resolution():
 
 
 def test_alias_period_is_the_closed_form():
-    assert alias_period(7.0, baseline_m=2.2, feature_pitch_m=1.0) == pytest.approx(
-        1.0 * 7.0 / 2.2)
+    assert alias_period(7.0, baseline_m=2.2, feature_pitch_m=1.0) == pytest.approx(1.0 * 7.0 / 2.2)
 
 
 def test_baselines_are_measured_between_positions(cfg2):
@@ -58,13 +58,14 @@ def test_baselines_are_measured_between_positions(cfg2):
 def _toy_forward():
     grid = VoxelGrid(origin=(0.0, 0.0, 0.0), spacing=1.0, shape=(2, 1, 1))
     # row 0 (pos0) hits voxel 0; rows 1 and 2 (pos1) both hit voxel 0; row 3 hits voxel 1
-    A = sparse.csr_matrix(np.array([[1.0, 0.0],
-                                    [2.0, 0.0],
-                                    [0.5, 0.0],
-                                    [0.0, 1.0]]))
-    rows = RowIndex(position_ids=("pos0", "pos1"),
-                    pos_of_row=np.array([0, 1, 1, 1]),
-                    sx=np.zeros(4), sy=np.zeros(4), sky_flat=np.arange(4))
+    A = sparse.csr_matrix(np.array([[1.0, 0.0], [2.0, 0.0], [0.5, 0.0], [0.0, 1.0]]))
+    rows = RowIndex(
+        position_ids=("pos0", "pos1"),
+        pos_of_row=np.array([0, 1, 1, 1]),
+        sx=np.zeros(4),
+        sy=np.zeros(4),
+        sky_flat=np.arange(4),
+    )
     return ForwardModel(A=A, grid=grid, rows=rows)
 
 

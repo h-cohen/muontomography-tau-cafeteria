@@ -9,6 +9,7 @@ a crisp volume without being able to say that its height is poorly measured
 would be a misleading instrument. For the same reason the fitted beam boxes
 travel with their total uncertainty when the error budget has been run.
 """
+
 from __future__ import annotations
 
 import json
@@ -53,22 +54,27 @@ def _beams_meta(results_dir: Path, cfg: Config) -> dict | None:
         return None
     fit = json.loads(fit_path.read_text())
     unc_path = results_dir / "uncertainty.json"
-    h_sigma = (json.loads(unc_path.read_text())["depth_h_total"]
-               if unc_path.is_file() else None)
+    h_sigma = json.loads(unc_path.read_text())["depth_h_total"] if unc_path.is_file() else None
     y0, y1 = (float(v) for v in cfg.beamdepth.y_extent_m)
     z0, h, w = float(fit["zbottom"]), float(fit["h"]), float(fit["w"])
     return {
-        "boxes": [{"x": float(xk), "w": w, "zbottom": z0, "ztop": z0 + h,
-                   "y_extent": [y0, y1]} for xk in fit["xs"]],
+        "boxes": [
+            {"x": float(xk), "w": w, "zbottom": z0, "ztop": z0 + h, "y_extent": [y0, y1]}
+            for xk in fit["xs"]
+        ],
         "h": h,
         "h_sigma": None if h_sigma is None else float(h_sigma),
     }
 
 
-def export_volume(voxels_dir: str | Path, cfg: Config, *,
-                  bootstrap_dir: str | Path | None = None,
-                  results_dir: str | Path | None = None,
-                  out_dir: str | Path) -> Path:
+def export_volume(
+    voxels_dir: str | Path,
+    cfg: Config,
+    *,
+    bootstrap_dir: str | Path | None = None,
+    results_dir: str | Path | None = None,
+    out_dir: str | Path,
+) -> Path:
     """Write volume.npy + meta.json (+ any optional layers found) for the viewer.
 
     Optional inputs are optional because a run may stop before the bootstrap
@@ -89,8 +95,9 @@ def export_volume(voxels_dir: str | Path, cfg: Config, *,
             for name in ("sigma", "snr"):
                 arr = d[name]
                 if arr.shape != rho.shape:
-                    raise ValueError(f"bootstrap {name} has shape {arr.shape}, "
-                                     f"volume has {rho.shape}")
+                    raise ValueError(
+                        f"bootstrap {name} has shape {arr.shape}, volume has {rho.shape}"
+                    )
                 np.save(out / f"{name}.npy", arr.astype(np.float32))
                 layers.append(name)
 
@@ -105,8 +112,9 @@ def export_volume(voxels_dir: str | Path, cfg: Config, *,
     # The rms angular error of one sky-grid bin (width / sqrt 12), as the
     # beam-depth cross-check states its resolution, so the two agree.
     sigma_t = cfg.opacity.sky_t_max * 2 / cfg.opacity.sky_n_bins / np.sqrt(12.0)
-    res = campaign_resolution(cfg, sigma_t=float(sigma_t),
-                              feature_pitch_m=max(2.0, 4 * cfg.volume.spacing_m))
+    res = campaign_resolution(
+        cfg, sigma_t=float(sigma_t), feature_pitch_m=max(2.0, 4 * cfg.volume.spacing_m)
+    )
 
     meta = {
         "shape": list(rho.shape),

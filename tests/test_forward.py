@@ -18,9 +18,13 @@ def cfg2(cfg):
 def _rows():
     sx = np.array([0.0, 0.2, 0.0, -0.2])
     sy = np.array([0.0, 0.0, 0.1, 0.1])
-    return RowIndex(position_ids=("pos0", "pos1"),
-                    pos_of_row=np.array([0, 0, 1, 1]),
-                    sx=sx, sy=sy, sky_flat=np.array([0, 1, 2, 3]))
+    return RowIndex(
+        position_ids=("pos0", "pos1"),
+        pos_of_row=np.array([0, 0, 1, 1]),
+        sx=sx,
+        sy=sy,
+        sky_flat=np.array([0, 1, 2, 3]),
+    )
 
 
 def test_build_sizes_the_grid_from_the_rows(cfg2):

@@ -9,6 +9,7 @@ on what any reconstruction of this campaign can possibly mean.
 Parallax comes only from the horizontal separation between positions: a
 single position has no baseline and therefore no depth information.
 """
+
 from __future__ import annotations
 
 import itertools
@@ -83,8 +84,7 @@ def rays_per_voxel(fwd: ForwardModel) -> np.ndarray:
     return np.diff(A.indptr).reshape(fwd.grid.shape).astype(np.int32)
 
 
-def campaign_resolution(cfg: Config, *, sigma_t: float,
-                        feature_pitch_m: float) -> dict:
+def campaign_resolution(cfg: Config, *, sigma_t: float, feature_pitch_m: float) -> dict:
     """Closed-form resolution report for a configured campaign.
 
     `sigma_t` is the angular bin width of the sky grid; `feature_pitch_m` is the
@@ -96,9 +96,11 @@ def campaign_resolution(cfg: Config, *, sigma_t: float,
     z0, z1 = float(cfg.volume.z_min_m), float(cfg.volume.z_max_m)
     zmid = 0.5 * (z0 + z1)
 
-    dz = {"z_min": depth_resolution(z0, max_b, sigma_t),
-          "z_mid": depth_resolution(zmid, max_b, sigma_t),
-          "z_max": depth_resolution(z1, max_b, sigma_t)}
+    dz = {
+        "z_min": depth_resolution(z0, max_b, sigma_t),
+        "z_mid": depth_resolution(zmid, max_b, sigma_t),
+        "z_max": depth_resolution(z1, max_b, sigma_t),
+    }
     # "Resolved" means the depth error at mid-range is smaller than the voxel
     # grid's own spacing. Anything coarser cannot place a surface within a
     # single voxel, so the solver's z-placement is prior, not data, however
@@ -109,8 +111,8 @@ def campaign_resolution(cfg: Config, *, sigma_t: float,
     verdict = (
         f"depth RESOLVED at mid-range: dz = {dz['z_mid']:.2f} m is finer than "
         f"the {spacing:.2f} m voxel spacing"
-        if resolved else
-        f"depth NOT resolved: dz = {dz['z_mid']:.2f} m at z = {zmid:.1f} m is "
+        if resolved
+        else f"depth NOT resolved: dz = {dz['z_mid']:.2f} m at z = {zmid:.1f} m is "
         f"{dz['z_mid'] / spacing:.0f}x the {spacing:.2f} m voxel spacing. "
         f"Lateral structure is still measured; the height of that structure is "
         f"set by the regulariser, not by the data."
@@ -128,4 +130,3 @@ def campaign_resolution(cfg: Config, *, sigma_t: float,
         "depth_resolved": bool(resolved),
         "verdict": verdict,
     }
-

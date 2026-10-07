@@ -31,8 +31,9 @@ def beam_phantom(cfg: Config, h_true: float, rng: np.random.Generator) -> tuple[
     # from either position) stays inside the grid: a slab cut off by the grid
     # edge is a sharp background step the smooth background cannot follow.
     g = VoxelGrid(origin=(-9.0, -6.0, 6.5), spacing=0.05, shape=(380, 240, 70))
-    truth = beam_ceiling(g, xs=XS, z0=Z0, w=W, h=h_true, kappa=KAPPA,
-                         y_extent=(-5.0, 5.0), slab_thickness=0.2)
+    truth = beam_ceiling(
+        g, xs=XS, z0=Z0, w=W, h=h_true, kappa=KAPPA, y_extent=(-5.0, 5.0), slab_thickness=0.2
+    )
     fwd = build_forward_model(rows, cfg, grid=g)
     like = FitData(lam=np.zeros(rows.n_rows), w=np.full(rows.n_rows, 1 / 0.02**2), rows=rows)
     return cfg, phantom_data(fwd, truth, like, rng)

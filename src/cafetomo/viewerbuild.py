@@ -8,6 +8,7 @@ so the shipped page has zero network requests and works from file://.
 With `embed_dir`, the run itself is inlined too, so the page is the whole
 supplementary material: one file a reader opens, with nothing to pick.
 """
+
 from __future__ import annotations
 
 import base64
@@ -58,14 +59,21 @@ def _embedded_run_tag(embed_dir: Path) -> str:
     empty, so it raises."""
     if not (embed_dir / "meta.json").is_file():
         raise FileNotFoundError(f"{embed_dir} has no meta.json: not an exported run")
-    files = {p.name: base64.b64encode(p.read_bytes()).decode()
-             for p in sorted(embed_dir.iterdir()) if p.suffix in {".npy", ".json"}}
-    return ('<script id="embedded-run" type="application/json">'
-            + json.dumps({"files": files}) + "</script>")
+    files = {
+        p.name: base64.b64encode(p.read_bytes()).decode()
+        for p in sorted(embed_dir.iterdir())
+        if p.suffix in {".npy", ".json"}
+    }
+    return (
+        '<script id="embedded-run" type="application/json">'
+        + json.dumps({"files": files})
+        + "</script>"
+    )
 
 
-def build(viewer_dir: Path = Path("viewer"), *, out_path: Path,
-          embed_dir: Path | None = None) -> Path:
+def build(
+    viewer_dir: Path = Path("viewer"), *, out_path: Path, embed_dir: Path | None = None
+) -> Path:
     viewer_dir = Path(viewer_dir)
     src_dir = viewer_dir / "src"
     shell = (viewer_dir / "shell.html").read_text()

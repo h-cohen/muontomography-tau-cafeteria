@@ -10,6 +10,7 @@ The fixture's rays layer is 1 (gated at the default N=2) for the half of
 the volume with i < nx/2 and 10 for the other half, so a gate that does
 nothing, or gates the wrong half, fails.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -43,7 +44,9 @@ def _picks(page):
             const r = document.querySelector('#gl-canvas').getBoundingClientRect();
             return pts.map(([fx, fy]) =>
                 window.__viewerState.pick(r.left + fx * r.width, r.top + fy * r.height));
-        }""", _GRID)
+        }""",
+        _GRID,
+    )
 
 
 def _frame(page):
@@ -77,7 +80,7 @@ def test_gate_changes_the_render_and_threshold_is_live(page, dist_path, run_fixt
     assert gated != ungated
 
     page.locator("#coverage-gate-enabled").check()
-    page.locator("#coverage-gate-value").fill("20")      # above every voxel: all hidden
+    page.locator("#coverage-gate-value").fill("20")  # above every voxel: all hidden
     page.locator("#coverage-gate-value").dispatch_event("input")
     assert all(p is None for p in _picks(page))
     assert _frame(page) != gated
@@ -95,11 +98,11 @@ def test_auto_window_is_set_by_the_voxels_the_gate_keeps(page, dist_path, run_fi
     shown: with the gate on, the window comes from ungated voxels only."""
     run, rays = _run_with_rays(run_fixture)
     vol = np.load(run / "volume.npy")
-    vol[rays < 2] = 50.0                  # a bright shell, all of it gated
+    vol[rays < 2] = 50.0  # a bright shell, all of it gated
     np.save(run / "volume.npy", vol)
     _load(page, dist_path, run)
     hi_on = page.evaluate("() => window.__viewerState.window[1]")
-    assert hi_on <= 1.0                   # the kept voxels are uniform in [0, 1)
+    assert hi_on <= 1.0  # the kept voxels are uniform in [0, 1)
 
     page.locator("#coverage-gate-enabled").uncheck()
     hi_off = page.evaluate("() => window.__viewerState.window[1]")

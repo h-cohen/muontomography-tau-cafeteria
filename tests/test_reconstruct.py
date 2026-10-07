@@ -17,8 +17,9 @@ N_SIDE = 12
 def cfg2(cfg):
     """Real detector and two positions, a small 1-3 m slab so matrices stay tiny."""
     vol = replace(cfg.volume, z_min_m=1.0, z_max_m=3.0, spacing_m=0.5, n_aperture_sub=2)
-    return replace(cfg, volume=vol, reconstruction=replace(
-        cfg.reconstruction, n_iter=30, tv_alpha=0.01))
+    return replace(
+        cfg, volume=vol, reconstruction=replace(cfg.reconstruction, n_iter=30, tv_alpha=0.01)
+    )
 
 
 def _data(cfg, seed=0, sigma=None):
@@ -48,9 +49,10 @@ def test_a_holdout_fit_uses_only_its_own_position(cfg2):
     disagreement with the other view is the cross-validation signal."""
     fits = solve_voxels(_data(cfg2), cfg2)
     assert fits["holdout_pos0"].info["n_rows_used"] < fits["full"].info["n_rows_used"]
-    assert (fits["holdout_pos0"].info["n_rows_used"]
-            + fits["holdout_pos1"].info["n_rows_used"]
-            == fits["full"].info["n_rows_used"])
+    assert (
+        fits["holdout_pos0"].info["n_rows_used"] + fits["holdout_pos1"].info["n_rows_used"]
+        == fits["full"].info["n_rows_used"]
+    )
 
 
 def test_holdouts_can_be_skipped(cfg2):
@@ -111,8 +113,11 @@ def test_the_volume_reproduces_its_own_measurements_better_than_a_zero_volume(cf
 def _flat_ceiling(cfg):
     """A flat slab at 6.6-7.4 m seen by both positions over a regular sky grid."""
     vol = replace(cfg.volume, spacing_m=0.5)
-    cfg = replace(cfg, volume=vol, reconstruction=replace(
-        cfg.reconstruction, n_iter=150, tv_alpha=0.01, tv_z_weight=0.5))
+    cfg = replace(
+        cfg,
+        volume=vol,
+        reconstruction=replace(cfg.reconstruction, n_iter=150, tv_alpha=0.01, tv_z_weight=0.5),
+    )
     rows = sky_rows(cfg.position_ids, 0.9, 18)
     fwd = build_forward_model(rows, cfg, cache_dir=None)
     zc = fwd.grid.axis_centers(2)
@@ -129,7 +134,7 @@ def _flat_ceiling(cfg):
 def _columns(fwd, x, seen):
     col = x.reshape(fwd.grid.shape).sum(2) * fwd.grid.spacing
     nx, ny = col.shape
-    centre = col[nx // 2 - 2:nx // 2 + 2, ny // 2 - 2:ny // 2 + 2].mean()
+    centre = col[nx // 2 - 2 : nx // 2 + 2, ny // 2 - 2 : ny // 2 + 2].mean()
     return centre, np.percentile(col[seen], 95)
 
 

@@ -13,6 +13,7 @@ hidden column's footprint must be mostly UNLIT (<=10%), and every kept
 column's footprint must be mostly LIT (>=70%; correct code measures
 77.8% at worst, the narrowest fog footprint).
 """
+
 from __future__ import annotations
 
 import json
@@ -23,7 +24,7 @@ import pytest
 pytestmark = pytest.mark.browser
 
 SHAPE = (9, 3, 4)
-COLS = {"A": 1, "B": 4, "C": 7}          # x index of each bright column
+COLS = {"A": 1, "B": 4, "C": 7}  # x index of each bright column
 _GRID = [(fx / 40, fy / 40) for fx in range(2, 39) for fy in range(2, 39)]
 
 
@@ -58,7 +59,8 @@ def _load(page, dist_path, run):
 def _set_only(page, gate):
     """Enable exactly one of sigma / coverage / snr via state (or none, for
     the all-off baseline pass when gate is None), then idle-render."""
-    page.evaluate("""(gate) => {
+    page.evaluate(
+        """(gate) => {
         const s = window.__viewerState;
         s.sigmaGateEnabled = gate === 'sigma';
         s.sigmaGateValue = 1.0;
@@ -68,11 +70,14 @@ def _set_only(page, gate):
         s.minSnr = 3;
         s.window = [0.5, 1.0];
         s.idleNow();
-    }""", gate)
+    }""",
+        gate,
+    )
 
 
 def _picks_and_lit(page):
-    return page.evaluate("""async (pts) => {
+    return page.evaluate(
+        """async (pts) => {
         const s = window.__viewerState;
         s.idleNow();
         const cv = document.querySelector('#gl-canvas');
@@ -91,7 +96,9 @@ def _picks_and_lit(page):
                 + Math.abs(d[o + 2] - bg[2]) > 12;
             return [p ? p.i : null, lit];
         });
-    }""", _GRID)
+    }""",
+        _GRID,
+    )
 
 
 def _footprints(baseline):
@@ -118,12 +125,12 @@ def test_shader_gate_matches_cpu_gate(page, dist_path, run_fixture, mode, gate, 
     _set_only(page, gate)
     rows = _picks_and_lit(page)
     picked_cols = {i for i, _ in rows if i is not None}
-    assert COLS[hidden] not in picked_cols                      # CPU hides the gated column
+    assert COLS[hidden] not in picked_cols  # CPU hides the gated column
     assert {COLS[k] for k in COLS if k != hidden} <= picked_cols  # and keeps the others
 
     hidden_fp = footprint[COLS[hidden]]
     lit_in_hidden = sum(1 for idx in hidden_fp if rows[idx][1])
-    assert lit_in_hidden <= 0.10 * len(hidden_fp)                # GPU also hides it
+    assert lit_in_hidden <= 0.10 * len(hidden_fp)  # GPU also hides it
 
     # KEPT_MIN_LIT is 70%, not the 80% first proposed: the narrowest column's
     # footprint (9 probes) sees fog edge-softness bring its true lit ratio to
@@ -138,4 +145,4 @@ def test_shader_gate_matches_cpu_gate(page, dist_path, run_fixture, mode, gate, 
             continue
         fp = footprint[col]
         lit = sum(1 for idx in fp if rows[idx][1])
-        assert lit >= KEPT_MIN_LIT * len(fp)                     # GPU keeps the others lit
+        assert lit >= KEPT_MIN_LIT * len(fp)  # GPU keeps the others lit

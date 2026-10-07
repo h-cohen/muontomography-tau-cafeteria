@@ -16,16 +16,28 @@ def sky_rows(position_ids: tuple[str, ...], t_max: float, n_bins: int) -> RowInd
     centers = 0.5 * (edges[:-1] + edges[1:])
     ii, jj = np.meshgrid(np.arange(n_bins), np.arange(n_bins), indexing="ij")
     n = len(position_ids)
-    return RowIndex(position_ids=tuple(position_ids),
-                    pos_of_row=np.repeat(np.arange(n, dtype=np.int64), ii.size),
-                    sx=np.tile(centers[ii].ravel(), n), sy=np.tile(centers[jj].ravel(), n),
-                    sky_flat=np.tile((ii * n_bins + jj).ravel().astype(np.int64), n))
+    return RowIndex(
+        position_ids=tuple(position_ids),
+        pos_of_row=np.repeat(np.arange(n, dtype=np.int64), ii.size),
+        sx=np.tile(centers[ii].ravel(), n),
+        sy=np.tile(centers[jj].ravel(), n),
+        sky_flat=np.tile((ii * n_bins + jj).ravel().astype(np.int64), n),
+    )
 
 
-def beam_ceiling(grid: VoxelGrid, *, xs, z0: float, w: float, h: float, kappa,
-                 y_extent: tuple[float, float], slab_thickness: float = 0.2,
-                 slab_kappa: float = 0.3,
-                 slab_y_extent: tuple[float, float] | None | EllipsisType = ...) -> np.ndarray:
+def beam_ceiling(
+    grid: VoxelGrid,
+    *,
+    xs,
+    z0: float,
+    w: float,
+    h: float,
+    kappa,
+    y_extent: tuple[float, float],
+    slab_thickness: float = 0.2,
+    slab_kappa: float = 0.3,
+    slab_y_extent: tuple[float, float] | None | EllipsisType = ...,
+) -> np.ndarray:
     """Rectangular beams along y (bottom face z0, width w, depth h, opacity
     density kappa_k) under a uniform slab whose underside is z0 + h.
 
@@ -49,14 +61,18 @@ def beam_ceiling(grid: VoxelGrid, *, xs, z0: float, w: float, h: float, kappa,
         in_beam |= box
     if slab_y_extent is ...:
         slab_y_extent = y_extent
-    slab_y = (np.ones_like(y, dtype=bool) if slab_y_extent is None
-              else (y >= slab_y_extent[0]) & (y <= slab_y_extent[1]))
+    slab_y = (
+        np.ones_like(y, dtype=bool)
+        if slab_y_extent is None
+        else (y >= slab_y_extent[0]) & (y <= slab_y_extent[1])
+    )
     slab = slab_y & (z > z0 + h) & (z <= z0 + h + slab_thickness)
     return np.where(slab & ~in_beam, slab_kappa, vol)
 
 
-def phantom_data(fwd: ForwardModel, truth: np.ndarray, like: FitData,
-                 rng: np.random.Generator) -> FitData:
+def phantom_data(
+    fwd: ForwardModel, truth: np.ndarray, like: FitData, rng: np.random.Generator
+) -> FitData:
     """Truth projected onto `like`'s rows, plus Gaussian noise at `like`'s sigma.
     Rows with zero weight stay unmeasured."""
     clean = fwd.predict(truth)

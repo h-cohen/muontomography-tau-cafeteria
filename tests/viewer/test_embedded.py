@@ -1,5 +1,6 @@
 """A build with the run embedded opens straight into the volume: the file
 picker is never touched, and the result is the same as loading the run."""
+
 import pytest
 
 from cafetomo.viewerbuild import build
