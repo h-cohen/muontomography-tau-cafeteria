@@ -1,4 +1,4 @@
-"""Figure 6: beam-depth fit, bootstrap distribution of the depth, and the voxel z profile."""
+"""Beam-depth fit, bootstrap distribution and fixed-depth nuisance profile."""
 
 from pathlib import Path
 
@@ -18,7 +18,7 @@ def histogram_panel(ax, h_boot, h_nominal: float, h_measured: float) -> None:
         ax.text(0.5, 0.5, "no finite replicas", transform=ax.transAxes, ha="center", va="center")
     ax.axvline(h_nominal, color=style.INK, lw=0.8, label="nominal fit")
     ax.axvline(h_measured, color=style.INK_SECONDARY, lw=0.8, ls="--", label="on-site measurement")
-    ax.set_xlabel("beam depth h (m)")
+    ax.set_xlabel("fitted h parameter (m)")
     ax.set_ylabel("bootstrap replicas")
     ax.yaxis.get_major_locator().set_params(integer=True)
     ax.set_ylim(top=max(ax.get_ylim()[1], 1.0) * 1.5)
@@ -45,26 +45,28 @@ def main(argv=None) -> None:
 
     histogram_panel(bx, h_boot, bd["h"], inputs["measured_beam_depth"])
 
-    cx.axvspan(bd["zbottom"], bd["ztop"], color=style.GRID, label="fitted box")
-    cx.axvspan(
-        bd["zprofile_bottom"],
-        bd["zprofile_top"],
-        ymax=0.06,
-        color=style.POSITION_COLORS["pos1"],
-        label="half maximum",
-    )
-    cx.plot(bd["zprofile_profile_z"], bd["zprofile_profile"], "o-", ms=3, color=style.INK)
+    profile = bd["depth_profile"]
+    chi = np.asarray(profile["chi2"])
+    cx.plot(profile["h"], chi - chi.min(), "o-", ms=3, color=style.INK)
     cx.axvline(
-        inputs["measured_beam_bottom"],
+        inputs["measured_beam_depth"],
         color=style.INK_SECONDARY,
         lw=0.8,
         ls="--",
-        label="on-site bottom",
+        label="on-site depth",
     )
-    cx.set_xlabel("height z (m)")
-    cx.set_ylabel(r"voxel opacity density $\rho$ (m$^{-1}$)")
-    cx.set_ylim(top=cx.get_ylim()[1] * 1.35)
-    cx.legend(loc="upper left")
+    cx.scatter(
+        [bd["h"]],
+        [np.interp(bd["h"], profile["h"], chi) - chi.min()],
+        color=style.INK,
+        s=14,
+        zorder=3,
+        label="nominal fit",
+    )
+    cx.set_yscale("symlog", linthresh=1.0)
+    cx.set_xlabel("fixed h parameter (m)")
+    cx.set_ylabel(r"profile $\Delta\chi^2$")
+    cx.legend(loc="lower left", bbox_to_anchor=(0.1, 1.0))
     style.label_panels([ax, bx, cx])
     style.save(fig, a)
 

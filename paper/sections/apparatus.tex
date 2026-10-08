@@ -1,27 +1,12 @@
-\section{Apparatus and measurements}\label{sec:apparatus}
-The instrument was a scintillator tracker with \InputsDetectorPlanes{} planes and \InputsBarsPerPlane{} live bars per plane. The active width and separation between consecutive layers were determined from the open-sky hit distributions and angular acceptance edge. The geometry used in every forward projection is listed in Table~\ref{tab:apparatus}. Detector dimensions enter in centimetres at the configuration boundary; reconstructed positions and lengths are expressed in metres.
+\section{Measurement geometry}\label{sec:apparatus}
+One scintillator tracker with \InputsDetectorPlanes{} planes and \InputsBarsPerPlane{} bars per plane was placed at two floor positions beneath the ceiling. Its active width was $\InputsActiveWidthCm\,\mathrm{cm}$ and layer separation $\InputsLayerGapCm\,\mathrm{cm}$, determined from the open-sky hit distribution and angular acceptance edge. The roof exposure used the same instrument as the response reference.
 
-\begin{table}[htbp]
-\centering
-\caption{Detector geometry and on-site comparison measurements. The ceiling measurements are comparison inputs and do not fix the fitted beam geometry.}\label{tab:apparatus}
-\begin{tabular}{lr}
-\toprule
-Quantity & Value \\
-\midrule
-Active tracker width & $\InputsActiveWidthCm\,\mathrm{cm}$ \\
-Layer separation & $\InputsLayerGapCm\,\mathrm{cm}$ \\
-On-site beam-bottom height & $\InputsMeasuredBeamBottom\,\mathrm{m}$ \\
-On-site vertical beam depth & $\InputsMeasuredBeamDepth\,\mathrm{m}$ \\
-\bottomrule
-\end{tabular}
-\end{table}
+The retained samples contained \DataFirstTracks{} tracks over $\DataFirstHours\,\mathrm{h}$ at pos0, \DataSecondTracks{} tracks over $\DataSecondHours\,\mathrm{h}$ at pos1, and \DataSkyTracks{} tracks over $\DataSkyHours\,\mathrm{h}$ in open sky. Live time was obtained from the inter-track interval histogram; its unlabelled time unit was inferred from the acquisition rate.
 
-The tracker occupied a reference floor position, pos0, and a displaced position, pos1. An open-sky roof exposure supplied the response reference. The retained exposures contained \DataFirstTracks{} tracks over $\DataFirstHours\,\mathrm{h}$ at pos0, \DataSecondTracks{} tracks over $\DataSecondHours\,\mathrm{h}$ at pos1, and \DataSkyTracks{} tracks over $\DataSkyHours\,\mathrm{h}$ in the sky reference. These counts refer to the angular crop retained by ingestion, rather than all events in the original histograms. Live times were obtained by summing the inter-track interval histogram weighted by the interval-bin centres. Its time unit was inferred from the acquisition rate because the histogram axis was unlabelled.
-
-The world frame places pos0 at the origin, with $z$ upwards and the principal beams running along $y$. The pos1 floor pose was self-calibrated from the transmission data. A rough straight-line separation estimate was not imposed as an exact baseline. The measured beam bottom and depth were retained as independent comparisons; no uncertainty was supplied for those on-site values, so they do not define a formal measurement-consistency test. Fitted heights refer to the configured pos0 reference plane. The direct on-site comparison assumes a common height origin; a separate detector-reference-to-floor offset was not calibrated in this analysis.
+The coordinate origin is pos0, $z$ points upwards and the main beams run along $y$. The pos1 pose was fitted from the angular data. The rough floor-distance estimate was not treated as an exact survey. The on-site beam bottom and depth were $\InputsMeasuredBeamBottom\,\mathrm{m}$ and $\InputsMeasuredBeamDepth\,\mathrm{m}$; their uncertainties were not supplied. Comparison assumes a common height origin, since a separate tracker-reference-to-floor offset was not calibrated.
 
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=\linewidth]{setup.pdf}
-\caption{Top and side views of the measurement geometry. Detector locations are from the self-calibrated pose; beam boxes show the fitted geometry, not the on-site reference dimensions.}\label{fig:setup}
+\caption{Measurement geometry and fitted beam boxes. One tracker occupied pos0 and pos1; box dimensions come from the fit.}\label{fig:setup}
 \end{figure}

@@ -1,12 +1,18 @@
-\section{Room voxel model and coverage}\label{sec:volume}
-The reconstruction contained \ReconstructionVoxels{} voxels and \ReconstructionRows{} measured angular rows, with weighted residual statistic $\ReconstructionChisqPerRow$ per row. This is a residual measure rather than a reduced chi-square with a known effective number of free parameters: regularization and the large null space prevent interpreting the voxel count as a fitted-parameter count. Position-only reconstructions were retained as holdouts alongside the joint solution.
-
-Figure~\ref{fig:volume} shows orthogonal slices through the fitted beam region. The effective opacity distribution represents a regularized allocation of line-integrated attenuation. It supports lateral structural interpretation where rays from both positions cross, while diffuse vertical extent remains less identifiable. Brightness in a singly viewed or weakly covered voxel can reflect the solver's prior and nonnegativity rather than a resolved material boundary.
+\section{Three-dimensional room reconstruction}\label{sec:volume}
+The joint reconstruction used \ReconstructionRows{} angular rows and \ReconstructionVoxels{} voxels, with weighted residual statistic $\ReconstructionChisqPerRow$ per row. Figure~\ref{fig:volume} will show the room in three dimensions, emphasizing the ceiling beams. The reconstructed field is effective opacity, not a unique material-density map; lateral structure is better constrained than its vertical extent.
 
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=\linewidth]{volume.pdf}
-\caption{Orthogonal slices of the reconstructed effective opacity density near the fitted beams, with the figure's bootstrap signal-to-noise selection. Numerical voxel spacing should not be read as isotropic spatial resolution.}\label{fig:volume}
+\IfFileExists{figures/room_voxels.pdf}{%
+  \includegraphics[width=\linewidth]{figures/room_voxels.pdf}%
+}{\IfFileExists{figures/room_voxels.png}{%
+  \includegraphics[width=\linewidth]{figures/room_voxels.png}%
+}{%
+  \fbox{\begin{minipage}[c][4cm][c]{0.94\linewidth}
+  \centering\textbf{AUTHOR FIGURE PLACEHOLDER}\\[0.8em]
+  Three-dimensional voxel reconstruction of the room,\\
+  with emphasis on the ceiling beams.
+  \end{minipage}}%
+}}
+\caption{Room-scale muon tomography: three-dimensional voxel reconstruction with emphasis on the overhead beam structure.}\label{fig:volume}
 \end{figure}
-
-The supplementary viewer provides volume, uncertainty and coverage layers with clipping and display controls. Its fitted beam-box overlay is derived from the same result files as the paper. The boxes summarize the parametric estimator; they are not an independent confirmation of the voxel geometry.

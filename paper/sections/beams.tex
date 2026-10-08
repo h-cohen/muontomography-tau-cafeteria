@@ -1,17 +1,17 @@
-\section{Beam shadows and triangulation}\label{sec:beams}
-The measured opacity maps were backprojected onto a trial horizontal plane without using the voxel inversion. Peaks in transverse angular profiles were matched between positions. For a shared feature at world coordinate $X_k$ and height $z$, each view obeys
+\section{Locating the ceiling beams}\label{sec:beams}
+Two complementary diagnostics localized the overhead structure. Autofocus fitted a thin layer to one view and scored its prediction of the other; the minimum gave $\AutofocusZ\pm\UncertaintyAutofocusZTotal\,\mathrm{m}$. Averaging shifted lattices reduced beam-pitch aliasing. Synthetic layer-centre recovery had signed bias $\ValidationFocusBias\,\mathrm{m}$ and maximum error $\ValidationFocusMaxError\,\mathrm{m}$.
+
+Beam-shadow peaks supplied a geometric check. A feature at $(X_k,z)$ obeys
 \begin{equation}
- s_{x,p,k}=\frac{X_k-x_p}{z-z_p}.
+s_{x,p,k}=\frac{X_k-x_p}{z-z_p}.
 \label{eq:triangulation}
 \end{equation}
-A joint fit to the matched peaks estimated the common height and feature coordinates. Profiles parallel to the principal beams were included only when their parallax correlation passed the configured threshold. Because those features and the pos1 $y$ coordinate are less constrained, an $x$-only height was also retained.
-
-The joint triangulation gave $z=\BeamsZ\pm\UncertaintyBeamsZTotal\,\mathrm{m}$, and the transverse-only estimate was $z_x=\BeamsZX\pm\UncertaintyBeamsZxTotal\,\mathrm{m}$. The transverse angular period was $\BeamsPeriod$, corresponding to a pitch of $\BeamsPitch\,\mathrm{m}$ at the fitted height. Ratios of height and pitch to baseline are useful scale-closure quantities; their metre-valued counterparts retain the pose scale assumptions.
+Matching transverse peaks between positions yielded $z_x=\BeamsZX\pm\UncertaintyBeamsZxTotal\,\mathrm{m}$. The joint-height solution gave beam pitch $\BeamsPitch\,\mathrm{m}$. This transverse estimate is emphasized because displacement along the beams is less identifiable. Autofocus measures an effective layer centre; triangulation localizes shadow features, so neither is automatically a bottom-face measurement.
 
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=0.85\linewidth]{triangulation.pdf}
-\caption{Cross-position parallax correlation as a function of trial height. The peak-matching triangulation and bootstrap spread are shown for comparison with the correlation scan.}\label{fig:triangulation}
+\includegraphics[width=\linewidth]{height.pdf}
+\caption{One height diagnostic figure: cross-position autofocus (a) and transverse parallax (b). Dashed lines mark each estimator and shaded bands show its count-bootstrap spread.}\label{fig:height}
 \end{figure}
 
-A verification gate compared peaks in the raw-data backprojection with peaks in the reconstruction layer nearest the triangulated height. This avoids substituting the most massive layer, which may represent the slab above the beams. The mean absolute peak offset was $\BeamsGateMeanAbsOffset\,\mathrm{m}$. The full-resolution run passed this gate. The gate tests lateral placement at that plane; it does not independently validate beam depth or resolve the global scale.
+Within the overlap of both views, the reconstructed layer at the triangulated height reproduced the raw-data beam positions with mean offset $\BeamsGateMeanAbsOffset\,\mathrm{m}$ and passed the verification gate. Single-view edge features were retained as separate diagnostics. This checks lateral placement, not beam depth or absolute scale.

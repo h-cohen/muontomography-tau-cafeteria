@@ -1,10 +1,8 @@
 cff-version: 1.2.0
 message: "If you use this software or data, please cite the accompanying paper."
-title: "Ceiling-Beam Geometry and a Room Voxel Model from Two Positions of One Muon Tracker: code and data"
+title: "Seeing the Ceiling with Cosmic Muons: Two-View Tomography of a Real Room: code and data"
 authors:
-  - family-names: Cohen
-    given-names: Hadar
-    email: hal.nls@gmail.com
+  - name: AUTHORS
 license: MIT
 version: 1.0.0.dev0
 repository-code: "https://github.com/h-cohen/muontomography-tau-cafeteria"

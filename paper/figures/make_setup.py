@@ -9,7 +9,6 @@ import style
 def main(argv=None) -> None:
     a, cfg = style.setup(argv)
     bd = style.load_result(a, "beamdepth")
-    t = cfg.opacity.max_tan
     (x0, x1), (y0, y1) = cfg.volume.viewer_crop_xy_m
     ybeam = cfg.beamdepth.y_extent_m
     zb, zt, w = bd["zbottom"], bd["ztop"], bd["w"]
@@ -20,22 +19,11 @@ def main(argv=None) -> None:
         ax.add_patch(
             Rectangle((xb - w / 2, ybeam[0]), w, ybeam[1] - ybeam[0], fc=style.GRID, ec="none")
         )
-    for pid, (px, py, pz) in cfg.origins().items():
-        reach = t * (zb - pz)
-        ax.add_patch(
-            Rectangle(
-                (px - reach, py - reach),
-                2 * reach,
-                2 * reach,
-                fill=False,
-                ec=style.POSITION_COLORS[pid],
-                lw=0.8,
-            )
-        )
+    for pid, (px, py, _pz) in cfg.origins().items():
         ax.plot(px, py, "o", color=style.POSITION_COLORS[pid], ms=4, label=pid)
     px_all = [p[0] for p in cfg.origins().values()]
     py_all = [p[1] for p in cfg.origins().values()]
-    reach = t * zb
+    reach = max(abs(x0), abs(x1), abs(y0), abs(y1))
     xlim = (min(px_all) - reach - 0.5, max(px_all) + reach + 0.5)
     ax.set_xlim(*xlim)
     ax.set_ylim(min(py_all) - reach - 0.5, max(py_all) + reach + 0.5)
@@ -55,7 +43,12 @@ def main(argv=None) -> None:
     bx.set_xlabel("x (m)")
     bx.set_ylabel("z (m)")
     bx.text(
-        xlim[1] - 0.2, zt + 0.1, "fitted beams", ha="right", va="bottom", color=style.INK_SECONDARY
+        xlim[1] - 0.2,
+        zt + 0.1,
+        "conditional box-fit layer",
+        ha="right",
+        va="bottom",
+        color=style.INK_SECONDARY,
     )
     bx.legend(loc="center right", handlelength=0.8)
     style.label_panels([ax, bx])

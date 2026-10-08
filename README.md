@@ -2,7 +2,7 @@
 
 [Code and data repository](https://github.com/h-cohen/muontomography-tau-cafeteria).
 
-Code, data and manuscript for *Ceiling-Beam Geometry and a Room Voxel Model from Two Positions of One Muon Tracker*.
+Code, data and manuscript for *Seeing the Ceiling with Cosmic Muons: Two-View Tomography of a Real Room*.
 Two exposures of one four-plane scintillator tracker under the cafeteria ceiling,
 normalised by an open-sky run of the same detector, yield a full-room voxel model,
 the height and pitch of the ceiling beams, and their vertical depth.

@@ -1,41 +1,22 @@
-\section{Uncertainty and validation}\label{sec:uncertainties}
-The statistical uncertainty was estimated using \UncertaintyReplicas{} Poisson replicas of the position and sky histograms. Each realization passed through the common opacity and measurement estimator, with the nominal row layout, fit weights and voxel lattice held fixed. The nominal value is the fit to the observed counts, not the average bootstrap fit. Measurement replicas used a deterministic random stream independent of the draws used to estimate the nominal fit weights. The depth replicas populated separated shallow and deeper solution groups. The histogram in Fig.~\ref{fig:depth} is therefore retained: its standard deviation summarizes a mixture of fitted solutions rather than a Gaussian confidence interval. The on-site depth lies beyond the sampled statistical range, but that observation does not include all model and scale uncertainties. Finite replica counts are reported for quantities whose voxel-profile crossing is absent in some realizations.
+\section{Uncertainty}\label{sec:uncertainties}
+Counting uncertainty came from \UncertaintyReplicas{} Poisson replicas of both positions and their shared sky reference, with fit weights and geometry held fixed. The bootstrap standard deviation summarizes the sampled solutions, not a calibrated Gaussian confidence interval. Nominal values are fits to the observed data, not bootstrap means. Bound box-fit parameters remain optimizer diagnostics; their distributions are not physical dimension uncertainties.
 
-Systematic effects were evaluated as shifts: a relative sky-to-position flux change, multiple scattering, fitted-pose perturbations, background polynomial degree, concrete density, and alternative sea-level spectrum. The flux fraction was $\InputsFluxScaleFraction$. Pose shifts used the self-calibration marginal position spreads; these counting-based spreads do not bound geometric bias or the global scale freedom, and the current budget does not separately propagate the weakly identified azimuth. Background-degree variation probes one model choice and cannot represent all possible room-edge backgrounds.
-
-The multiple-scattering calculation used the Highland projected-angle expression \citep{pdg2024}, integrated over an approximate survivor momentum distribution above $\InputsMcsMomentumCut\,\mathrm{GeV}/c$. Scattering inside a beam produces a lateral displacement scale $\theta_{\mathrm{rms}}h/\sqrt{3}$; dividing by the bottom-face lever arm gives the angular jitter injected into the beam signal. The nominal angular scale was $\UncertaintyMcsTheta\,\mathrm{rad}$ and the lateral displacement scale $\UncertaintyMcsDisplacement\,\mathrm{m}$. Refitting the perturbed data with the nominal unsmeared estimator measures the effect of unmodelled scattering within this approximation. The conservative momentum cutoff and beam-only scattering geometry remain assumptions.
-
-Table~\ref{tab:uncertainty} reports statistical spreads and systematic shifts separately. Quadrature totals summarize the evaluated components under that convention; they are not exhaustive coverage intervals for an inadequate model or a poorly known geometric scale. Material and flux variations can also change which local solution is selected, so their refit shifts need not scale linearly with the perturbed input. Neither the on-site measurement nor the observed discrepancy was added to this budget as an artificial correction.
+Table~\ref{tab:uncertainty} separates counting spread of fit parameters from refit shifts for flux normalization, scattering, pose and background. The flux fraction was $\InputsFluxScaleFraction$; scattering used the Highland expression \citep{pdg2024} with an approximate survivor spectrum above $\InputsMcsMomentumCut\,\mathrm{GeV}/c$. The scattering scale is conditional on the nominal fitted depth; its in-beam displacement scale was $\UncertaintyMcsDisplacement\,\mathrm{m}$. Pose perturbations varied each marginal coordinate and azimuth separately. Some perturbations changed the selected local solution, so shifts need not be linear in the input. The quadrature total summarizes evaluated sensitivities and excludes uncalibrated scale, height-origin and model effects, including spatial response, joint correlations and matching-model recovery bias.
 
 \begin{table}[htbp]
 \centering
-\caption{Evaluated error budget in metres. Statistical entries are bootstrap standard deviations; other entries are absolute refit shifts.}\label{tab:uncertainty}
-\begin{tabular}{lrrr}
+\caption{Evaluated parallax-height budget in metres: count-bootstrap spread and absolute refit shifts.}\label{tab:uncertainty}
+\begin{tabular}{lr}
 \toprule
-Source & Transverse height $z_x$ & Box bottom $z_0$ & Box depth $h$ \\
+Source & Parallax height $z_x$ \\
 \midrule
-Statistics & \UncertaintyBeamsZxStat & \UncertaintyDepthZbottomStat & \UncertaintyDepthHStat \\
-Flux normalization & \UncertaintyBeamsZxFlux & \UncertaintyDepthZbottomFlux & \UncertaintyDepthHFlux \\
-Multiple scattering & \UncertaintyBeamsZxMcs & \UncertaintyDepthZbottomMcs & \UncertaintyDepthHMcs \\
-Pose perturbations & \UncertaintyBeamsZxPose & \UncertaintyDepthZbottomPose & \UncertaintyDepthHPose \\
-Background degree & \UncertaintyBeamsZxBg & \UncertaintyDepthZbottomBg & \UncertaintyDepthHBg \\
-Concrete density & \UncertaintyBeamsZxRho & \UncertaintyDepthZbottomRho & \UncertaintyDepthHRho \\
-Spectrum choice & \UncertaintyBeamsZxModel & \UncertaintyDepthZbottomModel & \UncertaintyDepthHModel \\
+Statistics & \UncertaintyBeamsZxStat \\
+Flux & \UncertaintyBeamsZxFlux \\
+Scattering & \UncertaintyBeamsZxMcs \\
+Pose & \UncertaintyBeamsZxPose \\
+Background & \UncertaintyBeamsZxBg \\
 \midrule
-Quadrature total & \UncertaintyBeamsZxTotal & \UncertaintyDepthZbottomTotal & \UncertaintyDepthHTotal \\
+Quadrature total & \UncertaintyBeamsZxTotal \\
 \bottomrule
 \end{tabular}
 \end{table}
-
-For a feature observed with angular uncertainty $\sigma_t$ from two positions separated by $b$, propagation of the parallax relation gives
-\begin{equation}
-\sigma_z\simeq\frac{\sqrt{2}\,\sigma_t z^2}{b}.
-\label{eq:resolution}
-\end{equation}
-This geometric scale grows rapidly with height and supplies context for the voxel-profile width. Feature averaging and a parametric shape assumption can improve a particular estimator without creating isotropic voxel resolution.
-
-\begin{figure}[htbp]
-\centering
-\includegraphics[width=\linewidth]{uncertainty.pdf}
-\caption{Bootstrap opacity-density uncertainty and the number of positions viewing each voxel in the beam region. Coverage identifies where parallax is available and where vertical placement depends mainly on reconstruction assumptions.}\label{fig:uncertainty}
-\end{figure}

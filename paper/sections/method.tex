@@ -1,32 +1,18 @@
-\section{Opacity and reconstruction}\label{sec:method}
-For position $p$ and a world sky-tangent bin, the measured opacity was
+\section{From transmission to a room image}\label{sec:method}
+For position $p$, opacity in a world angular bin was
 \begin{equation}
-\lambda_p=-\ln\!\left[\frac{n_p}{(t_p/t_{\mathrm{sky}})n_{\mathrm{sky}}}\right],
+\lambda_p=-\ln\!\left[\frac{n_p}{(t_p/t_{\mathrm{sky}})n_{\mathrm{sky}}}\right],\qquad
+\sigma_{\lambda,p}^2\simeq\frac{1}{n_p}+\frac{1}{n_{\mathrm{sky}}},
 \label{eq:opacity}
 \end{equation}
-where $n$ denotes counts and $t$ denotes live time. The same detector was used for the position and reference runs. This ratio removes the common angular response to the extent that it remained stable between exposures. The reference and live-time normalization fix the opacity zero point; the nominal voxel inversion does not fit additive offsets. Missing reference support is excluded rather than interpreted as zero opacity. Figure~\ref{fig:opacity} shows the angular measurements and reference support.
+where $n$ and $t$ are counts and live times. The common detector response cancels to the extent that it remained stable between runs. This normalization fixes the opacity zero point; unmeasured reference bins are masked, and the nominal inversion does not fit additive offsets. Figure~\ref{fig:opacity} shows the measured projections.
 
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=\linewidth]{opacity.pdf}
-\caption{Sky-normalized opacity at the two floor positions and open-sky reference counts. Unmeasured bins are masked. The broad background and sharper beam shadows are both retained.}\label{fig:opacity}
+\caption{Opacity at the two room positions and open-sky reference counts. The broad background and repeated beam shadows are retained.}\label{fig:opacity}
 \end{figure}
 
-For independent Poisson counts away from clipping boundaries, error propagation gives
-\begin{equation}
-\sigma_{\lambda,p}^2\simeq\frac{1}{n_p}+\frac{1}{n_{\mathrm{sky}}}.
-\label{eq:poisson}
-\end{equation}
-The sky term uses the raw reference count, not its live-time-scaled value. The pose objective used these analytic weights. The delivered opacity maps used binwise standard deviations from count replicas for their nominal fit weights. Those weights were held fixed in the subsequent measurement bootstrap, preserving the estimator. A shared sky realization was resampled together with both position histograms, retaining the dependence introduced by the common reference. Finite-replica noise in the estimated weights limits a literal goodness-of-fit interpretation, particularly for the smoke-run settings.
+The voxel model was $\boldsymbol\lambda=A\boldsymbol q$, with $q_j$ an effective opacity density and $A_{ij}$ the aperture-averaged path through voxel $j$. Uniform sub-rays sampled the ideal direction-conditioned coincidence footprint in the effective detector midpoint plane: its detector-coordinate widths were $W-|t_x|D$ and $W-|t_y|D$ for active width $W$ and effective layer separation $D$. The footprint rotated with detector azimuth. It was solved with nonnegative iterative updates and horizontal total variation \citep{gilbert1972,rudin1992}. Vertical smoothing was disabled to preserve parallax; coverage damping reduced poorly constrained edge artefacts. The $\ReconstructionSpacing\,\mathrm{m}$ voxel spacing describes the discretization, not isotropic spatial resolution. The solve volume covered the ray footprints, with cropping applied only for display.
 
-The voxel forward model was $\boldsymbol\lambda=A\boldsymbol q$, where $q_j$ is an effective opacity density and $A_{ij}$ is the bundle-averaged path length through voxel $j$. This $q$ is not a concrete mass density. Ray bundles represented the finite active aperture rather than a point detector. The solve volume covered the union of the measured ray footprints; the common-view crop was applied only for display. Cropping the solve volume would force attenuation from oblique rays onto artificial side walls.
-
-The nonnegative reconstruction used weighted simultaneous iterative updates with a total-variation proximal step \citep{gilbert1972,rudin1992}. Horizontal regularization suppressed noise while vertical total-variation coupling was disabled to avoid smoothing away the weak parallax signal. Coverage damping reduced the tendency of poorly illuminated voxels to absorb an individual ray's residual. The displayed voxel spacing was $\ReconstructionSpacing\,\mathrm{m}$. This spacing is a numerical discretization, not a claim of equal physical resolution in all directions.
-
-The relative floor pose was estimated by reconstructing from one position on a coarse lattice and evaluating its prediction of the other position, then exchanging their roles. A free offset was used only within this predictive objective. Averaging two half-voxel-shifted lattices reduced beam-pitch aliasing. The fit gave $x_1=\PoseX\pm\PoseXSigma\,\mathrm{m}$, $y_1=\PoseY\pm\PoseYSigma\,\mathrm{m}$ and an azimuth of $\PoseAz\pm\PoseAzSigma$ degrees, with separation $\PoseBaseline\,\mathrm{m}$. The search retained the floor-offset prior $\InputsFloorOffsetPrior\,\mathrm{m}$ and its configured bounds. With no surveyed baseline imposed, this procedure does not independently eliminate the global scale freedom. The fitted separation and its Poisson spread are conditional on the reconstruction domain, search bounds and objective. Within this free-baseline analysis, the pose was selected by the predictive objective rather than by a residual against the on-site beam measurements.
-
-\begin{figure}[htbp]
-\centering
-\includegraphics[width=\linewidth]{backprojection.pdf}
-\caption{Model-free opacity backprojection onto the triangulated beam plane, with the matched transverse beam coordinates indicated. Points mark sampled ray intersections without interpolation; colours saturate beyond the displayed range.}\label{fig:backprojection}
-\end{figure}
+The relative pose minimized cross-position prediction error on two half-voxel-shifted lattices. The fitted floor offset was $(\PoseX,\PoseY)\,\mathrm{m}$, separation $\PoseBaseline\,\mathrm{m}$ and azimuth $\PoseAz$ degrees. With a free baseline, the absolute scale remains conditional on the $\InputsFloorOffsetPrior\,\mathrm{m}$ floor-offset prior, search bounds and reconstruction objective. The pose was not chosen by agreement with the on-site beam heights.
