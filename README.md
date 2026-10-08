@@ -119,7 +119,10 @@ Depth always means **z-axis thickness**, not the long y-axis span or transverse
 x width. The earlier flat overlay displayed the unresolved baseline, not the
 1.45 m conditional estimate. Switching fits changes only the displayed boxes;
 it does not stretch the voxel field or rerun the inference. The color and opacity
-controls affect filled faces and outlines in either model.
+controls affect filled faces and outlines in either model. For presentation, the
+conditional overlay hides its leftmost and rightmost boxes, and displayed boxes
+use 80% of the fitted y span, centred on the same midpoint. These display crops
+do not alter the exported fits or their vertical z thickness.
 
 ## FAST smoke execution
 

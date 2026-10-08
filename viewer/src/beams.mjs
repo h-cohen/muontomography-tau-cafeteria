@@ -50,6 +50,21 @@ export function beamBoxVertices(beams) {
   return out;
 }
 
+// Presentation crop only: fitted/exported geometry remains unchanged.
+export function beamDisplayGeometry(beams) {
+  let boxes = [...beams.boxes];
+  if (beams.conditional && boxes.length > 2) {
+    boxes.sort((a,b) => a.x - b.x);
+    boxes = boxes.slice(1, -1);
+  }
+  return { ...beams, boxes: boxes.map(box => {
+    const [lo, hi] = box.y_extent;
+    const centre = (lo + hi) / 2;
+    const half = 0.4 * (hi - lo);
+    return { ...box, y_extent: [centre - half, centre + half] };
+  }) };
+}
+
 // Six rectangular faces, each represented by two triangles in world coordinates.
 export function beamFaceVertices(beams) {
   const faces = [[0,2,6,4],[1,5,7,3],[0,4,5,1],[2,3,7,6],[0,1,3,2],[4,6,7,5]];
