@@ -115,7 +115,8 @@ def campaign_resolution(cfg: Config, *, sigma_t: float, feature_pitch_m: float) 
         else f"voxel-scale depth NOT resolved: dz = {dz['z_mid']:.2f} m at z = {zmid:.1f} m is "
         f"{dz['z_mid'] / spacing:.1f}x the {spacing:.2f} m voxel spacing. "
         + (
-            "Feature-plane heights can still be constrained by parallax; voxel extent is not box depth."
+            "Feature-plane heights can still be constrained by parallax; "
+            "voxel extent is not box depth."
             if max_b > 0
             else "No stereo baseline is available."
         )
