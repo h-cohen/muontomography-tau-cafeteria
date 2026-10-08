@@ -5,6 +5,8 @@ Rectangular boxes with free transverse centres, bottom $z_0$, width $w$ and dept
 \end{equation}
 Aperture-averaged paths $L_{ik}$ and projected nonnegative beam opacities were fitted over polynomial backgrounds $b_i$. Analytic paths and common multistart bounds avoided density or survey constraints.
 
+Depth changes the oblique shadow shape through side-face crossings; width and column opacity can partly compensate. The fit therefore uses both angular views and the detector-admitted footprint, not a count of reconstructed layers. The finite beam extent in $y$ is prescribed.
+
 The flexible matched-beam fit favoured thin layers ($h=\BeamdepthH\,\mathrm{m}$) and a shallow profile edge (Fig.~\ref{fig:depth}). Count weights also reached the bound; matching-model noisy phantoms had maximum mean bias $\ValidationDepthMaxBias\,\mathrm{m}$. This fit did not resolve physical depth.
 
 Continuing inferred beam spacing beyond the matched subset tested array completeness. Relative centres were fixed apart from a fitted common shift. This conditional model averaged transmission before taking its logarithm:
@@ -13,9 +15,11 @@ Continuing inferred beam spacing beyond the matched subset tested array complete
 \end{equation}
 Here $\ell_{ik}$ is each admitted ray's path, with background constant across the aperture. Independent nonnegative column opacities $q_k$, bottom, depth and width remained free. The conditional estimates were bottom $\ArraydepthBottom\pm\ArraydepthBottomSigma\,\mathrm{m}$ in tracker coordinates, depth $\ArraydepthH\pm\ArraydepthHSigma\,\mathrm{m}$ and width $\ArraydepthW\pm\ArraydepthWSigma\,\mathrm{m}$. Spreads came from \ArraydepthNReplicas{} count replicas with centres, array and pose fixed; the residual statistic was $\ArraydepthChisqPerDof$ per nominal degree of freedom. The on-site bottom/depth $\InputsMeasuredBeamBottom\,\mathrm{m}$/$\InputsMeasuredBeamDepth\,\mathrm{m}$ are independent comparisons with uncalibrated height registration. These are exploratory model-dependent estimates, not unconditional dimensions.
 
+Background coefficients are projected out at each conditional geometry step while column opacities are fitted jointly with bottom, depth, width and shift. Width is initialized from a rough estimate but remains free. The aperture quadrature uses $\ArraydepthQuadratureMajor\times\ArraydepthQuadratureMinor$ samples; nominal and replica fits use identical starts and bounds. Thus the reported spread measures count variation under the prescribed array, rather than uncertainty in the prescription itself.
+
 Independent ray-box intersections checked noiseless recovery. Aperture refinement and multiple starts were consistent, but centre geometry, background and array completeness shifted depth substantially. Flux averaging alone had little effect. Survey agreement was never an optimization criterion.
 
-\begin{figure}[!htbp]
+\begin{figure}[H]
 \centering
 \includegraphics[width=\linewidth]{depth.pdf}
 \caption{Flexible matched-beam baseline: profiles, count bootstrap and fixed-depth refits. The on-site depth is an independent marker. The symmetric-log curve diagnoses the shallow plateau; it is not a confidence interval.}\label{fig:depth}

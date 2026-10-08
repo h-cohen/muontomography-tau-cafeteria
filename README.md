@@ -21,7 +21,7 @@ Run commands from the repository root. Requirements:
 - GNU make >= 4.3.
 - Node >= 24 for viewer unit tests.
 - For `make paper`/`make all`: `latexmk`, `pdflatex`, BibTeX and the LaTeX packages
-  `siunitx`, `natbib`, `hyperref`, `booktabs` and `geometry`.
+  `siunitx`, `natbib`, `hyperref`, `booktabs`, `geometry` and `float`.
 
 ```bash
 uv sync
@@ -100,9 +100,18 @@ To rebuild only the HTML from an existing export, bypassing upstream Make target
 uv run cafetomo viewer --export runs/export --out runs/viewer.html
 ```
 
-The viewer displays the reconstructed room and toggleable beam boxes. A bound
-box fit is labelled as a conditional layer with unresolved physical depth.
-The continued-array estimate is reported separately in `results/arraydepth.json`.
+The viewer displays the reconstructed room and toggleable fitted-beam wireframes.
+Use **Fitted beams** to show/hide the overlay, **beam opacity** to fade it
+(0% hides the lines), and **beam color** to choose its color. These controls are
+independent of voxel opacity, thresholds and the fitted dimensions. The PNG
+export includes the currently displayed overlays; hide/fade them for a voxel-only
+room image.
+
+The current overlay comes from the flexible fit in `results/beamdepth.json`.
+When that fit is bound, its legend explicitly says physical depth is unresolved.
+The separate continued-array estimate lives in `results/arraydepth.json`; it is
+not substituted silently into those boxes. The distinction matters when the
+rendered voxels extend farther in z than the overlay.
 
 ## FAST smoke execution
 
@@ -156,6 +165,106 @@ make arxiv -o paper/generated/paper.pdf
 
 Generate `figures` and `numbers` first. The final command packages that existing
 PDF's source inputs without invoking the Make PDF recipe.
+
+## How beam depth is estimated
+
+### Data and geometric information
+
+Depth fitting uses the measured angular opacity maps, not the rendered voxel
+volume. For each world-direction bin, opacity is `lambda = -ln(n_pos / n_expected)`,
+where the expected open-sky counts include the live-time ratio. The fitted pose
+places both exposures in the same metre-based coordinates. Usable rows within
+the configured transverse-analysis band enter a weighted least-squares fit.
+
+A beam has shared bottom height `z0`, width `w` and vertical depth `h`, extending
+along y. A deeper beam changes shadow shape when viewed obliquely; schematically,
+its transverse extent includes a contribution `h * abs(tan(theta_x))` in addition
+to width. Two views sample different angles, but width, depth, opacity amplitude
+and background can still compensate for one another.
+
+For each ray, paths through the box are calculated from its intersections with
+the bottom, top and side faces. The detector aperture is not a point: only
+midpoint positions admitted by the coincidence geometry are averaged. In local
+detector axes their widths are `W - D * abs(tan(theta))`, rotated into the world
+frame by the fitted azimuth.
+
+### Flexible matched-beam fit
+
+`make analysis` produces `results/beamdepth.json`. The model fits bottom, width,
+depth and each matched beam centre, with an independent nonnegative opacity
+coefficient per beam and a polynomial background per position. Opacity and
+background coefficients are projected out at each geometric step. The transverse
+mean path is integrated analytically where the complete footprint lies inside
+the finite beam extent; other crossings use quadrature.
+
+Multiple starts explore a common parameter domain. The current nominal fit
+reaches a shallow-depth bound. Its raw `h` and box outlines are optimizer
+diagnostics; `h_measurement` and `zbottom_measurement` are NaN and
+`depth_resolved` is false. `make depthcheck` repeats the fit with analytic
+count weights, while fixed-depth nuisance refits expose the thin-layer plateau.
+The bootstrap distribution of these raw parameters is not a physical-depth
+confidence interval.
+
+### Conditional continued-array fit
+
+`make arraydepth` produces `results/arraydepth.json`. It continues the inferred
+beam spacing with two additional centres at each end of the matched array.
+Relative centres and detector pose are fixed; a common transverse shift, bottom,
+width, depth and independent nonnegative normal-column opacities remain free.
+Width starts at the rough 0.3 m estimate and is fitted, not fixed to that value.
+Background coefficients are projected out under the configured polynomial model.
+
+Here the aperture average is taken in transmitted flux before the logarithm:
+
+```text
+lambda_i = background_i - log(mean_A(exp(-sum_k((q_k / h) * path_ik(A)))))
+```
+
+`q_k` is a fitted normal-incidence opacity, not a pinned concrete density.
+Background is assumed constant across the aperture for a given direction.
+The current quadrature uses 32 transverse samples and 3 samples on the second
+projected aperture coordinate. Two identical depth-start rules are used for
+nominal, bootstrap and numerical recovery checks. The JSON records bounds,
+quadrature dimensions, fitted centres, column opacities and boundary flags.
+
+The current conditional result is depth **1.45 m**, width **0.486 m** and bottom
+**6.178 m in tracker coordinates**. Their count spreads are **0.11 m**,
+**0.015 m** and **0.091 m**, respectively. All 50 replicas resample both room
+exposures and their shared roof reference, retaining nominal rows and weights.
+Every replica is kept; failed fits stop the run. No current depth replica reaches
+its bound. Independent 3D ray-box tests check noiseless numerical recovery.
+
+These spreads hold pose, relative centres and array completeness fixed. They
+exclude uncertainty from those assumptions, actual cross-section, background
+misspecification and angular-bin modelling. The residual statistic is about
+2.36 per nominal degree of freedom, so this is an exploratory conditional
+estimate. Changing array/background/centre assumptions shifts depth much more
+than aperture refinement or flux-versus-mean-path averaging. The on-site 1.2 m
+is an external comparison, never a fitting target; comparing the bottom with
+7.3 m also requires a registered tracker-to-floor height origin.
+
+### Why the voxel beam looks thicker
+
+The voxel volume solves a different inverse problem: a distributed, nonnegative
+field of effective opacity. With only two positions, many vertical distributions
+can explain similar projections. Finite angular/aperture resolution, the limited
+view geometry and reconstruction choices can distribute beam-related signal
+across several z layers. The room field also contains background structures;
+voxel opacity and threshold controls alter which of those layers are visible.
+Vertical TV smoothing is disabled in this campaign, but that does not remove
+the geometric null space or the other reconstruction ambiguities.
+
+The saved cross-check in `beamdepth.json` averages beam columns minus
+between-beam columns over a y band, then measures the half-maximum crossings of
+that contrast profile. Its current FWHM is **2.30 m**, from about **6.17 m** to
+**8.47 m**. This is a reconstruction diagnostic, not the fitted physical depth.
+The analytic feature-height resolution scale is about **0.545 m**; it is not a
+measured point-spread kernel and cannot simply be subtracted from the FWHM to
+recover beam thickness. Crossings outside the solve grid are reported as NaN.
+
+Consequently, counting visible z voxels and multiplying by the 0.2 m spacing
+measures a display-dependent extent. It does not replace the angular-data box
+fit or establish that the beam is physically as thick as the visible volume.
 
 ## Direct analysis commands
 
