@@ -72,6 +72,35 @@ def _beams_meta(results_dir: Path, cfg: Config) -> dict | None:
     }
 
 
+def _conditional_beams_meta(results_dir: Path, cfg: Config) -> dict | None:
+    path = results_dir / "arraydepth.json"
+    if not path.is_file():
+        return None
+    fit = json.loads(path.read_text())
+    z, h, w = float(fit["bottom"]), float(fit["h"]), float(fit["w"])
+    centres = [float(x) for x in fit["centres"]]
+    if not all(np.isfinite(v) for v in [z, h, w, *centres]) or min(h, w) <= 0:
+        raise ValueError("invalid conditional beam geometry")
+    return {
+        "boxes": [
+            {
+                "x": x,
+                "w": w,
+                "zbottom": z,
+                "ztop": z + h,
+                "y_extent": list(cfg.beamdepth.y_extent_m),
+            }
+            for x in centres
+        ],
+        "h": h,
+        "h_sigma": fit.get("h_sigma"),
+        "conditional": True,
+        "at_bound": bool(fit.get("at_bound", False)),
+        "depth_resolved": False,
+        "uncertainty_scope": "count spread; fixed array and pose",
+    }
+
+
 def export_volume(
     voxels_dir: str | Path,
     cfg: Config,
@@ -152,5 +181,11 @@ def export_volume(
         beams = _beams_meta(Path(results_dir), cfg)
         if beams is not None:
             meta["beams"] = beams
+        conditional = _conditional_beams_meta(Path(results_dir), cfg)
+        if conditional is not None:
+            meta["beam_models"] = {"conditional": conditional}
+            if beams is not None:
+                meta["beam_models"]["matched"] = beams
+            meta["beam_model_default"] = "conditional"
     (out / "meta.json").write_text(json.dumps(_json_safe(meta), indent=2) + "\n")
     return out / "volume.npy"

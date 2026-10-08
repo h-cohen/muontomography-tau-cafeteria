@@ -76,7 +76,7 @@ $(RESULTS)/uncertainty.json: $(ANALYSIS) $(POSE) $(INGEST) \
 	  --out $(RUNS)/bootstrap --cache $(CACHE)
 
 export: $(RUNS)/export/meta.json
-$(RUNS)/export/meta.json: $(RESULTS)/uncertainty.json $(CODE)
+$(RUNS)/export/meta.json: $(RESULTS)/uncertainty.json $(RESULTS)/arraydepth.json $(CODE)
 	$(CLI) export --config $(CONFIG) --pose $(POSE) --voxels $(RUNS)/voxels \
 	  --bootstrap $(RUNS)/bootstrap --results $(RESULTS) --out $(RUNS)/export
 

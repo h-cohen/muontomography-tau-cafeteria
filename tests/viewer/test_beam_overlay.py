@@ -104,3 +104,29 @@ def test_faded_beam_png_preserves_half_alpha_on_transparent_volume(page, dist_pa
       return [...values];
     }""")
     assert any(126 <= value <= 129 for value in alphas), alphas
+
+
+def test_conditional_fit_defaults_to_vertical_depth_and_can_switch_baseline(
+    page, dist_path, run_fixture
+):
+    import json
+
+    run = run_fixture(beams=BEAMS)
+    path = run / "meta.json"
+    meta = json.loads(path.read_text())
+    conditional = {
+        **BEAMS,
+        "conditional": True,
+        "h": 1.45,
+        "h_sigma": 0.11,
+        "boxes": [{**box, "ztop": box["zbottom"] + 1.45} for box in BEAMS["boxes"]],
+    }
+    meta["beam_models"] = {"conditional": conditional, "matched": BEAMS}
+    meta["beam_model_default"] = "conditional"
+    path.write_text(json.dumps(meta))
+    _load(page, dist_path, run)
+    assert page.locator("#beam-model").input_value() == "conditional"
+    assert "conditional z depth h = 1.45" in page.locator("#beam-legend").inner_text()
+    assert page.evaluate("() => window.__viewerState.beamFaceVertexCount") == 72
+    page.locator("#beam-model").select_option("matched")
+    assert page.locator("#beam-legend").inner_text() == "beam depth h = 1.20 ± 0.15 m"

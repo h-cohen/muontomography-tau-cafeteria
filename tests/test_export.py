@@ -187,3 +187,30 @@ def test_unresolved_beam_fit_is_not_exported_as_a_depth_measurement(tmp_path, cf
     assert beams["h"] == BEAMDEPTH["h"]
     assert beams["depth_resolved"] is False
     assert beams["h_sigma"] is None
+
+
+def test_conditional_array_is_available_as_explicit_default_viewer_model(tmp_path, cfg):
+    results = tmp_path / "results"
+    results.mkdir()
+    (results / "beamdepth.json").write_text(json.dumps(BEAMDEPTH))
+    (results / "arraydepth.json").write_text(
+        json.dumps(
+            {
+                "h": 1.45,
+                "bottom": 6.18,
+                "w": 0.49,
+                "centres": [-1.0, 1.0],
+                "h_sigma": 0.11,
+                "conditional": True,
+            }
+        )
+    )
+    out = tmp_path / "view"
+    export_volume(_voxels_dir(tmp_path), cfg, results_dir=results, out_dir=out)
+    meta = _meta(out)
+    assert meta["beam_model_default"] == "conditional"
+    beams = meta["beam_models"]["conditional"]
+    assert beams["conditional"] is True
+    assert beams["uncertainty_scope"] == "count spread; fixed array and pose"
+    assert beams["boxes"][0]["ztop"] - beams["boxes"][0]["zbottom"] == pytest.approx(1.45)
+    assert meta["beam_models"]["matched"]["h"] == BEAMDEPTH["h"]

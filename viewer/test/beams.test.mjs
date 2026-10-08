@@ -58,3 +58,11 @@ test('unresolved physical depth is labelled as a conditional fit layer', () => {
     'box-fit layer; physical depth unresolved',
   );
 });
+
+test('filled beam faces preserve width, length and vertical depth', async () => {
+  const { beamFaceVertices } = await import('../src/beams.mjs');
+  const verts = beamFaceVertices({ boxes: [BOX] });
+  assert.equal(verts.length, 108);
+  const pts = points(verts);
+  assert.equal(Math.max(...pts.map(p => p[2])) - Math.min(...pts.map(p => p[2])), 1.25);
+});

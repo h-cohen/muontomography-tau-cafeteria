@@ -66,6 +66,7 @@ export function createState() {
     beamOpacity: 1,
     beamColor: '#f24dd9',
     beamVertexCount: 0,
+    beamFaceVertexCount: 0,
     window: null,
   };
 }

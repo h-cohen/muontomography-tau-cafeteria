@@ -9,7 +9,7 @@ import { COLORMAP_NAMES, colormapStops } from './colormap.mjs';
 import { captureView, loadViews, saveViews } from './views.mjs';
 import { SHORTCUTS, keyToAction } from './shortcuts.mjs';
 import { markerVertices, dedupeDetectors, projectToScreen } from './markers.mjs';
-import { beamBoxVertices, beamLegendText } from './beams.mjs';
+import { beamBoxVertices, beamFaceVertices, sortedBeamFaces, beamLegendText } from './beams.mjs';
 import { voxelGates, spatialGates } from './gates.mjs';
 import { pickVoxel } from './picker.mjs';
 import { readRun, embeddedFiles } from './runload.mjs';
@@ -356,6 +356,15 @@ export function initViewer(root) {
   gl.enableVertexAttribArray(0);
   gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
   gl.bindVertexArray(null);
+  const beamFaceVao = gl.createVertexArray();
+  const beamFaceBuffer = gl.createBuffer();
+  gl.bindVertexArray(beamFaceVao);
+  gl.bindBuffer(gl.ARRAY_BUFFER, beamFaceBuffer);
+  gl.enableVertexAttribArray(0);
+  gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+  gl.bindVertexArray(null);
+  let beamFaces = new Float32Array(0);
+  let beamModels = {};
   const CAMERA_NEAR = 0.05, CAMERA_FAR = 100;
   const RAY_STEPS = 200; // max samples per ray INSIDE the volume box
   const ADAPTIVE_STEPS = 64; // fast-preview step count while state.interacting
@@ -665,12 +674,20 @@ export function initViewer(root) {
     gl.uniform4fv(markerUniforms.uMarkerColor, [...rgb, state.beamOpacity]);
     gl.enable(gl.BLEND);
     gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.bindVertexArray(beamFaceVao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, beamFaceBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, sortedBeamFaces(beamFaces, viewProj), gl.DYNAMIC_DRAW);
+    gl.enable(gl.CULL_FACE);
+    gl.cullFace(gl.BACK);
+    gl.drawArrays(gl.TRIANGLES, 0, beamFaces.length / 3);
+    gl.disable(gl.CULL_FACE);
+    gl.bindVertexArray(beamVao);
     gl.drawArrays(gl.LINES, 0, state.beamVertexCount);
     gl.disable(gl.BLEND);
     gl.bindVertexArray(null);
   }
 
-  // A run without a beams block (no beam-depth fit yet) hides the control and
+  // A run without a fitted beam model hides the control and
   // the legend line instead of offering a toggle that draws nothing; one with
   // it shows the boxes by default, since they are the paper's headline.
   function applyBeams(beams) {
@@ -679,6 +696,8 @@ export function initViewer(root) {
     const legendEl = root.querySelector('#beam-legend');
     const verts = beams ? beamBoxVertices(beams) : new Float32Array(0);
     state.beamVertexCount = verts.length / 3;
+    beamFaces = beams ? beamFaceVertices(beams) : new Float32Array(0);
+    state.beamFaceVertexCount = beamFaces.length / 3;
     gl.bindBuffer(gl.ARRAY_BUFFER, beamBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, verts, gl.STATIC_DRAW);
     state.showBeams = !!beams;
@@ -841,7 +860,17 @@ export function initViewer(root) {
     state.detectors = meta.detectors || [];
     rebuildMarkerBuffer();
 
-    applyBeams(meta.beams || null);
+    beamModels = meta.beam_models || (meta.beams ? { matched: meta.beams } : {});
+    const selector = root.querySelector('#beam-model');
+    selector.replaceChildren();
+    for (const key of Object.keys(beamModels)) {
+      const option = document.createElement('option');
+      option.value = key;
+      option.textContent = key === 'conditional' ? 'Conditional continued array (z depth)' : 'Matched-beam baseline';
+      selector.append(option);
+    }
+    selector.value = meta.beam_model_default || Object.keys(beamModels)[0] || '';
+    applyBeams(beamModels[selector.value] || null);
 
     const banner = root.querySelector('#resolution-banner');
     const res = meta.resolution || {};
@@ -1052,6 +1081,13 @@ export function initViewer(root) {
     commit({ showBeams: ev.target.checked });
   });
 
+  root.querySelector('#beam-model').addEventListener('change', ev => {
+    const visible = state.showBeams;
+    applyBeams(beamModels[ev.target.value]);
+    state.showBeams = visible;
+    root.querySelector('#toggle-beams').checked = visible;
+    render();
+  });
   root.querySelector('#beam-opacity').addEventListener('input', (ev) => {
     const value = Number(ev.target.value);
     root.querySelector('#beam-opacity-readout').textContent = `${Math.round(100 * value)}%`;

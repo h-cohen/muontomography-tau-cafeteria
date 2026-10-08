@@ -253,6 +253,7 @@
         <label><input id="toggle-detectors" type="checkbox" style="width:auto"> Detectors</label>
         <div id="beams-control" hidden>
           <label title="Box geometry fitted to angular opacity; voxel thickness is a separate reconstruction diagnostic."><input id="toggle-beams" type="checkbox" style="width:auto"> Fitted beams</label>
+          <label for="beam-model">Beam fit</label><select id="beam-model"></select>
           <div class="row"><label for="beam-opacity">beam opacity</label><input id="beam-opacity" type="range" min="0" max="1" step="0.01" value="1" style="flex:1;min-width:0"><span id="beam-opacity-readout" class="mono">100%</span></div>
           <div class="row"><label for="beam-color">beam color</label><input id="beam-color" type="color" value="#f24dd9" style="width:44px;height:28px;padding:2px"></div>
         </div>
