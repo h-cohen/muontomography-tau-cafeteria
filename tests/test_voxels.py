@@ -43,3 +43,15 @@ def test_auto_grid_rejects_an_inverted_z_range():
     vol = Volume(z_min_m=5.0, z_max_m=1.0, spacing_m=0.5)
     with pytest.raises(ValueError, match="z_max_m"):
         auto_grid(vol, {"pos0": (0.0, 0.0, 0.0)}, t_reach=1.0, aperture_m=0.35)
+
+
+def test_auto_grid_contains_a_rotated_detector_footprint():
+    from cafetomo.raycast import bundle_offsets
+
+    vol = Volume(z_min_m=1.0, z_max_m=3.0, spacing_m=0.02)
+    grid = auto_grid(vol, {"pos0": (0.0, 0.0, 0.0)}, t_reach=0.0, aperture_m=0.35)
+    offsets = bundle_offsets(np.array([[0.0, 0.0, 1.0]]), 0.35, 16, az_deg=35.0)
+    for axis in (0, 1):
+        lo, hi = grid.extent(axis)
+        assert offsets[:, :, axis].min() >= lo
+        assert offsets[:, :, axis].max() <= hi

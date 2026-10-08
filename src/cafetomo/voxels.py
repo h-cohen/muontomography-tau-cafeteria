@@ -47,8 +47,8 @@ def auto_grid(
     The sky grid extends well past the measured range to catch stray counts;
     sizing the voxel grid by that would inflate it to hold bins nothing constrains.
 
-    `aperture_m` is required rather than defaulted: the ray bundle's half-width
-    is what pads the grid, and a default would have to name a specific detector,
+    `aperture_m` is required rather than defaulted: the aperture's circumscribed radius
+    pads the grid for every detector azimuth, and a default would have to name a specific detector,
     putting site knowledge in a module that otherwise has none.
     """
     if vol.z_max_m <= vol.z_min_m:
@@ -61,8 +61,8 @@ def auto_grid(
         (x0, x1), (y0, y1) = vol.xy_m
     else:
         # A ray of tangent t leaving (px, py, pz) is at px + t*(z1 - pz) by the
-        # top of the grid; the bundle spreads half an aperture either side.
-        pad = 0.5 * aperture_m
+        # top of the grid. The circumscribed radius bounds a rotated aperture.
+        pad = aperture_m / np.sqrt(2.0)
         xs, ys = [], []
         for px, py, pz in origins.values():
             reach = t_reach * max(z1 - pz, 0.0) + pad

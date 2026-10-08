@@ -1,3 +1,4 @@
+from dataclasses import replace
 from types import SimpleNamespace
 
 import numpy as np
@@ -49,6 +50,13 @@ def test_zero_jitter_injects_zero_dlam(cfg):
     assert np.any(mcs_dlam(data, c, depth, 0.02))
 
 
+def test_mcs_geometry_uses_each_fitted_beam_amplitude(cfg):
+    rows = sky_rows(cfg.position_ids, T_MAX, N_BINS)
+    data = FitData(lam=np.zeros(rows.n_rows), w=np.ones(rows.n_rows), rows=rows)
+    depth = SimpleNamespace(z0=Z0, w=W, h=1.25, xs=XS, kappa=(0.0,) * len(XS), kappa_mean=1.0)
+    assert not np.any(mcs_dlam(data, cfg, depth, 0.02))
+
+
 def test_budget_adds_every_source_in_quadrature():
     zero = {"depth_h": 0.0}
     shifts = {"flux": zero, "mcs": {"depth_h": 0.4}, "bg": zero}
@@ -70,6 +78,7 @@ def test_budget_keeps_nan_instead_of_zero():
 
 @pytest.mark.slow
 def test_shifts_on_the_phantom(cfg):
+    cfg = replace(cfg, beamdepth=replace(cfg.beamdepth, model="concrete"))
     c, data = beam_phantom(cfg, 1.25, np.random.default_rng(5))
     c, sky = c.fast(), phantom_sky()
     nominal = measure(data, c, sky, with_volume=False)
@@ -90,3 +99,32 @@ def test_shifts_on_the_phantom(cfg):
     # Denser beams need less depth for the same contrast: a few cm per 0.1 g/cm^3.
     assert np.isfinite(rho["depth_h"]) and 0 < rho["depth_h"] < 0.15
     assert np.isfinite(model["depth_h"]) and abs(model["depth_h"]) < 0.15
+
+
+def test_pose_sensitivity_includes_detector_azimuth(cfg, monkeypatch):
+    import cafetomo.systematics as module
+    from cafetomo.measure import Measurement
+
+    rows = sky_rows(cfg.position_ids, 0.2, 1)
+    data = FitData(lam=np.zeros(rows.n_rows), w=np.ones(rows.n_rows), rows=rows)
+    monkeypatch.setattr(module, "solve_opacity", lambda *args: None)
+    monkeypatch.setattr(module, "build_fit_data", lambda *args, **kwargs: data)
+    monkeypatch.setattr(
+        module,
+        "measure",
+        lambda data, c, *args, **kwargs: Measurement(
+            values={"depth_h": c.exposure(c.selfcal.free_pose).pose.az_deg}, volume=None
+        ),
+    )
+    nominal = Measurement(values={"depth_h": 0.0}, volume=None)
+    shift = module.pose_shift(
+        None,
+        cfg,
+        {},
+        {},
+        {"x": 0.0, "y": 0.0, "az_deg": 2.0},
+        nominal,
+        sky=phantom_sky(),
+        rows=rows,
+    )
+    assert shift["depth_h"] == pytest.approx(2.0)

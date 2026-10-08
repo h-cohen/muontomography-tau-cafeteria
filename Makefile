@@ -13,7 +13,8 @@ INGEST  := $(RUNS)/ingest/meta.json $(RESULTS)/data.json
 RECON   := $(RUNS)/voxels/meta.json $(RESULTS)/reconstruction.json
 ANALYSIS := $(RESULTS)/beamdepth.json $(RESULTS)/beams.json $(RESULTS)/autofocus.json
 NUMERIC = $(RESULTS)/data.json $(POSE) $(RESULTS)/reconstruction.json $(ANALYSIS) \
-           $(RESULTS)/validation.json $(RESULTS)/uncertainty.json $(RESULTS)/inputs.json
+           $(RESULTS)/validation.json $(RESULTS)/uncertainty.json $(RESULTS)/inputs.json \
+           $(RESULTS)/depthdiagnostics.json
 # main.tex reads generated/numbers.tex and generated/figures/ relative to paper/.
 # GEN is that `generated` directory: paper/generated, or runs/fast/generated
 # under FAST. latexmk runs in paper/ with TEXINPUTS led by GEN's parent, so
@@ -22,8 +23,9 @@ NUMERIC = $(RESULTS)/data.json $(POSE) $(RESULTS)/reconstruction.json $(ANALYSIS
 GEN     := $(if $(FAST),runs/fast/generated,paper/generated)
 TEXROOT := $(abspath $(dir $(GEN)))
 POSE    := $(RESULTS)/pose.json
-FIGS    := setup opacity backprojection autofocus triangulation depth volume uncertainty
+FIGS    := setup opacity height depth
 FIGPDF  := $(FIGS:%=$(GEN)/figures/%.pdf)
+AUTHORFIG := $(wildcard paper/figures/room_voxels.pdf paper/figures/room_voxels.png)
 
 .PHONY: all ingest selfcal opacity reconstruct analysis validation uncertainty export figures paper viewer test clean arxiv
 .DELETE_ON_ERROR:
@@ -55,6 +57,10 @@ analysis: $(ANALYSIS)
 $(ANALYSIS) &: $(RECON) $(CODE)
 	$(CLI) analyze --config $(CONFIG) --pose $(POSE) --opacity $(RUNS)/opacity \
 	  --voxels $(RUNS)/voxels --results $(RESULTS) --cache $(CACHE)
+
+$(RESULTS)/depthdiagnostics.json: $(ANALYSIS) $(POSE) $(INGEST) $(RUNS)/opacity/meta.json $(CODE)
+	$(CLI) depthcheck --config $(CONFIG) --pose $(POSE) --ingest $(RUNS)/ingest \
+	  --opacity $(RUNS)/opacity --results $(RESULTS)
 
 validation: $(RESULTS)/validation.json
 $(RESULTS)/validation.json: $(ANALYSIS) $(RUNS)/opacity/meta.json $(POSE) $(CODE)
@@ -93,7 +99,7 @@ $(GEN)/numbers.tex: $(NUMERIC) $(CODE)
 
 paper: $(GEN)/paper.pdf
 $(GEN)/paper.pdf: paper/main.tex $(wildcard paper/sections/*.tex) paper/refs.bib \
-                  $(GEN)/numbers.tex $(FIGPDF)
+                  $(GEN)/numbers.tex $(FIGPDF) $(AUTHORFIG)
 	cd paper && TEXINPUTS=$(TEXROOT): BIBINPUTS=$(abspath paper): latexmk -pdf -interaction=nonstopmode -halt-on-error \
 	  -outdir=$(abspath $(GEN)) main.tex
 	mv $(GEN)/main.pdf $@
@@ -105,7 +111,7 @@ test:
 	node --test viewer/test/*.test.mjs
 
 arxiv: paper
-	tar -czf $(GEN)/arxiv.tar.gz -C paper main.tex sections refs.bib \
+	tar -czf $(GEN)/arxiv.tar.gz -C paper main.tex sections refs.bib $(AUTHORFIG:paper/%=%) \
 	  -C $(abspath $(GEN)) main.bbl -C $(TEXROOT) \
 	  generated/numbers.tex $(FIGS:%=generated/figures/%.pdf)
 

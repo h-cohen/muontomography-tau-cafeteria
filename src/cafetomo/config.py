@@ -126,6 +126,7 @@ class BeamSettings:
 
 @dataclass(frozen=True)
 class BeamDepthSettings:
+    model: str = "geometry"
     y_extent_m: tuple = (-5.0, 5.0)
     band_sy: float = 0.32
     w_init_m: float = 0.3
@@ -135,6 +136,10 @@ class BeamDepthSettings:
     bg_degree: int = 2
     n_sub: int = 4
     y_band_m: tuple = (-2.0, 2.0)
+
+    def __post_init__(self):
+        if self.model not in ("geometry", "concrete"):
+            raise ValueError(f"beamdepth: unknown model {self.model!r}")
 
 
 @dataclass(frozen=True)

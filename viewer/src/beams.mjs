@@ -55,6 +55,7 @@ export function beamBoxVertices(beams) {
 // than a statistical-only error that would read as the full one.
 export function beamLegendText(beams) {
   if (!Number.isFinite(beams.h)) throw new Error('beams.h must be a finite depth in metres');
+  if (beams.depth_resolved === false) return 'box-fit layer; physical depth unresolved';
   const sigma = beams.h_sigma;
   return Number.isFinite(sigma)
     ? `beam depth h = ${beams.h.toFixed(2)} ± ${sigma.toFixed(2)} m`

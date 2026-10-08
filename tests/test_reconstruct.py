@@ -25,7 +25,7 @@ def cfg2(cfg):
 def _data(cfg, seed=0, sigma=None):
     """Both positions over one regular tangent grid, ~70% of rows measured."""
     rng = np.random.default_rng(seed)
-    rows = sky_rows(cfg.position_ids, 1.0, N_SIDE)
+    rows = sky_rows(cfg.position_ids, cfg.detector.max_tan, N_SIDE)
     lam = rng.uniform(0.0, 2.0, rows.n_rows)
     live = rng.random(rows.n_rows) < 0.7
     sig = np.ones(rows.n_rows) if sigma is None else sigma

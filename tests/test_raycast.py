@@ -23,13 +23,34 @@ def _rows(sx, sy, pos=None) -> RowIndex:
 ORIGINS = {"pos0": (0.0, 0.0, 0.0), "pos1": (2.0, 0.0, 0.0)}
 
 
-def test_bundle_offsets_are_perpendicular_to_their_ray():
-    d = np.array([[0.0, 0.0, 1.0], [0.6, 0.0, 0.8], [0.3, -0.4, np.sqrt(1 - 0.25)]])
-    d /= np.linalg.norm(d, axis=1, keepdims=True)
-    offs = bundle_offsets(d, aperture_m=0.35, n_sub=3)
+def test_bundle_offsets_stay_inside_both_detector_layers():
+    slopes = np.array([[0.5, 0.2], [-0.7, 0.1]])
+    directions = np.column_stack([slopes, np.ones(2)])
+    directions /= np.linalg.norm(directions, axis=1, keepdims=True)
+    offsets = bundle_offsets(directions, 0.35, 4, layer_dz_m=0.389)
+    np.testing.assert_allclose(offsets[:, :, 2], 0.0)
+    for z in (-0.389 / 2, 0.389 / 2):
+        intercepts = offsets[:, :, :2] + slopes[:, None, :] * z
+        assert np.all(np.abs(intercepts) <= 0.35 / 2)
+    span = 0.35 - np.abs(slopes) * 0.389
+    np.testing.assert_allclose(np.ptp(offsets[:, :, :2], axis=1), 0.75 * span)
 
-    assert offs.shape == (3, 9, 3)
-    np.testing.assert_allclose(np.einsum("rsk,rk->rs", offs, d), 0.0, atol=1e-12)
+
+def test_conditional_footprint_rotates_with_detector_axes():
+    angle = np.radians(35.0)
+    rotation = np.array(
+        [[np.cos(angle), -np.sin(angle), 0.0], [np.sin(angle), np.cos(angle), 0.0], [0.0, 0.0, 1.0]]
+    )
+    local = np.array([[0.5, 0.2, 1.0]])
+    world = local @ rotation.T
+    plain = bundle_offsets(local, 0.35, 3, layer_dz_m=0.389)
+    turned = bundle_offsets(world, 0.35, 3, layer_dz_m=0.389, az_deg=35.0)
+    np.testing.assert_allclose(turned, plain @ rotation.T, atol=1e-12)
+
+
+def test_unsupported_centre_direction_is_not_an_artificial_pinhole():
+    with pytest.raises(ValueError, match="coincidence"):
+        bundle_offsets(np.array([[1.0, 0.0, 1.0]]), 0.35, 4, layer_dz_m=0.389)
 
 
 def test_bundle_offsets_span_the_aperture_and_are_centred():
@@ -146,3 +167,20 @@ def test_matrix_is_csr_and_finite():
     assert sparse.isspmatrix_csr(A)
     assert np.all(np.isfinite(A.data))
     assert A.data.min() > 0.0
+
+
+def test_cache_key_includes_detector_separation_and_orientation(tmp_path):
+    grid = VoxelGrid(origin=(-1.0, -1.0, 1.0), spacing=0.25, shape=(8, 8, 8))
+    rows = _rows([0.3], [0.2])
+    for separation, azimuth in [(0.0, 0.0), (0.389, 0.0), (0.389, 35.0)]:
+        build_system_matrix(
+            rows,
+            ORIGINS,
+            grid,
+            aperture_m=0.35,
+            n_sub=4,
+            layer_dz_m=separation,
+            azimuths={"pos0": azimuth},
+            cache_dir=tmp_path,
+        )
+    assert len(list(tmp_path.glob("A_*.npz"))) == 3

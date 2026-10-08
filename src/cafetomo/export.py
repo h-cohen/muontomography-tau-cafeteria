@@ -47,7 +47,8 @@ def _beams_meta(results_dir: Path, cfg: Config) -> dict | None:
     and treats every beam as running the full configured y extent; the boxes
     are drawn exactly as fitted. `h_sigma` is the TOTAL uncertainty from the
     error budget, null until that stage has run, so the viewer never shows a
-    statistical-only error as if it were the full one.
+    statistical-only error as if it were the full one. Unresolved dimensions
+    retain their fit outlines but have no measurement error attached.
     """
     fit_path = results_dir / "beamdepth.json"
     if not fit_path.is_file():
@@ -55,6 +56,9 @@ def _beams_meta(results_dir: Path, cfg: Config) -> dict | None:
     fit = json.loads(fit_path.read_text())
     unc_path = results_dir / "uncertainty.json"
     h_sigma = json.loads(unc_path.read_text())["depth_h_total"] if unc_path.is_file() else None
+    resolved = bool(fit.get("depth_resolved", not fit.get("at_bound", False)))
+    if not resolved:
+        h_sigma = None
     y0, y1 = (float(v) for v in cfg.beamdepth.y_extent_m)
     z0, h, w = float(fit["zbottom"]), float(fit["h"]), float(fit["w"])
     return {
@@ -63,6 +67,7 @@ def _beams_meta(results_dir: Path, cfg: Config) -> dict | None:
             for xk in fit["xs"]
         ],
         "h": h,
+        "depth_resolved": resolved,
         "h_sigma": None if h_sigma is None else float(h_sigma),
     }
 

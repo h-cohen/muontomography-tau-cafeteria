@@ -151,6 +151,7 @@ def cmd_reconstruct(args) -> None:
 def cmd_analyze(args) -> None:
     """autofocus.json, beams.json (+ the reconstruction gate as `gate_<k>`) and
     beamdepth.json (+ the voxel z-profile cross-check as `zprofile_<k>`)."""
+    from cafetomo.beamdepth import profile_beam_depth
     from cafetomo.beams import sky_images, verify_gate
     from cafetomo.measure import measure
     from cafetomo.reconstruct import VoxelSolution
@@ -160,19 +161,72 @@ def cmd_analyze(args) -> None:
     sol = VoxelSolution.load(Path(args.voxels) / "volume_full.npz")
     m = measure(data, cfg, maps.sky, vgrid=sol.grid, cache_dir=args.cache)
     res = Path(args.results)
-    _write_json(res / "autofocus.json", m.details["autofocus"].to_json())
     beams = m.details["beams"]
     gate = verify_gate(
         sky_images(data, maps.sky), cfg.origins(), maps.sky.centers, beams["z"], sol, cfg.beams
     )
-    _write_json(res / "beams.json", beams | {f"gate_{k}": v for k, v in gate.items()})
     depth = m.details["depth"]
-    _write_json(
-        res / "beamdepth.json",
-        depth.to_json() | {f"zprofile_{k}": v for k, v in m.details["zprofile"].items()},
+    profile = {}
+    if cfg.beamdepth.model == "geometry":
+        heights = np.unique(
+            np.r_[np.linspace(0.1, cfg.beamdepth.h_max_m, 21), cfg.beamdepth.h_starts_m, depth.h]
+        )
+        profile = {
+            "depth_profile": profile_beam_depth(
+                data,
+                cfg,
+                xs_init=beams["beams_x"],
+                z0_init=beams["z"],
+                heights=heights,
+                nominal=depth,
+            )
+        }
+    _write_json(res / "autofocus.json", m.details["autofocus"].to_json())
+    _write_json(res / "beams.json", beams | {f"gate_{k}": v for k, v in gate.items()})
+    depth_doc = (
+        depth.to_json() | profile | {f"zprofile_{k}": v for k, v in m.details["zprofile"].items()}
     )
+    if profile and profile["depth_profile"]["minimum_at_edge"]:
+        depth_doc |= {
+            "depth_resolved": False,
+            "h_measurement": float("nan"),
+            "zbottom_measurement": float("nan"),
+        }
+    _write_json(res / "beamdepth.json", depth_doc)
+    if profile and profile["depth_profile"]["minimum_at_edge"]:
+        print(
+            "WARNING: depth profile minimum is at a sampled edge; depth is unresolved",
+            file=sys.stderr,
+        )
     if depth.at_bound:
         print("WARNING: beam-depth fit ended on a bound; h is not a measurement", file=sys.stderr)
+
+
+def cmd_depthcheck(args) -> None:
+    """Refit the same depth estimator using analytic count uncertainty weights.
+
+    This diagnostic changes only the weights and preserves the nominal rows.
+    It is not a calibrated additional contribution to the uncertainty budget.
+    """
+    from cafetomo.beamdepth import estimate_beam_depth
+    from cafetomo.opacity import build_fit_data, poisson_sigma
+
+    cfg = _cfg(args)
+    maps, _, data = _fit_data(cfg, Path(args.opacity))
+    grid, live = _grid(cfg, Path(args.ingest))
+    analytic = build_fit_data(maps, cfg, poisson_sigma(grid, cfg, live), rows=data.rows)
+    beams, depth = estimate_beam_depth(analytic, cfg, maps.sky)
+    _write_json(
+        Path(args.results) / "depthdiagnostics.json",
+        {
+            "analytic_h": depth.h,
+            "analytic_zbottom": depth.z0,
+            "analytic_chisq_per_dof": depth.chi2_per_dof,
+            "analytic_at_bound": depth.at_bound,
+            "analytic_beams_z": beams["z"],
+            "analytic_kappa": list(depth.kappa),
+        },
+    )
 
 
 def cmd_validate(args) -> None:
@@ -236,16 +290,17 @@ def cmd_uncertainty(args) -> None:
         cfg,
         live,
         sigma,
-        {"x": pose_doc["x_sigma"], "y": pose_doc["y_sigma"]},
+        {"x": pose_doc["x_sigma"], "y": pose_doc["y_sigma"], "az_deg": pose_doc["az_sigma"]},
         nominal,
         sky=sky,
         rows=data.rows,
         cache_dir=args.cache,
     )
     bg = background_shift(data, cfg, nominal, sky=sky, cache_dir=args.cache)
-    rho = density_shift(data, cfg, nominal, sky=sky, cache_dir=args.cache)
-    model = flux_model_shift(data, cfg, nominal, sky=sky, cache_dir=args.cache)
-    shifts = {"flux": flux, "mcs": mcs_d, "pose": pose, "bg": bg, "rho": rho, "model": model}
+    shifts = {"flux": flux, "mcs": mcs_d, "pose": pose, "bg": bg}
+    if cfg.beamdepth.model == "concrete":
+        shifts["rho"] = density_shift(data, cfg, nominal, sky=sky, cache_dir=args.cache)
+        shifts["model"] = flux_model_shift(data, cfg, nominal, sky=sky, cache_dir=args.cache)
     _write_json(
         Path(args.results) / "uncertainty.json",
         {
@@ -301,6 +356,7 @@ def main(argv: list[str] | None = None) -> None:
     stage("opacity", cmd_opacity, "config", "pose", "ingest", "out")
     stage("reconstruct", cmd_reconstruct, "config", "pose", "opacity", "out", "results", "cache")
     stage("analyze", cmd_analyze, "config", "pose", "opacity", "voxels", "results", "cache")
+    stage("depthcheck", cmd_depthcheck, "config", "pose", "ingest", "opacity", "results")
     stage("validate", cmd_validate, "config", "pose", "opacity", "results", "cache")
     stage(
         "uncertainty",

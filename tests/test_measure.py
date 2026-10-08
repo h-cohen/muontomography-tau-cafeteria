@@ -34,8 +34,8 @@ def test_measure_without_volume_recovers_the_phantom(phantom):
     assert m.values["depth_ztop"] == pytest.approx(m.values["depth_zbottom"] + m.values["depth_h"])
     assert m.values["beams_pitch"] == pytest.approx(XS[1] - XS[0], abs=0.15)
     depth = m.details["depth"]
-    assert depth.density == c.physics.concrete_density_gcm3
-    assert depth.kappa_mean > 0 and depth.overburden_mean > 0
+    assert np.isnan(depth.density) and np.isnan(depth.overburden_mean)
+    assert len(depth.kappa) == len(XS) and min(depth.kappa) > 0
 
 
 @pytest.mark.slow

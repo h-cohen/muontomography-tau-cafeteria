@@ -174,3 +174,16 @@ def test_no_beams_block_without_a_beam_depth_fit(tmp_path, cfg):
     assert "beams" not in _meta(out)
     export_volume(_voxels_dir(tmp_path), cfg, out_dir=out)
     assert "beams" not in _meta(out)
+
+
+def test_unresolved_beam_fit_is_not_exported_as_a_depth_measurement(tmp_path, cfg):
+    results = tmp_path / "results"
+    results.mkdir()
+    (results / "beamdepth.json").write_text(json.dumps(BEAMDEPTH | {"depth_resolved": False}))
+    (results / "uncertainty.json").write_text(json.dumps({"depth_h_total": 0.4}))
+    out = tmp_path / "view"
+    export_volume(_voxels_dir(tmp_path), cfg, out_dir=out, results_dir=results)
+    beams = _meta(out)["beams"]
+    assert beams["h"] == BEAMDEPTH["h"]
+    assert beams["depth_resolved"] is False
+    assert beams["h_sigma"] is None

@@ -164,3 +164,26 @@ def test_triangulates_phantom_ceiling(cfg):
     assert res["ok"]
     assert res["z"] == pytest.approx(7.15, abs=0.2)
     assert res["pitch"] == pytest.approx(1.7, abs=0.15)
+
+
+def test_gate_checks_shared_coverage_without_single_view_edge_features():
+    centers = make_sky_grid(0.65, 160).centers
+    origins = {"pos0": (0.0, 0.0, 0.0), "pos1": (2.0, 0.0, 0.0)}
+    shared = (0.0, 1.7, 3.4)
+    images = _comb_images(origins, centers, (*shared, 5.7), 7.0)
+    grid = VoxelGrid(origin=(-5.0, -3.0, 6.5), spacing=0.1, shape=(120, 60, 10))
+    truth = beam_ceiling(
+        grid,
+        xs=shared,
+        z0=6.9,
+        w=0.2,
+        h=0.2,
+        kappa=(1.0,) * len(shared),
+        y_extent=(-3.0, 3.0),
+        slab_kappa=0.0,
+    )
+    sol = VoxelSolution(rho=truth.ravel(), grid=grid, offsets={}, position_ids=tuple(origins))
+    gate = verify_gate(images, origins, centers, 7.0, sol, BeamSettings())
+    assert gate["passed"]
+    assert gate["n_beams_data"] == len(shared)
+    assert gate["n_single_view_peaks"] >= 1

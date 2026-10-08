@@ -10,15 +10,13 @@ lambda directly, not the regularised volume, so it is not subject to the
 inversion's smearing along depth. Linear parameters are projected out at each
 step (variable projection).
 
-The beams' opacity is pinned to concrete physics. A free opacity density per
-beam trades off against h (contrast ~ kappa * h), which made the real-data
-depth bimodal. The fit therefore runs in two passes: a free-kappa pass only
-supplies the background lambda of every fitted row, which `muonphysics`
-converts into the slant grammage X the ray already crosses; the second pass
-models each beam crossing exactly, as lambda(X + 100 rho L) - lambda(X) for
-total beam path L at concrete density rho, and refits only the geometry and
-the background. The exact term is used because the linearised kappa(X) * L is
-off by up to ~11% over the beam paths in question (tests/test_muonphysics.py).
+The primary geometric model fits nonnegative opacity density independently for
+each beam, projecting those coefficients and the smooth background out of the
+nonlinear geometry fit. This exposes rather than removes the opacity-depth
+trade-off. Fixed-depth nuisance refits assess the profile of that trade-off.
+An optional concrete model instead adds exact transmission at fixed material
+density after a preliminary free-opacity pass estimates background grammage.
+The concrete model is a comparison, not the default geometric estimator.
 
 Cross-check -- the z extent of the beams in the reconstructed volume, read
 against the analytic depth resolution. Regularisation and the depth null space
@@ -38,7 +36,7 @@ from cafetomo.beams import find_beams
 from cafetomo.config import Config
 from cafetomo.fitdata import FitData, RowIndex
 from cafetomo.muonphysics import Transmission
-from cafetomo.raycast import bundle_offsets
+from cafetomo.raycast import bundle_offsets, coincidence_spans
 from cafetomo.reconstruct import VoxelSolution
 from cafetomo.resolution import depth_resolution, position_baselines
 from cafetomo.sky import SkyGrid
@@ -68,6 +66,40 @@ def box_path_lengths(
     return np.clip(leave - enter, 0.0, None)
 
 
+def _aperture_primitives(x, width_a, width_b):
+    """CDF and its integral for a sum of two centred uniform coordinates."""
+    a, b = np.maximum(width_a, width_b), np.minimum(width_a, width_b)
+    small = b < 1e-8 * a
+    safe_b = np.where(small, 1.0, b)
+    radius = (a + b) / 2
+    q = [np.maximum(x + shift, 0.0) for shift in (radius, (a - b) / 2, (b - a) / 2, -radius)]
+    cdf = (q[0] ** 2 - q[1] ** 2 - q[2] ** 2 + q[3] ** 2) / (2 * a * safe_b)
+    integral = (q[0] ** 3 - q[1] ** 3 - q[2] ** 3 + q[3] ** 3) / (6 * a * safe_b)
+    cdf = np.where(small, np.clip((x + a / 2) / a, 0, 1), cdf)
+    integral = np.where(small, np.maximum(x + a / 2, 0.0) ** 2 / (2 * a), integral)
+    cdf = np.where(x <= -radius, 0.0, np.where(x >= radius, 1.0, cdf))
+    integral = np.where(x <= -radius, 0.0, np.where(x >= radius, x, integral))
+    return np.clip(cdf, 0, 1), integral
+
+
+def _mean_transverse_path(origin, sx, sy, zlo, zhi, xlo, xhi, width_a, width_b):
+    """Exact aperture average when the beam contains the full y footprint."""
+    height = np.maximum(zhi - zlo, 0.0)
+    moving = np.abs(sx) > 1e-10
+    distance = np.zeros(len(sx))
+    for edge, sign in ((xhi, 1.0), (xlo, -1.0)):
+        u = edge - origin[:, 0] - sx * (zlo - origin[:, 2])
+        v = edge - origin[:, 0] - sx * (zhi - origin[:, 2])
+        _, left = _aperture_primitives(u, width_a, width_b)
+        _, right = _aperture_primitives(v, width_a, width_b)
+        piece = np.zeros(len(sx))
+        np.divide(left - right, sx, out=piece, where=moving)
+        midpoint = edge - origin[:, 0] - sx * ((zlo + zhi) / 2 - origin[:, 2])
+        cdf, _ = _aperture_primitives(midpoint, width_a, width_b)
+        distance += sign * np.where(moving, piece, height * cdf)
+    return np.clip(distance, 0.0, height) * np.sqrt(1 + sx**2 + sy**2)
+
+
 def beam_design(
     rows: RowIndex,
     origins: dict,
@@ -80,22 +112,67 @@ def beam_design(
     xs,
     y_extent,
     angle_jitter: float = 0.0,
+    layer_dz_m: float = 0.0,
+    azimuths: dict[str, float] | None = None,
 ) -> np.ndarray:
-    """Bundle-averaged path length of every row through every beam box,
-    [n_rows, n_beams]. `angle_jitter` (tan units) smears directions along x
-    by a 3-point Gauss-Hermite rule: the MCS systematic."""
-    starts0 = np.array([origins[rows.position_ids[i]] for i in rows.pos_of_row])
+    """Aperture-averaged paths through beam boxes, [n_rows, n_beams].
+
+    Integrate the rotated rectangular footprint exactly when the beam spans
+    it fully in y; otherwise use the configured two-dimensional quadrature.
+    The observed direction conditions detector admission even when internal
+    beam scattering is represented by the three-node angular perturbation.
+    """
+    origin = np.array([origins[rows.position_ids[i]] for i in rows.pos_of_row])
+    azimuths = {} if azimuths is None else azimuths
+    az = np.array([azimuths.get(rows.position_ids[i], 0.0) for i in rows.pos_of_row])
+    co, si = np.abs(np.cos(np.radians(az))), np.abs(np.sin(np.radians(az)))
+    spans = coincidence_spans(rows.directions(), aperture_m, layer_dz_m, az)
+    width_a, width_b = spans[:, 0] * co, spans[:, 1] * si
+    radius_y = (spans[:, 0] * si + spans[:, 1] * co) / 2
+    zlo, zhi = np.maximum(z0, origin[:, 2]), z0 + h
+    ya = origin[:, 1] + rows.sy * (zlo - origin[:, 2])
+    yb = origin[:, 1] + rows.sy * (zhi - origin[:, 2])
+    active = zhi > zlo
+    exact = (
+        active
+        & (width_a + width_b > 0)
+        & (np.minimum(ya, yb) - radius_y >= y_extent[0])
+        & (np.maximum(ya, yb) + radius_y <= y_extent[1])
+    )
+    numerical = active & ~exact
+    starts = None
+    if np.any(numerical):
+        starts = origin[numerical, None, :] + bundle_offsets(
+            rows.directions()[numerical],
+            aperture_m,
+            n_sub,
+            layer_dz_m=layer_dz_m,
+            az_deg=az[numerical],
+        )
     out = np.zeros((rows.n_rows, len(xs)))
     nodes, weights = _GH if angle_jitter > 0 else (np.zeros(1), np.ones(1))
     for node, wt in zip(nodes, weights, strict=True):
-        d = np.stack([rows.sx + node * angle_jitter, rows.sy, np.ones(rows.n_rows)], axis=-1)
-        d /= np.linalg.norm(d, axis=-1, keepdims=True)
-        starts = starts0[:, None, :] + bundle_offsets(d, aperture_m, n_sub)
-        dd = np.broadcast_to(d[:, None, :], starts.shape)
+        sx = rows.sx + node * angle_jitter
         for k, xk in enumerate(xs):
-            lo = np.array([xk - w / 2, y_extent[0], z0])
-            hi = np.array([xk + w / 2, y_extent[1], z0 + h])
-            out[:, k] += wt * box_path_lengths(starts, dd, lo, hi).mean(axis=1)
+            if np.any(exact):
+                out[exact, k] += wt * _mean_transverse_path(
+                    origin[exact],
+                    sx[exact],
+                    rows.sy[exact],
+                    zlo[exact],
+                    zhi,
+                    xk - w / 2,
+                    xk + w / 2,
+                    width_a[exact],
+                    width_b[exact],
+                )
+            if starts is not None:
+                d = np.column_stack([sx[numerical], rows.sy[numerical], np.ones(numerical.sum())])
+                d /= np.linalg.norm(d, axis=1, keepdims=True)
+                dd = np.broadcast_to(d[:, None, :], starts.shape)
+                lo = np.array([xk - w / 2, y_extent[0], z0])
+                hi = np.array([xk + w / 2, y_extent[1], zhi])
+                out[numerical, k] += wt * box_path_lengths(starts, dd, lo, hi).mean(axis=1)
     return out
 
 
@@ -112,11 +189,12 @@ def _background(rows: RowIndex, degree: int) -> np.ndarray:
 
 @dataclass(frozen=True)
 class BeamDepthFit:
-    """`kappa_mean` (1/m) and `overburden_mean` (slant g/cm^2) are the pinned
-    opacity density and the grammage in front of the beams, averaged over the
-    fitted rows weighted by each row's path through the beams; NaN for the
-    free-kappa pass, which pins nothing. `background` is the fitted
-    background lambda per fitted row, the input of the pinned pass."""
+    """Fitted geometry and effective beam opacity densities in inverse metres.
+
+    Geometry fits report per-beam `kappa`, their mean and fitted background.
+    Material density and overburden are NaN when not measured. Concrete fits
+    report their path-weighted effective opacity and inferred grammage instead.
+    """
 
     z0: float
     w: float
@@ -132,12 +210,16 @@ class BeamDepthFit:
     overburden_mean: float
     density: float
     background: np.ndarray | None = field(default=None, repr=False, compare=False)
+    kappa: tuple[float, ...] = ()
 
     def to_json(self) -> dict:
-        return {
+        doc = {
             "zbottom": self.z0,
             "w": self.w,
             "h": self.h,
+            "h_measurement": self.h if not self.at_bound else float("nan"),
+            "zbottom_measurement": self.z0 if not self.at_bound else float("nan"),
+            "depth_resolved": not self.at_bound,
             "ztop": self.z0 + self.h,
             "xs": list(self.xs),
             "kappa_mean": self.kappa_mean,
@@ -149,7 +231,13 @@ class BeamDepthFit:
             "profiles": self.profiles,
             "converged": self.converged,
             "n_eval": self.n_eval,
+            "background_mean": (
+                float(np.mean(self.background)) if self.background is not None else float("nan")
+            ),
         }
+        if self.kappa:
+            doc["kappa"] = list(self.kappa)
+        return doc
 
 
 @dataclass(frozen=True)
@@ -197,6 +285,17 @@ def _best(fits: list[BeamDepthFit]) -> BeamDepthFit:
     return min(fits, key=lambda f: f.chi2_per_dof)
 
 
+def _linear_coefficients(design: np.ndarray, target: np.ndarray, n_beams: int) -> np.ndarray:
+    coef, *_ = np.linalg.lstsq(design, target, rcond=None)
+    if n_beams and np.any(coef[:n_beams] < 0):
+        low = np.r_[np.zeros(n_beams), np.full(design.shape[1] - n_beams, -np.inf)]
+        fit = optimize.lsq_linear(design, target, bounds=(low, np.inf), method="bvls")
+        if not fit.success:
+            raise RuntimeError(f"beam opacity projection failed: {fit.message}")
+        coef = fit.x
+    return coef
+
+
 def fit_beam_depth(
     data: FitData,
     cfg: Config,
@@ -207,9 +306,9 @@ def fit_beam_depth(
     density: float | None = None,
     flux_model: str | None = None,
 ) -> BeamDepthFit:
-    """Fit the box model, seeded from the triangulated beams, with the beam
-    opacity pinned to concrete of `density` (g/cm^3; None: the config's) under
-    the muon spectrum `flux_model` (None: the config's).
+    """Fit geometric boxes seeded from triangulation with projected beam opacity.
+
+    `model="concrete"` optionally pins material density and the muon spectrum.
 
     `z0_init` is the triangulated beam height, which lies between the beams'
     bottom face and their centre; the box fit has local minima, and seeded at
@@ -219,8 +318,8 @@ def fit_beam_depth(
     lower chi^2 wins: all starts use the same rows, so the chi^2 values compare
     directly. A non-finite chi^2 cannot be ranked and raises.
 
-    The free pass (h0 = `h_init_m`) fixes the background grammage of the
-    pinned pass (see the module docstring). The pinned chi^2 still has local
+    For the optional concrete model, the free pass (h0 = `h_init_m`) fixes
+    the background grammage of the pinned pass. Its chi-square still has local
     minima in h, a few hundredths apart in chi^2/dof, so the pinned pass is
     started from every depth in `h_starts_m` and from the free pass's h. On
     h = 1.25 m phantoms, starts at 0.6 m and the free h alone missed the
@@ -231,13 +330,16 @@ def fit_beam_depth(
     band = _band(data, cfg)
     common = dict(xs_init=xs_init, angle_jitter=angle_jitter)
 
-    def starts(h0: float, pinned: _Pinned | None) -> list[BeamDepthFit]:
+    def starts(h0: float, pinned: _Pinned | None, z_bounds=None) -> list[BeamDepthFit]:
         return [
-            _fit_once(band, cfg, z0_init=z0, h_init=h0, pinned=pinned, **common)
+            _fit_once(band, cfg, z0_init=z0, h_init=h0, pinned=pinned, z_bounds=z_bounds, **common)
             for z0 in (z0_init, z0_init - h0 / 2)
         ]
 
     h_init = cfg.beamdepth.h_init_m
+    if cfg.beamdepth.model == "geometry":
+        bounds = (z0_init - cfg.beamdepth.h_max_m / 2 - 1.0, z0_init + 1.0)
+        return _best([fit for h0 in cfg.beamdepth.h_starts_m for fit in starts(h0, None, bounds)])
     free = _best(starts(h_init, None))
     trans = Transmission(
         band.cos_theta(),
@@ -270,6 +372,85 @@ def estimate_beam_depth(
     return beams, fit
 
 
+def profile_beam_depth(
+    data: FitData,
+    cfg: Config,
+    *,
+    xs_init,
+    z0_init: float,
+    heights,
+    nominal: BeamDepthFit | None = None,
+) -> dict:
+    """Profile geometric depth with opacity, width, bottom and centres refitted.
+
+    Every depth uses the same nuisance-parameter domain. The curve is a
+    weighted-residual diagnostic, not a calibrated confidence interval.
+    """
+    if cfg.beamdepth.model != "geometry":
+        raise ValueError("depth profile requires the geometry model")
+    heights = np.asarray(heights, dtype=float)
+    if (
+        heights.size == 0
+        or np.any(~np.isfinite(heights))
+        or np.any((heights < 0.05) | (heights > cfg.beamdepth.h_max_m))
+    ):
+        raise ValueError("profile depths must lie within the physical fit bounds")
+    band = _band(data, cfg)
+    bounds = (z0_init - cfg.beamdepth.h_max_m / 2 - 1.0, z0_init + 1.0)
+    if nominal is None:
+        nominal = fit_beam_depth(data, cfg, xs_init=xs_init, z0_init=z0_init)
+    fits = []
+    previous = nominal
+    for h in heights:
+        fits.append(
+            _best(
+                [
+                    _fit_once(
+                        band,
+                        cfg,
+                        xs_init=xs_init,
+                        z0_init=z,
+                        h_init=h,
+                        angle_jitter=0.0,
+                        pinned=None,
+                        z_bounds=bounds,
+                        fixed_h=h,
+                    )
+                    for z in (z0_init, z0_init - h / 2)
+                ]
+                + [
+                    _fit_once(
+                        band,
+                        cfg,
+                        xs_init=xs_init,
+                        z0_init=z0_init,
+                        h_init=h,
+                        angle_jitter=0.0,
+                        pinned=None,
+                        z_bounds=bounds,
+                        fixed_h=h,
+                        initial_theta=np.array([seed.z0, seed.w, h, *seed.xs]),
+                    )
+                    for seed in (nominal, previous)
+                ]
+            )
+        )
+        previous = fits[-1]
+    n_parameters = (
+        2 + len(xs_init) + len(xs_init) + _background(band.rows, cfg.beamdepth.bg_degree).shape[1]
+    )
+    dof = max(band.rows.n_rows - n_parameters, 1)
+    chi2 = [f.chi2_per_dof * dof for f in fits]
+    minimum = int(np.argmin(chi2))
+    return {
+        "h": heights.tolist(),
+        "chi2": chi2,
+        "minimum_at_edge": minimum in (0, len(heights) - 1),
+        "zbottom": [f.z0 for f in fits],
+        "w": [f.w for f in fits],
+    }
+
+
 def _fit_once(
     band: _Band,
     cfg: Config,
@@ -279,6 +460,9 @@ def _fit_once(
     h_init: float,
     angle_jitter: float,
     pinned: _Pinned | None,
+    z_bounds: tuple[float, float] | None = None,
+    fixed_h: float | None = None,
+    initial_theta: np.ndarray | None = None,
 ) -> BeamDepthFit:
     """One seeded fit. Free (`pinned` None): every beam carries its own linear
     opacity density. Pinned: the beam term is fixed physics and only the
@@ -295,6 +479,8 @@ def _fit_once(
             origins,
             aperture_m=cfg.detector.aperture_m,
             n_sub=s.n_sub,
+            layer_dz_m=cfg.detector.layer_dz_cm / 100.0,
+            azimuths={e.id: e.pose.az_deg for e in cfg.exposures},
             z0=z0,
             w=w,
             h=h,
@@ -310,33 +496,48 @@ def _fit_once(
             return np.zeros(rows.n_rows), np.hstack([L, bg]), L
         return pinned.beam_lam(L), bg, L
 
-    def resid(theta):
+    def full_theta(values):
+        return values if fixed_h is None else np.insert(values, 2, fixed_h)
+
+    def resid(values):
+        theta = full_theta(values)
         fixed, X, _ = split(theta)
         y = (lam - fixed) * sw
-        coef, *_ = np.linalg.lstsq(X * sw[:, None], y, rcond=None)
+        coef = _linear_coefficients(X * sw[:, None], y, len(xs_init) if pinned is None else 0)
         return y - (X * sw[:, None]) @ coef
 
-    x0 = np.array([z0_init, s.w_init_m, h_init, *xs_init], dtype=np.float64)
-    lo = np.array([z0_init - 1.0, 0.05, 0.05, *(np.asarray(xs_init) - 0.3)])
-    hi = np.array([z0_init + 1.0, 1.0, s.h_max_m, *(np.asarray(xs_init) + 0.3)])
+    x0 = (
+        np.array([z0_init, s.w_init_m, h_init, *xs_init], dtype=np.float64)
+        if initial_theta is None
+        else np.asarray(initial_theta, dtype=np.float64)
+    )
+    zlo, zhi = (z0_init - 1.0, z0_init + 1.0) if z_bounds is None else z_bounds
+    lo = np.array([zlo, 0.05, 0.05, *(np.asarray(xs_init) - 0.3)])
+    hi = np.array([zhi, 1.0, s.h_max_m, *(np.asarray(xs_init) + 0.3)])
+    if fixed_h is not None:
+        x0, lo, hi = (np.delete(a, 2) for a in (x0, lo, hi))
     fit = optimize.least_squares(
         resid, np.clip(x0, lo, hi), bounds=(lo, hi), x_scale="jac", max_nfev=5000
     )
     if fit.status <= 0:
         raise RuntimeError(f"beam-depth fit failed (status {fit.status}): {fit.message}")
-    theta = fit.x
+    theta = full_theta(fit.x)
     fixed, X, L = split(theta)
-    coef, *_ = np.linalg.lstsq(X * sw[:, None], (lam - fixed) * sw, rcond=None)
+    coef = _linear_coefficients(
+        X * sw[:, None], (lam - fixed) * sw, len(xs_init) if pinned is None else 0
+    )
     # The trust-region solver keeps iterates strictly inside the box and its
     # active_mask stays empty, so a parameter pinned by a bound stops a small
     # fraction of the span short of it: 1% of the span is "at the bound".
     span = hi - lo
-    at_bound = bool(np.any(np.minimum(theta - lo, hi - theta) < 1e-2 * span))
-    dof = max(rows.n_rows - (len(theta) + X.shape[1]), 1)
+    at_bound = bool(np.any(np.minimum(fit.x - lo, hi - fit.x) < 1e-2 * span))
+    dof = max(rows.n_rows - (len(fit.x) + X.shape[1]), 1)
     model = fixed + X @ coef
     background = bg @ coef[-bg.shape[1] :]
     if pinned is None:
-        kappa_mean = overburden_mean = density = float("nan")
+        fitted_kappa = tuple(float(v) for v in coef[: len(xs_init)])
+        kappa_mean = float(np.mean(fitted_kappa))
+        overburden_mean = density = float("nan")
     else:
         through = L.sum(axis=1)
         if not np.any(through > 0):
@@ -345,6 +546,7 @@ def _fit_once(
         kappa_mean = float(np.average(kappa, weights=through))
         overburden_mean = float(np.average(pinned.x_bg, weights=through))
         density = pinned.density
+        fitted_kappa = ()
     profiles = {}
     for k, pid in enumerate(rows.position_ids):
         sel = rows.pos_of_row == k
@@ -368,6 +570,7 @@ def _fit_once(
         overburden_mean=overburden_mean,
         density=density,
         background=background,
+        kappa=fitted_kappa,
     )
 
 

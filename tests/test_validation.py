@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import numpy as np
 import pytest
 
@@ -20,6 +22,7 @@ NOMINAL = {
 
 @pytest.fixture(scope="module")
 def phantom(cfg):
+    cfg = replace(cfg, beamdepth=replace(cfg.beamdepth, model="concrete"))
     c, data = beam_phantom(cfg, H_TRUE, np.random.default_rng(6))
     return c.fast(), data
 
@@ -59,6 +62,7 @@ def test_validate_autofocus_reports_signed_bias(phantom):
 
 
 def test_validation_needs_a_finite_overburden(cfg):
+    cfg = replace(cfg, beamdepth=replace(cfg.beamdepth, model="concrete"))
     from cafetomo.voxels import VoxelGrid
 
     g = VoxelGrid(origin=(-3.0, -3.0, 6.0), spacing=0.1, shape=(10, 10, 10))
@@ -67,6 +71,7 @@ def test_validation_needs_a_finite_overburden(cfg):
 
 
 def test_validation_truth_contains_high_beams_and_the_complete_slab(cfg):
+    cfg = replace(cfg, beamdepth=replace(cfg.beamdepth, model="concrete"))
     from cafetomo.fitdata import FitData
     from cafetomo.phantom import sky_rows
 
@@ -79,3 +84,40 @@ def test_validation_truth_contains_high_beams_and_the_complete_slab(cfg):
     truth = validation._truth(grid, cfg, nominal, z0=8.9, h=2.0).reshape(grid.shape)
     occupied_z = grid.axis_centers(2)[np.any(truth > 0, axis=(0, 1))]
     assert occupied_z.max() == pytest.approx(11.175, abs=1e-6)
+
+
+def test_geometry_validation_uses_fitted_opacity_without_a_density(cfg):
+    from cafetomo.voxels import VoxelGrid
+
+    g = VoxelGrid(origin=(-3.0, -3.0, 6.0), spacing=0.05, shape=(120, 120, 60))
+    nominal = NOMINAL | {
+        "density": float("nan"),
+        "overburden_mean": float("nan"),
+        "kappa": [0.12] * len(XS),
+        "background_mean": 0.07,
+    }
+    truth = validation._truth(g, cfg, nominal, z0=7.0, h=1.2)
+    assert np.isfinite(truth).all()
+    assert np.max(truth) == pytest.approx(0.07 / 0.3)
+
+
+def test_geometry_depth_phantoms_preserve_observed_column_opacity(cfg):
+    from cafetomo.forward import build_forward_model
+    from cafetomo.phantom import sky_rows
+    from cafetomo.voxels import VoxelGrid
+
+    nominal = {
+        "xs": [0.0],
+        "w": 0.3,
+        "h": 0.6,
+        "zbottom": 7.0,
+        "kappa": [0.18],
+        "background_mean": 0.07,
+    }
+    grid = VoxelGrid(origin=(-0.5, -0.5, 6.5), spacing=0.1, shape=(10, 10, 25))
+    truth = validation._truth(grid, cfg, nominal, z0=7.0, h=1.2)
+    rows = sky_rows(("pos0",), 0.1, 1)
+    c = replace(cfg, volume=replace(cfg.volume, n_aperture_sub=1))
+    fwd = build_forward_model(rows, c, grid=grid)
+    predicted = fwd.predict(truth)
+    assert predicted[0] == pytest.approx(0.18 * 0.6 + 0.07, abs=1e-10)

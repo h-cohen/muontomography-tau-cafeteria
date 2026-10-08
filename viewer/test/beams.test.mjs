@@ -51,3 +51,10 @@ test('legend shows the total uncertainty when present, the bare value otherwise'
   assert.equal(beamLegendText({ h: 1.234, h_sigma: null }), 'beam depth h = 1.23 m');
   assert.throws(() => beamLegendText({ h: null }), /finite depth/);
 });
+
+test('unresolved physical depth is labelled as a conditional fit layer', () => {
+  assert.equal(
+    beamLegendText({ h: 0.067, h_sigma: 0.4, depth_resolved: false }),
+    'box-fit layer; physical depth unresolved',
+  );
+});

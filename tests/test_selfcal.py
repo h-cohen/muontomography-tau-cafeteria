@@ -41,9 +41,20 @@ def _campaign(cfg, true_pose: Pose):
     rng = np.random.default_rng(1)
     for pid in ("pos0", "pos1"):
         rows = sky_rows((pid,), t, n_det)
-        rows = replace(rows, sx=tx.ravel(), sy=ty.ravel())
+        supported = sky_counts.ravel() > 0
+        local = np.column_stack([tx.ravel(), ty.ravel(), np.ones(tx.size)])
+        world = local @ c.exposure(pid).pose.rotation().T
+        rows = replace(
+            rows,
+            pos_of_row=rows.pos_of_row[supported],
+            sx=world[supported, 0] / world[supported, 2],
+            sy=world[supported, 1] / world[supported, 2],
+            sky_flat=rows.sky_flat[supported],
+        )
         fwd = build_forward_model(rows, c, grid=g)
-        lam = fwd.predict(truth).reshape(n_det, n_det)
+        lam = np.zeros(tx.size)
+        lam[supported] = fwd.predict(truth)
+        lam = lam.reshape(n_det, n_det)
         counts[pid] = rng.poisson(0.5 * sky_counts * np.exp(-lam))
     return AnalysisGrid(edges=edges, counts=counts), {"SKY": 2.0, "pos0": 1.0, "pos1": 1.0}
 

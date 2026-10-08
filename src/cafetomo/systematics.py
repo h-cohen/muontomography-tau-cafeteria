@@ -120,12 +120,15 @@ def flux_scale_shift(
 def mcs_dlam(data: FitData, cfg: Config, depth, jitter_tan: float) -> np.ndarray:
     """Change of lambda when the nominal fitted beams (`depth`) are seen through
     direction-smeared paths; the background cancels in the difference. The
-    beams' opacity is taken at the fit's mean pinned density `kappa_mean`:
+    beam opacities use the fitted per-beam coefficients, or the mean effective
+    opacity for the optional concrete model:
     linear in the path change, ample for the size of a blur bias."""
     s = cfg.beamdepth
     common = dict(
         aperture_m=cfg.detector.aperture_m,
         n_sub=s.n_sub,
+        layer_dz_m=cfg.detector.layer_dz_cm / 100.0,
+        azimuths={e.id: e.pose.az_deg for e in cfg.exposures},
         z0=depth.z0,
         w=depth.w,
         h=depth.h,
@@ -133,10 +136,11 @@ def mcs_dlam(data: FitData, cfg: Config, depth, jitter_tan: float) -> np.ndarray
         y_extent=s.y_extent_m,
     )
     origins = cfg.origins()
-    return (
-        beam_design(data.rows, origins, angle_jitter=jitter_tan, **common)
-        - beam_design(data.rows, origins, **common)
-    ).sum(axis=1) * depth.kappa_mean
+    delta_paths = beam_design(data.rows, origins, angle_jitter=jitter_tan, **common) - beam_design(
+        data.rows, origins, **common
+    )
+    kappa = getattr(depth, "kappa", ())
+    return delta_paths @ np.asarray(kappa) if kappa else delta_paths.sum(axis=1) * depth.kappa_mean
 
 
 def mcs_shift(
@@ -191,20 +195,24 @@ def pose_shift(
     rows: RowIndex,
     cache_dir: str | Path | None = None,
 ) -> dict[str, float]:
-    """Largest |shift| over the free position moved by +-1 sigma along x and y.
-    A key that is NaN in any variant stays NaN. `rows` pins the row set to the
-    nominal one, as in the bootstrap and flux paths."""
+    """Largest refit shift over +/- marginal x, y and azimuth uncertainties.
+
+    The nominal rows stay fixed; this is a sensitivity envelope, not joint
+    covariance propagation. Missing azimuth uncertainty is an input error.
+    """
     free = cfg.selfcal.free_pose
     p = cfg.exposure(free).pose
     worst: dict[str, float] = {}
-    for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
-        c = cfg.with_pose(
-            free, replace(p, x=p.x + dx * pose_sigma["x"], y=p.y + dy * pose_sigma["y"])
-        )
-        data = build_fit_data(solve_opacity(grid, c, live_time), c, sigma, rows=rows)
-        worst = _worst(
-            worst, _delta(measure(data, c, sky, cache_dir=cache_dir, with_volume=False), nominal)
-        )
+    for axis in ("x", "y", "az_deg"):
+        for sign in (-1, 1):
+            c = cfg.with_pose(
+                free, replace(p, **{axis: getattr(p, axis) + sign * pose_sigma[axis]})
+            )
+            data = build_fit_data(solve_opacity(grid, c, live_time), c, sigma, rows=rows)
+            worst = _worst(
+                worst,
+                _delta(measure(data, c, sky, cache_dir=cache_dir, with_volume=False), nominal),
+            )
     return worst
 
 

@@ -7,9 +7,8 @@ of n_sub^2 parallel sub-rays across the aperture rather than as a pinhole.
 Entries are path lengths AVERAGED over the bundle, so a bundle and a
 pinhole through uniform material predict the same optical depth.
 
-No pose rotation is applied: every measurement is already in the world frame,
-so a row's direction is just normalize(sx, sy, 1); rotating again would rotate
-twice.
+Directions already lie in the world frame and are not rotated again.
+Detector azimuth rotates only the accepted footprint in its midpoint plane.
 """
 
 from __future__ import annotations
@@ -25,34 +24,64 @@ from cafetomo.voxels import VoxelGrid
 
 # Bumped whenever ray-casting logic changes. It is part of the cache key, so a
 # cache built before a fix is never served after it.
-INVERSION_VERSION = 2
+INVERSION_VERSION = 3
 
 _SAMPLES_PER_VOXEL = 3  # sampling step along a ray = spacing / this
 _ROW_BLOCK = 512  # rows processed per vectorised block
 
 
-def bundle_offsets(directions: np.ndarray, aperture_m: float, n_sub: int) -> np.ndarray:
-    """Sub-ray start offsets, [n_rows, n_sub**2, 3], perpendicular to each ray.
-
-    A square of side `aperture_m` perpendicular to the ray stands in for the
-    aperture.
-    """
+def coincidence_spans(
+    directions: np.ndarray,
+    aperture_m: float,
+    layer_dz_m: float,
+    az_deg: float | np.ndarray = 0.0,
+) -> np.ndarray:
+    """Accepted midpoint widths in the two detector axes."""
     d = np.asarray(directions, dtype=np.float64)
-    d = d / np.linalg.norm(d, axis=-1, keepdims=True)
+    if aperture_m < 0 or layer_dz_m < 0:
+        raise ValueError("invalid aperture geometry")
+    angle = np.radians(np.broadcast_to(az_deg, (len(d),)))
+    co, si = np.cos(angle), np.sin(angle)
+    span = np.full((len(d), 2), aperture_m, dtype=np.float64)
+    if layer_dz_m > 0:
+        if not np.all(np.isfinite(d)) or np.any(d[:, 2] == 0):
+            raise ValueError("direction has no finite coincidence support")
+        slopes = np.column_stack([co * d[:, 0] + si * d[:, 1], -si * d[:, 0] + co * d[:, 1]])
+        span -= layer_dz_m * np.abs(slopes / d[:, 2, None])
+        if np.any(span <= 0):
+            raise ValueError(
+                "direction centre has no coincidence support; integrate its angular bin"
+            )
+    return span
 
-    # An orthonormal frame perpendicular to each ray. cross(d, z) degenerates for
-    # a vertical ray, so fall back to x there.
-    zhat = np.array([0.0, 0.0, 1.0])
-    u = np.cross(d, zhat)
-    small = np.linalg.norm(u, axis=-1) < 1e-9
-    u[small] = np.array([1.0, 0.0, 0.0])
-    u /= np.linalg.norm(u, axis=-1, keepdims=True)
-    v = np.cross(d, u)
 
-    g = (np.arange(n_sub) + 0.5) / n_sub - 0.5  # centred, in [-0.5, 0.5)
+def bundle_offsets(
+    directions: np.ndarray,
+    aperture_m: float,
+    n_sub: int,
+    *,
+    layer_dz_m: float = 0.0,
+    az_deg: float | np.ndarray = 0.0,
+) -> np.ndarray:
+    """Uniform quadrature of the accepted detector-midpoint rectangle.
+
+    Its widths are W-abs(t_local)*D and its axes rotate with the detector.
+    D=0 is a generic single-plane aperture. Unsupported direction centres
+    are rejected rather than replaced by artificial pinholes.
+    """
+    if n_sub < 1:
+        raise ValueError("invalid aperture quadrature")
+    d = np.asarray(directions, dtype=np.float64)
+    span = coincidence_spans(d, aperture_m, layer_dz_m, az_deg)
+    angle = np.radians(np.broadcast_to(az_deg, (len(d),)))
+    co, si = np.cos(angle), np.sin(angle)
+    g = (np.arange(n_sub) + 0.5) / n_sub - 0.5
     gx, gy = np.meshgrid(g, g, indexing="ij")
-    gx, gy = gx.ravel() * aperture_m, gy.ravel() * aperture_m
-    return gx[None, :, None] * u[:, None, :] + gy[None, :, None] * v[:, None, :]
+    x, y = span[:, 0, None] * gx.ravel(), span[:, 1, None] * gy.ravel()
+    offsets = np.zeros((len(d), n_sub**2, 3))
+    offsets[:, :, 0] = co[:, None] * x - si[:, None] * y
+    offsets[:, :, 1] = si[:, None] * x + co[:, None] * y
+    return offsets
 
 
 def build_system_matrix(
@@ -63,16 +92,20 @@ def build_system_matrix(
     aperture_m: float,
     n_sub: int = 4,
     cache_dir: str | Path | None = None,
+    layer_dz_m: float = 0.0,
+    azimuths: dict[str, float] | None = None,
 ) -> sparse.csr_matrix:
     """A[row, voxel] in METRES, shape [rows.n_rows, grid.n_voxels]."""
     if cache_dir is not None:
-        key = _cache_key(rows, origins, grid, aperture_m, n_sub)
+        key = _cache_key(rows, origins, grid, aperture_m, n_sub, layer_dz_m, azimuths)
         cache = Path(cache_dir) / f"A_{key}.npz"
         if cache.exists():
             return sparse.load_npz(cache)
 
     dirs = rows.directions()  # [nr, 3]
-    offs = bundle_offsets(dirs, aperture_m, n_sub)  # [nr, ns, 3]
+    azimuths = {} if azimuths is None else azimuths
+    az = np.array([azimuths.get(rows.position_ids[i], 0.0) for i in rows.pos_of_row])
+    offs = bundle_offsets(dirs, aperture_m, n_sub, layer_dz_m=layer_dz_m, az_deg=az)
     starts = np.array([origins[rows.position_ids[i]] for i in rows.pos_of_row])
     starts = starts[:, None, :] + offs  # [nr, ns, 3]
 
@@ -137,12 +170,21 @@ def build_system_matrix(
 
 
 def _cache_key(
-    rows: RowIndex, origins: dict, grid: VoxelGrid, aperture_m: float, n_sub: int
+    rows: RowIndex,
+    origins: dict,
+    grid: VoxelGrid,
+    aperture_m: float,
+    n_sub: int,
+    layer_dz_m: float = 0.0,
+    azimuths: dict[str, float] | None = None,
 ) -> str:
     h = hashlib.sha256()
     h.update(f"v{INVERSION_VERSION}|".encode())
     h.update(rows.key().encode())
+    azimuths = {} if azimuths is None else azimuths
+    h.update(f"D:{layer_dz_m:.6f}|".encode())
     for pid in rows.position_ids:
+        h.update(f"az:{azimuths.get(pid, 0.0):.6f}|".encode())
         x, y, z = origins[pid]
         h.update(f"{pid}:{x:.6f},{y:.6f},{z:.6f};".encode())
     h.update(f"{grid.key()}|{aperture_m:.6f}|{n_sub}|{_SAMPLES_PER_VOXEL}".encode())

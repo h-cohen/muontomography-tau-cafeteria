@@ -373,8 +373,9 @@ def verify_gate(
     real data would be picked instead, failing the gate for the wrong reason.
     Each data beam's offset is to the nearest reconstruction beam;
     the gate passes when their mean |offset| is within s.gate_max_offset_m.
-    Reconstruction peaks are sought only where the data profile is measured, so
-    side-wall artefacts outside the shared view cannot claim a match.
+    Both peak searches use the intersection of the views' measured profiles.
+    Single-view edge features have no two-view depth localisation; their
+    positions and full-field offsets are retained as separate diagnostics.
     """
     g = sol.grid
     xs_r = g.axis_centers(0)
@@ -385,15 +386,21 @@ def verify_gate(
         world_profile(*profile(img, centers, "x", s.band_x), origins[pid], "x", z_m, xgrid)
         for pid, img in images.items()
     ]
-    data_prof = _nanmean(np.stack(world), axis=0)
+    stack = np.stack(world)
+    full_prof = _nanmean(stack, axis=0)
+    shared = np.all(np.isfinite(stack), axis=0)
+    data_prof = np.where(shared, full_prof, np.nan)
     pk_data = beam_peaks(xgrid, data_prof, s.prominence_sigmas)
+    pk_full = beam_peaks(xgrid, full_prof, s.prominence_sigmas)
+    single_view = [float(p) for p in pk_full if not shared[np.argmin(np.abs(xgrid - p))]]
 
     pos = np.maximum(sol.rho3(), 0.0)
     iz = int(np.argmin(np.abs(g.axis_centers(2) - z_m)))
     sl = pos[:, :, iz]
     yband = np.abs(ys_r) < _GATE_Y_BAND_M
     prof_r = gaussian_filter1d(sl[:, yband].mean(axis=1), _GATE_SMOOTH_M / g.spacing)
-    recon = np.where(np.isfinite(data_prof), np.interp(xgrid, xs_r, prof_r), np.nan)
+    full_recon = np.where(np.isfinite(full_prof), np.interp(xgrid, xs_r, prof_r), np.nan)
+    recon = np.where(shared, full_recon, np.nan)
     pk_recon = beam_peaks(xgrid, recon, s.prominence_sigmas)
 
     offsets = (
@@ -401,9 +408,18 @@ def verify_gate(
         if len(pk_recon)
         else []
     )
+    full_peaks = beam_peaks(xgrid, full_recon, s.prominence_sigmas)
+    full_offsets = (
+        [float(full_peaks[np.argmin(np.abs(full_peaks - p))] - p) for p in pk_full]
+        if len(full_peaks)
+        else []
+    )
     mean_abs = float(np.mean(np.abs(offsets))) if offsets else float("nan")
     return {
         "offsets": offsets,
+        "n_single_view_peaks": len(single_view),
+        "single_view_peaks_x": single_view,
+        "fullfield_offsets": full_offsets,
         "mean_abs_offset": mean_abs,
         "passed": bool(np.isfinite(mean_abs) and mean_abs <= s.gate_max_offset_m),
         "n_beams_data": int(len(pk_data)),

@@ -64,5 +64,7 @@ def build_forward_model(
         aperture_m=cfg.detector.aperture_m,
         n_sub=cfg.volume.n_aperture_sub,
         cache_dir=cache_dir,
+        layer_dz_m=cfg.detector.layer_dz_cm / 100.0,
+        azimuths={e.id: e.pose.az_deg for e in cfg.exposures},
     )
     return ForwardModel(A=A, grid=grid, rows=rows)

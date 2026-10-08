@@ -34,6 +34,7 @@ def built_pipeline(tmp_path):
                 "autofocus",
                 "beams",
                 "beamdepth",
+                "depthdiagnostics",
                 "validation",
                 "uncertainty",
                 "inputs",
@@ -77,6 +78,7 @@ def test_code_or_dependency_change_rebuilds_analysis_and_uncertainty(built_pipel
         ("reconstruction", "reconstruct"),
         ("beams", "analyze"),
         ("autofocus", "analyze"),
+        ("depthdiagnostics", "depthcheck"),
     ],
 )
 def test_missing_result_is_regenerated_before_numbers(built_pipeline, missing, stage):
@@ -110,12 +112,8 @@ def test_arxiv_archive_places_bibliography_beside_main_tex(built_pipeline):
     for name in (
         "setup",
         "opacity",
-        "backprojection",
-        "autofocus",
-        "triangulation",
+        "height",
         "depth",
-        "volume",
-        "uncertainty",
     ):
         files[f"runs/fast/generated/figures/{name}.pdf"] = "figure"
     for name, content in files.items():

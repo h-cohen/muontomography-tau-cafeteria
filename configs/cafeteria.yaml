@@ -93,12 +93,12 @@ beams:
   min_y_corr: 0.5         # y features join the triangulation only if the y parallax agrees
 
 beamdepth:
+  model: geometry         # infer shadow geometry; opacity amplitudes remain nuisance parameters
   y_extent_m: [-5.0, 5.0]   # beams run along y across the room
   band_sy: 0.32
   w_init_m: 0.3
   h_init_m: 0.6
-  # Depth starts of the pinned pass (plus the free pass's h): its chi^2 still
-  # has local minima, and shallow starts alone miss the deep one.
+  # Common multistarts sample local depth minima without imposing a target.
   h_starts_m: [0.6, 1.2, 1.8]
   h_max_m: 3.0
   bg_degree: 2
@@ -116,8 +116,7 @@ validation:
   depth_h_true_m: [0.6, 1.25, 2.0]
   n_realizations: 8
 
-# Pins the beams' opacity density to concrete (see src/cafetomo/muonphysics.py
-# for the spectra and the PDG range table).
+# Material inputs for the optional concrete comparison and scattering model.
 physics:
   concrete_density_gcm3: 2.4    # steel-reinforced concrete, nominal
   concrete_density_sigma: 0.1   # its systematic

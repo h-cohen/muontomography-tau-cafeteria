@@ -8,12 +8,8 @@ import pytest
 FIGS = [
     "setup",
     "opacity",
-    "backprojection",
-    "autofocus",
-    "triangulation",
+    "height",
     "depth",
-    "volume",
-    "uncertainty",
 ]
 
 

@@ -6,6 +6,7 @@ nominal row set, weights and lattice held fixed: the weights define the
 estimator, they are not part of the noise.
 """
 
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -80,7 +81,7 @@ def run_bootstrap(
     rng = np.random.default_rng(np.random.SeedSequence(u.seed, spawn_key=(1,)))
     values: dict[str, list[float]] = {}
     vols = []
-    for _ in range(u.n_replicas):
+    for replica in range(u.n_replicas):
         maps = solve_opacity(resample(grid, rng), cfg, live_time)
         m = measure(
             build_fit_data(maps, cfg, sigma, rows=rows), cfg, sky, vgrid=vgrid, cache_dir=cache_dir
@@ -88,6 +89,7 @@ def run_bootstrap(
         for k, v in m.values.items():
             values.setdefault(k, []).append(v)
         vols.append(m.volume)
+        print(f"bootstrap: completed {replica + 1}/{u.n_replicas}", file=sys.stderr, flush=True)
     arr = np.stack(vols)
     vsig = arr.std(axis=0, ddof=1) if len(vols) > 1 else np.full(arr.shape[1:], np.nan)
     return BootstrapResult(

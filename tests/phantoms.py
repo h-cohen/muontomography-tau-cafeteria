@@ -1,9 +1,9 @@
 """The shared beam-ceiling phantom: the one ground truth the beam-depth,
 measurement and validation tests all reconstruct, so they test one geometry.
 
-Beams and slab are concrete of the config's density; lambda follows from each
-ray's grammage through the muon transmission, as the pinned fit models it.
-The 0.3 m slab gives a background lambda of ~0.07, as on the real ceiling."""
+Geometry-model phantoms carry effective opacity densities. Optional concrete
+phantoms use the configured density and muon transmission. The slab provides a
+smooth background on the scale of the real-room opacity."""
 
 import numpy as np
 
@@ -35,7 +35,8 @@ def beam_phantom(cfg: Config, h_true: float, rng: np.random.Generator) -> tuple[
     # from either position, slab included) stays inside the grid: a slab cut off by the grid
     # edge is a sharp background step the smooth background cannot follow.
     g = VoxelGrid(origin=(-9.0, -6.0, 6.5), spacing=0.05, shape=(380, 240, 70))
-    rho = cfg.physics.concrete_density_gcm3
+    concrete = cfg.beamdepth.model == "concrete"
+    rho = cfg.physics.concrete_density_gcm3 if concrete else 0.18
     truth = beam_ceiling(
         g,
         xs=XS,
@@ -45,8 +46,8 @@ def beam_phantom(cfg: Config, h_true: float, rng: np.random.Generator) -> tuple[
         kappa=(rho,) * len(XS),
         y_extent=(-5.0, 5.0),
         slab_thickness=SLAB_M,
-        slab_kappa=rho,
+        slab_kappa=rho if concrete else 0.23,
     )
     fwd = build_forward_model(rows, cfg, grid=g)
     like = FitData(lam=np.zeros(rows.n_rows), w=np.full(rows.n_rows, 1 / 0.02**2), rows=rows)
-    return cfg, phantom_data(fwd, truth, like, rng, physics=cfg.physics)
+    return cfg, phantom_data(fwd, truth, like, rng, physics=cfg.physics if concrete else None)
