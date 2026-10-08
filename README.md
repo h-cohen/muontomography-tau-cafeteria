@@ -100,18 +100,26 @@ To rebuild only the HTML from an existing export, bypassing upstream Make target
 uv run cafetomo viewer --export runs/export --out runs/viewer.html
 ```
 
-The viewer displays the reconstructed room and toggleable fitted-beam wireframes.
+The viewer displays the reconstructed room and toggleable fitted-beam bodies and outlines.
 Use **Fitted beams** to show/hide the overlay, **beam opacity** to fade it
-(0% hides the lines), and **beam color** to choose its color. These controls are
+(0% hides both faces and edges), and **beam color** to choose its color. These controls are
 independent of voxel opacity, thresholds and the fitted dimensions. The PNG
-export includes the currently displayed overlays; hide/fade them for a voxel-only
-room image.
+export includes the currently displayed overlays; uncheck **Fitted beams** or
+set beam opacity to 0% for a voxel-only room image.
 
-The current overlay comes from the flexible fit in `results/beamdepth.json`.
-When that fit is bound, its legend explicitly says physical depth is unresolved.
-The separate continued-array estimate lives in `results/arraydepth.json`; it is
-not substituted silently into those boxes. The distinction matters when the
-rendered voxels extend farther in z than the overlay.
+**Beam fit** selects the geometry shown. When available, the default is the
+**Conditional continued array (z depth)**: its vertical extent is
+`ztop - zbottom = h`, currently 1.45 m. The legend marks it conditional and labels
+the 0.11 m spread as counting variation under fixed array/pose assumptions.
+**Matched-beam baseline** remains selectable: its roughly 0.067 m vertical extent
+is a bound optimizer result, labelled physically unresolved. Older exports with
+only one fit still work.
+
+Depth always means **z-axis thickness**, not the long y-axis span or transverse
+x width. The earlier flat overlay displayed the unresolved baseline, not the
+1.45 m conditional estimate. Switching fits changes only the displayed boxes;
+it does not stretch the voxel field or rerun the inference. The color and opacity
+controls affect filled faces and outlines in either model.
 
 ## FAST smoke execution
 
