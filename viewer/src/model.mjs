@@ -63,6 +63,8 @@ export function createState() {
     // Fitted beam boxes (meta.beams): shown by default whenever a run has
     // them; loadRun sets both fields.
     showBeams: false,
+    beamOpacity: 1,
+    beamColor: '#f24dd9',
     beamVertexCount: 0,
     window: null,
   };
@@ -80,6 +82,7 @@ export const EFFECTS = {
   smoothSampling: ['filter', 'render'],
   shading: RENDER_ONLY, adaptiveQuality: RENDER_ONLY,
   showDetectors: RENDER_ONLY, showBeams: RENDER_ONLY,
+  beamOpacity: RENDER_ONLY, beamColor: RENDER_ONLY,
   window: ['histogram', 'render'],
   transferStops: ['lut', 'render'],
 };

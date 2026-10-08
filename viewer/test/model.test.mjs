@@ -53,3 +53,10 @@ test('load-bearing effects: the LUT rebuilds, the camera renders', () => {
   assert.deepEqual(effectsFor({ camera: {} }), ['render']);
   assert.deepEqual(effectsFor({ window: [0, 1] }), ['histogram', 'render']);
 });
+
+test('beam appearance changes rerender without changing volume processing', () => {
+  const s = createState();
+  assert.equal(s.beamOpacity, 1);
+  assert.equal(s.beamColor, '#f24dd9');
+  assert.deepEqual(effectsFor({ beamOpacity: 0.3, beamColor: '#00ff00' }), ['render']);
+});

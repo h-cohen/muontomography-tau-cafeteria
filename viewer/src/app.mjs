@@ -261,10 +261,10 @@ void main() {
 
 const MARKER_FRAGMENT_SRC = `#version 300 es
 precision highp float;
-uniform vec3 uMarkerColor;
+uniform vec4 uMarkerColor;
 out vec4 outColor;
 void main() {
-  outColor = vec4(uMarkerColor, 1.0);
+  outColor = uMarkerColor;
 }`;
 
 function compileShader(gl, type, src) {
@@ -361,7 +361,6 @@ export function initViewer(root) {
   const ADAPTIVE_STEPS = 64; // fast-preview step count while state.interacting
   // Magenta: distinct from the amber detector crosses and from every
   // colormap's ramp, so a box edge never reads as density.
-  const BEAM_COLOR = [0.95, 0.3, 0.85];
 
   const uniforms = {};
   for (const name of [
@@ -586,7 +585,7 @@ export function initViewer(root) {
     if (state.showDetectors && state.meta && state.markerVertexCount > 0) {
       drawMarkers(viewProj);
     }
-    if (state.showBeams && state.meta && state.beamVertexCount > 0) {
+    if (state.showBeams && state.beamOpacity > 0 && state.meta && state.beamVertexCount > 0) {
       drawBeams(viewProj);
     }
     drawGizmo();
@@ -601,7 +600,7 @@ export function initViewer(root) {
     gl.useProgram(markerProgram);
     gl.bindVertexArray(markerVao);
     gl.uniformMatrix4fv(markerUniforms.uMarkerViewProj, false, viewProj);
-    gl.uniform3fv(markerUniforms.uMarkerColor, [1.0, 0.75, 0.1]);
+    gl.uniform4fv(markerUniforms.uMarkerColor, [1.0, 0.75, 0.1, 1.0]);
     gl.drawArrays(gl.LINES, 0, state.markerVertexCount);
     gl.bindVertexArray(null);
   }
@@ -662,8 +661,12 @@ export function initViewer(root) {
     gl.useProgram(markerProgram);
     gl.bindVertexArray(beamVao);
     gl.uniformMatrix4fv(markerUniforms.uMarkerViewProj, false, viewProj);
-    gl.uniform3fv(markerUniforms.uMarkerColor, BEAM_COLOR);
+    const rgb = [1, 3, 5].map((i) => parseInt(state.beamColor.slice(i, i + 2), 16) / 255);
+    gl.uniform4fv(markerUniforms.uMarkerColor, [...rgb, state.beamOpacity]);
+    gl.enable(gl.BLEND);
+    gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.drawArrays(gl.LINES, 0, state.beamVertexCount);
+    gl.disable(gl.BLEND);
     gl.bindVertexArray(null);
   }
 
@@ -1047,6 +1050,15 @@ export function initViewer(root) {
 
   root.querySelector('#toggle-beams').addEventListener('change', (ev) => {
     commit({ showBeams: ev.target.checked });
+  });
+
+  root.querySelector('#beam-opacity').addEventListener('input', (ev) => {
+    const value = Number(ev.target.value);
+    root.querySelector('#beam-opacity-readout').textContent = `${Math.round(100 * value)}%`;
+    commit({ beamOpacity: value });
+  });
+  root.querySelector('#beam-color').addEventListener('input', (ev) => {
+    commit({ beamColor: ev.target.value });
   });
 
   function renderViewList() {

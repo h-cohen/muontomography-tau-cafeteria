@@ -47,3 +47,60 @@ def test_no_beams_block_hides_the_control_and_legend(page, dist_path, run_fixtur
     assert page.locator("#beams-control").is_hidden()
     assert page.locator("#beam-legend").is_hidden()
     assert page.evaluate("() => window.__viewerState.showBeams") is False
+
+
+def test_beam_opacity_and_color_change_only_the_overlay(page, dist_path, run_fixture):
+    _load(page, dist_path, run_fixture(beams=BEAMS))
+    original = canvas_data(page)
+    page.locator("#beam-opacity").evaluate(
+        "el => { el.value = '0.5'; el.dispatchEvent(new Event('input')); }"
+    )
+    page.wait_for_timeout(50)
+    half = canvas_data(page)
+    assert half != original
+    assert page.locator("#beam-opacity-readout").inner_text() == "50%"
+    page.locator("#beam-opacity").evaluate(
+        "el => { el.value = '0'; el.dispatchEvent(new Event('input')); }"
+    )
+    page.wait_for_timeout(50)
+    transparent = canvas_data(page)
+    page.locator("#toggle-beams").uncheck()
+    page.wait_for_timeout(50)
+    assert canvas_data(page) == transparent
+    assert transparent != original
+    assert transparent != half
+    page.locator("#toggle-beams").check()
+    page.locator("#beam-opacity").evaluate(
+        "el => { el.value = '1'; el.dispatchEvent(new Event('input')); }"
+    )
+    page.locator("#beam-color").evaluate(
+        "el => { el.value = '#00ff00'; el.dispatchEvent(new Event('input')); }"
+    )
+    page.wait_for_timeout(50)
+    green = canvas_data(page)
+    assert green != original
+    assert green != transparent
+    assert page.locator("#beam-opacity-readout").inner_text() == "100%"
+    assert page.evaluate("() => window.__viewerState.opacity") == 1
+
+
+def test_faded_beam_png_preserves_half_alpha_on_transparent_volume(page, dist_path, run_fixture):
+    _load(page, dist_path, run_fixture(beams=BEAMS))
+    page.locator("#opacity").evaluate(
+        "el => { el.value = '0'; el.dispatchEvent(new Event('input')); }"
+    )
+    page.locator("#beam-opacity").evaluate(
+        "el => { el.value = '0.5'; el.dispatchEvent(new Event('input')); }"
+    )
+    page.wait_for_timeout(50)
+    alphas = page.evaluate("""async () => {
+      const image = new Image();
+      image.src = document.querySelector('#gl-canvas').toDataURL('image/png');
+      await image.decode();
+      const c = document.createElement('canvas'); c.width=image.width; c.height=image.height;
+      const ctx=c.getContext('2d'); ctx.drawImage(image,0,0);
+      const data=ctx.getImageData(0,0,c.width,c.height).data;
+      const values=new Set(); for(let i=3;i<data.length;i+=4) values.add(data[i]);
+      return [...values];
+    }""")
+    assert any(126 <= value <= 129 for value in alphas), alphas
