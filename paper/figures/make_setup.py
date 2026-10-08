@@ -1,6 +1,7 @@
 """Figure 1: measurement geometry, top view and side view."""
 
 import matplotlib.pyplot as plt
+import numpy as np
 from matplotlib.patches import Rectangle
 
 import style
@@ -11,11 +12,24 @@ def main(argv=None) -> None:
     bd = style.load_result(a, "beamdepth")
     (x0, x1), (y0, y1) = cfg.volume.viewer_crop_xy_m
     ybeam = cfg.beamdepth.y_extent_m
+    beams = style.load_result(a, "beams")
+    pitch = beams["period"] * beams["z_x"]
+    fitted_xs = np.asarray(bd["xs"])
+    n_left = max(0, int(np.ceil((fitted_xs[0] - x0) / pitch)))
+    n_right = max(0, int(np.ceil((x1 - fitted_xs[-1]) / pitch)))
+    illustrative_xs = np.sort(
+        np.r_[
+            fitted_xs[0] - pitch * np.arange(1, n_left + 1),
+            fitted_xs,
+            fitted_xs[-1] + pitch * np.arange(1, n_right + 1),
+        ]
+    )
+    illustrative_xs = illustrative_xs[(illustrative_xs >= x0) & (illustrative_xs <= x1)]
     zb, zt, w = bd["zbottom"], bd["ztop"], bd["w"]
 
     fig, (ax, bx) = plt.subplots(1, 2, figsize=(style.FULL_IN, 2.6), gridspec_kw={"wspace": 0.3})
     ax.add_patch(Rectangle((x0, y0), x1 - x0, y1 - y0, fill=False, ec=style.MUTED, lw=0.8, ls=":"))
-    for xb in bd["xs"]:
+    for xb in illustrative_xs:
         ax.add_patch(
             Rectangle((xb - w / 2, ybeam[0]), w, ybeam[1] - ybeam[0], fc=style.GRID, ec="none")
         )
@@ -31,7 +45,7 @@ def main(argv=None) -> None:
     ax.set_xlabel("x (m)")
     ax.set_ylabel("y (m)")
 
-    for xb in bd["xs"]:
+    for xb in illustrative_xs:
         bx.add_patch(Rectangle((xb - w / 2, zb), w, zt - zb, fc=style.INK_SECONDARY, ec="none"))
     xt = bd["xs"][1]
     for pid, (px, _, pz) in cfg.origins().items():

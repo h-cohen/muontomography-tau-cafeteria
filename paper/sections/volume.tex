@@ -1,7 +1,9 @@
 \section{Three-dimensional room reconstruction}\label{sec:volume}
-The joint reconstruction used \ReconstructionRows{} angular rows and \ReconstructionVoxels{} voxels, with weighted residual statistic $\ReconstructionChisqPerRow$ per row. Figure~\ref{fig:volume} will show the room in three dimensions, emphasizing the ceiling beams. The reconstructed field is effective opacity, not a unique material-density map; lateral structure is better constrained than its vertical extent.
+The three-dimensional room image is a principal result. It combines response-corrected projections, fitted detector geometry and cross-position constraints in one voxel field, revealing repeated elongated ceiling structures beyond individual angular shadows or height estimates.
 
-\begin{figure}[htbp]
+The joint reconstruction used \ReconstructionRows{} angular rows and \ReconstructionVoxels{} voxels, with residual statistic $\ReconstructionChisqPerRow$ per row. Figure~\ref{fig:volume} emphasizes the beams and their spatial arrangement. The shared-view check supports lateral placement; the preceding uncertainty analysis qualifies inferred dimensions. The field represents effective opacity, with vertical extent less constrained than lateral structure.
+
+\begin{figure}[!htbp]
 \centering
 \IfFileExists{figures/room_voxels.pdf}{%
   \includegraphics[width=\linewidth]{figures/room_voxels.pdf}%
@@ -10,9 +12,9 @@ The joint reconstruction used \ReconstructionRows{} angular rows and \Reconstruc
 }{%
   \fbox{\begin{minipage}[c][4cm][c]{0.94\linewidth}
   \centering\textbf{AUTHOR FIGURE PLACEHOLDER}\\[0.8em]
-  Three-dimensional voxel reconstruction of the room,\\
+  Main result: three-dimensional voxel reconstruction of the room,\\
   with emphasis on the ceiling beams.
   \end{minipage}}%
 }}
-\caption{Room-scale muon tomography: three-dimensional voxel reconstruction with emphasis on the overhead beam structure.}\label{fig:volume}
+\caption{Room-scale muon tomography: a three-dimensional voxel view combining measured projections and two-position geometry, with emphasis on the repeated overhead beams. Apparent thickness remains subject to the depth ambiguity.}\label{fig:volume}
 \end{figure}

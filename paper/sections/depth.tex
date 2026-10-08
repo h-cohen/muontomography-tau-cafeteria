@@ -1,18 +1,22 @@
-\section{Beam depth}\label{sec:depth}
-A common rectangular-box model described bottom height $z_0$, width $w$, depth $h$ and transverse beam coordinates. It was fitted directly to the opacity maps, independently of voxel regularization:
+\section{Beam-depth estimation}\label{sec:depth}
+Rectangular boxes with free transverse centres, bottom $z_0$, width $w$ and depth $h$ were fitted to opacity maps independently of voxel regularization:
 \begin{equation}
-\lambda_i=\sum_k\kappa_k L_{ik}(z_0,w,h,x_k)+b_i,
+\lambda_i=\sum_k\kappa_k L_{ik}(z_0,w,h,x_k)+b_i.
 \end{equation}
-where $L_{ik}$ is the aperture-averaged path through beam $k$ and $b_i$ is a smooth per-position polynomial background. Nonnegative beam opacities $\kappa_k$ and background coefficients were projected out at each geometry step. For beams spanning the full accepted footprint in $y$, path averages were integrated analytically; finite-end crossings retained numerical quadrature. Multiple starts shared the same parameter bounds. Material density was not imposed, and measured dimensions were used only for comparison.
+Aperture-averaged paths $L_{ik}$ and projected nonnegative beam opacities were fitted over polynomial backgrounds $b_i$. Analytic paths and common multistart bounds avoided density or survey constraints.
 
-The optimizer reached a thin-depth bound and the profile minimum lay at the shallow edge (Fig.~\ref{fig:depth}); consequently no physical bottom or depth measurement is reported. The on-site values were $\InputsMeasuredBeamBottom\,\mathrm{m}$ and $\InputsMeasuredBeamDepth\,\mathrm{m}$. The conditional optimizer parameters were bottom $\BeamdepthZbottom\,\mathrm{m}$ and $h=\BeamdepthH\,\mathrm{m}$, with width $\BeamdepthW\,\mathrm{m}$ and residual statistic $\BeamdepthChisqPerDof$ per nominal degree of freedom. These numbers describe the fitted thin-layer approximation, not recovered beam dimensions.
+The flexible matched-beam fit favoured thin layers ($h=\BeamdepthH\,\mathrm{m}$) and a shallow profile edge (Fig.~\ref{fig:depth}). Count weights also reached the bound; matching-model noisy phantoms had maximum mean bias $\ValidationDepthMaxBias\,\mathrm{m}$. This fit did not resolve physical depth.
 
-The profile remains nearly flat toward thin layers, where increasing opacity compensates for decreasing depth. Analytic count weights also produced a bound fit. Beam cross-section, angular response and background misspecification can introduce further bias; agreement with a survey value was not an optimization criterion.
+Continuing inferred beam spacing beyond the matched subset tested array completeness. Relative centres were fixed apart from a fitted common shift. This conditional model averaged transmission before taking its logarithm:
+\begin{equation}
+\lambda_i=b_i-\ln\left\langle\exp\left[-\sum_k(q_k/h)\ell_{ik}\right]\right\rangle_{\!A}.
+\end{equation}
+Here $\ell_{ik}$ is each admitted ray's path, with background constant across the aperture. Independent nonnegative column opacities $q_k$, bottom, depth and width remained free. The conditional estimates were bottom $\ArraydepthBottom\pm\ArraydepthBottomSigma\,\mathrm{m}$ in tracker coordinates, depth $\ArraydepthH\pm\ArraydepthHSigma\,\mathrm{m}$ and width $\ArraydepthW\pm\ArraydepthWSigma\,\mathrm{m}$. Spreads came from \ArraydepthNReplicas{} count replicas with centres, array and pose fixed; the residual statistic was $\ArraydepthChisqPerDof$ per nominal degree of freedom. The on-site bottom/depth $\InputsMeasuredBeamBottom\,\mathrm{m}$/$\InputsMeasuredBeamDepth\,\mathrm{m}$ are independent comparisons with uncalibrated height registration. These are exploratory model-dependent estimates, not unconditional dimensions.
 
-On box-and-slab phantoms retaining the campaign's normal column contrast, the same estimator had maximum mean depth bias $\ValidationDepthMaxBias\,\mathrm{m}$. This checks numerical recovery within the assumed model rather than the accuracy of the real-room dimensions.
+Independent ray-box intersections checked noiseless recovery. Aperture refinement and multiple starts were consistent, but centre geometry, background and array completeness shifted depth substantially. Flux averaging alone had little effect. Survey agreement was never an optimization criterion.
 
-\begin{figure}[htbp]
+\begin{figure}[!htbp]
 \centering
 \includegraphics[width=\linewidth]{depth.pdf}
-\caption{Measured and fitted profiles, depth bootstrap and fixed-depth nuisance refits. The on-site depth is an independent comparison marker. The symmetric-log profile scale exposes the shallow-depth plateau; the curve is a fit diagnostic, not a calibrated confidence interval.}\label{fig:depth}
+\caption{Flexible matched-beam baseline: profiles, count bootstrap and fixed-depth refits. The on-site depth is an independent marker. The symmetric-log curve diagnoses the shallow plateau; it is not a confidence interval.}\label{fig:depth}
 \end{figure}
