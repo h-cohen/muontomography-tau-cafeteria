@@ -1,10 +1,10 @@
 {
-  "chisq_per_row": 0.8476560382356211,
+  "chisq_per_row": 0.5932000942101713,
   "iterations": 150,
-  "nx": 90,
-  "ny": 84,
+  "nx": 91,
+  "ny": 85,
   "nz": 40,
   "rows": 2586,
   "spacing": 0.2,
-  "voxels": 302400
+  "voxels": 309400
 }
