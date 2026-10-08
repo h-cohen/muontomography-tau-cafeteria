@@ -35,6 +35,7 @@ def built_pipeline(tmp_path):
                 "beams",
                 "beamdepth",
                 "depthdiagnostics",
+                "arraydepth",
                 "validation",
                 "uncertainty",
                 "inputs",
@@ -130,3 +131,13 @@ def test_arxiv_archive_places_bibliography_beside_main_tex(built_pipeline):
         assert archive.extractfile("main.bbl").read() == b"formatted bibliography"
         assert "generated/numbers.tex" in archive.getnames()
         assert "generated/figures/depth.pdf" in archive.getnames()
+
+
+def test_conditional_array_study_is_generated_before_paper_numbers(built_pipeline):
+    (built_pipeline / "runs/fast/results/arraydepth.json").unlink()
+    scheduled = _schedule(built_pipeline, "runs/fast/generated/numbers.tex")
+    assert "python -m cafetomo.arraydepth --fast" in scheduled
+    assert "--out runs/fast/results/arraydepth.json" in scheduled
+    assert scheduled.index("python -m cafetomo.arraydepth") < scheduled.index(
+        "cafetomo --fast numbers"
+    )

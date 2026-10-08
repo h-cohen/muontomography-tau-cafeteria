@@ -14,7 +14,7 @@ RECON   := $(RUNS)/voxels/meta.json $(RESULTS)/reconstruction.json
 ANALYSIS := $(RESULTS)/beamdepth.json $(RESULTS)/beams.json $(RESULTS)/autofocus.json
 NUMERIC = $(RESULTS)/data.json $(POSE) $(RESULTS)/reconstruction.json $(ANALYSIS) \
            $(RESULTS)/validation.json $(RESULTS)/uncertainty.json $(RESULTS)/inputs.json \
-           $(RESULTS)/depthdiagnostics.json
+           $(RESULTS)/depthdiagnostics.json $(RESULTS)/arraydepth.json
 # main.tex reads generated/numbers.tex and generated/figures/ relative to paper/.
 # GEN is that `generated` directory: paper/generated, or runs/fast/generated
 # under FAST. latexmk runs in paper/ with TEXINPUTS led by GEN's parent, so
@@ -27,7 +27,7 @@ FIGS    := setup opacity height depth
 FIGPDF  := $(FIGS:%=$(GEN)/figures/%.pdf)
 AUTHORFIG := $(wildcard paper/figures/room_voxels.pdf paper/figures/room_voxels.png)
 
-.PHONY: all ingest selfcal opacity reconstruct analysis validation uncertainty export figures paper viewer test clean arxiv
+.PHONY: all ingest selfcal opacity reconstruct analysis depthcheck arraydepth validation uncertainty export figures numbers paper viewer test clean arxiv
 .DELETE_ON_ERROR:
 
 all: paper viewer
@@ -58,6 +58,7 @@ $(ANALYSIS) &: $(RECON) $(CODE)
 	$(CLI) analyze --config $(CONFIG) --pose $(POSE) --opacity $(RUNS)/opacity \
 	  --voxels $(RUNS)/voxels --results $(RESULTS) --cache $(CACHE)
 
+depthcheck: $(RESULTS)/depthdiagnostics.json
 $(RESULTS)/depthdiagnostics.json: $(ANALYSIS) $(POSE) $(INGEST) $(RUNS)/opacity/meta.json $(CODE)
 	$(CLI) depthcheck --config $(CONFIG) --pose $(POSE) --ingest $(RUNS)/ingest \
 	  --opacity $(RUNS)/opacity --results $(RESULTS)
@@ -94,6 +95,13 @@ $(GEN)/figures/%.pdf: paper/figures/make_%.py paper/figures/style.py \
 
 $(GEN)/figures/depth.pdf: $(RESULTS)/inputs.json
 
+arraydepth: $(RESULTS)/arraydepth.json
+$(RESULTS)/arraydepth.json: $(RESULTS)/beams.json $(RUNS)/opacity/meta.json $(POSE) $(CODE)
+	OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 uv run python -m cafetomo.arraydepth $(if $(FAST),--fast,) \
+	  --config $(CONFIG) --pose $(POSE) --opacity $(RUNS)/opacity --ingest $(RUNS)/ingest \
+	  --beams $(RESULTS)/beams.json --out $@
+
+numbers: $(GEN)/numbers.tex
 $(GEN)/numbers.tex: $(NUMERIC) $(CODE)
 	$(CLI) numbers --results $(RESULTS) --out $@
 
