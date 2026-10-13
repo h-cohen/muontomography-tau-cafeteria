@@ -26,7 +26,7 @@ SEQUENTIAL = LinearSegmentedColormap.from_list(
     "sequential_blue",
     ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b"],
 )
-SEQUENTIAL.set_bad("#efeeea")
+SEQUENTIAL = SEQUENTIAL.with_extremes(bad="#efeeea")
 PANEL_LABEL_KW = {"fontweight": "bold", "va": "bottom", "ha": "left"}
 
 
