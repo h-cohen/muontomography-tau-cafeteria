@@ -126,9 +126,9 @@ def test_measurement_replicas_are_independent_of_weight_replicas_and_reproducibl
     live = {"pos0": 1.0, "pos1": 1.0, "SKY": 1.0}
     weight_draws, measurement_draws = [], []
 
-    def weight_opacity(sample, *args):
+    def weight_opacity(sample, *args, observation_mask=None):
         weight_draws.append(sample.counts["pos0"].copy())
-        return solve_opacity(sample, *args)
+        return solve_opacity(sample, *args, observation_mask=observation_mask)
 
     def measurement_sample(source, rng):
         sample = resample(source, rng)
