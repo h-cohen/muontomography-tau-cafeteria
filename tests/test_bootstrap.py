@@ -157,3 +157,38 @@ def test_measurement_replicas_are_independent_of_weight_replicas_and_reproducibl
     )
     for a, b in zip(measurement_draws[:3], measurement_draws[3:], strict=True):
         np.testing.assert_array_equal(a, b)
+
+
+def test_replica_archive_saves_volume_and_positive_weight_coverage(cfg, monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    from scipy.sparse import csr_matrix
+
+    import cafetomo.robustness as robustness
+    from cafetomo.reconstruct import VoxelSolution
+    from cafetomo.voxels import VoxelGrid
+
+    volume = VoxelSolution(np.array([2.0, 5.0]), VoxelGrid((0, 0, 0), 1.0, (2, 1, 1)), {}, ())
+    data = SimpleNamespace(rows=None, w=np.array([1.0, 0.0]))
+    monkeypatch.setattr(bootstrap, "solve_opacity", lambda *a, **kw: None)
+    monkeypatch.setattr(bootstrap, "build_fit_data", lambda *a, **kw: data)
+    monkeypatch.setattr(
+        bootstrap,
+        "measure",
+        lambda *a, **kw: Measurement({"height": 4.0}, volume.rho3(), {"solution": volume}),
+    )
+    monkeypatch.setattr(
+        robustness,
+        "build_forward_model",
+        lambda *a, **kw: SimpleNamespace(A=csr_matrix([[1, 0], [0, 1]])),
+    )
+    config = replace(cfg, uncertainty=replace(cfg.uncertainty, n_replicas=1))
+    grid = AnalysisGrid(np.array([-1, 1]), {"pos0": np.ones((1, 1))})
+    arguments = dict(live_time={}, sigma={}, rows=None, vgrid=None, sky=None)
+    default = run_bootstrap(grid, config, **arguments)
+    assert list(tmp_path.iterdir()) == []
+    archived = run_bootstrap(grid, config, replica_dir=tmp_path, **arguments)
+    np.testing.assert_array_equal(default.volume_mean, archived.volume_mean)
+    saved = VoxelSolution.load(tmp_path / "replica-000.npz")
+    np.testing.assert_array_equal(saved.rho, [2.0, 5.0])
+    np.testing.assert_array_equal(np.load(tmp_path / "coverage-000.npy").ravel(), [True, False])

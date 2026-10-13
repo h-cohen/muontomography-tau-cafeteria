@@ -31,7 +31,7 @@ def test_missing_replicas_and_duplicates():
     with pytest.raises(ValueError):
         stability_map([solution()], [], [], reference_grid=solution().grid)
     with pytest.raises(ValueError, match="duplicate"):
-        validate_choices([{"tv_alpha": 0.03}, {"tv_alpha": 0.03}])
+        validate_choices([dict(group="algorithm", contrast_threshold=0.1)] * 2)
 
 
 def test_coverage_uses_only_positive_weights(monkeypatch, cfg):
@@ -149,3 +149,140 @@ def test_beam_diagnostics_frozen_prominence_and_height():
     assert [p["x_m"] for p in result["peaks"]] == [1.5, 3.5]
     assert [p["z_centroid_m"] for p in result["peaks"]] == [5.5, 6.5]
     assert result["peaks"][0]["z_profile_extent_m"] == [5.0, 6.0]
+
+
+@pytest.mark.parametrize(
+    "choice",
+    [
+        dict(group="algorithm", contrast_threshold=0.1, weight_method="analytic"),
+        dict(
+            group="weights",
+            contrast_threshold=0.1,
+            weight_method="analytic",
+            overrides={"reconstruction": {"tv_alpha": 0.06}},
+        ),
+        dict(
+            group="support",
+            background_degree=1,
+            support_threshold=2,
+            tangent_sigma=0,
+            overrides={"volume": {"spacing_m": 0.25}},
+        ),
+        dict(group="display", contrast_threshold=0.1, lattice_shift=0.5),
+        dict(group="display", contrast_threshold=0.1, support_threshold=2),
+        dict(group="algorithm", contrast_threshold=0.1, overrides={"reconstruction": {"seed": 5}}),
+        dict(
+            group="weights", contrast_threshold=0.1, weight_method="analytic", n_sigma_replicas=12
+        ),
+    ],
+)
+def test_group_specific_rejects_confounded_or_ignored_options(choice):
+    with pytest.raises(ValueError):
+        validate_choices([choice])
+
+
+@pytest.mark.parametrize(
+    "alias",
+    [
+        dict(lattice_shift=0),
+        dict(overrides={}),
+        dict(overrides={"reconstruction": {}}),
+        dict(overrides={"reconstruction": {"tv_alpha": 0.03}}),
+        dict(overrides={"volume": {"spacing_m": 0.2}}),
+        dict(label="different label"),
+        dict(beam_background_rule="per_z_median"),
+    ],
+)
+def test_effective_duplicate_aliases(alias):
+    baseline = dict(group="algorithm", contrast_threshold=0.1)
+    with pytest.raises(ValueError, match="duplicate"):
+        validate_choices([baseline, {**baseline, **alias}])
+
+
+def test_effective_duplicates_use_supplied_cfg_and_ignore_evidence_prose(cfg):
+    from dataclasses import replace
+
+    custom = replace(cfg, reconstruction=replace(cfg.reconstruction, tv_alpha=0.06))
+    with pytest.raises(ValueError, match="duplicate"):
+        validate_choices(
+            [
+                dict(group="algorithm", contrast_threshold=0.1),
+                dict(
+                    group="algorithm",
+                    contrast_threshold=0.1,
+                    overrides={"reconstruction": {"tv_alpha": 0.06}},
+                ),
+            ],
+            custom,
+        )
+    poisson = dict(
+        group="weights",
+        contrast_threshold=0.1,
+        weight_method="poisson",
+        n_sigma_replicas=24,
+        convergence_evidence="predeclared criterion A",
+    )
+    with pytest.raises(ValueError, match="duplicate"):
+        validate_choices([poisson, {**poisson, "convergence_evidence": "other prose"}])
+
+
+def test_valid_distinct_choices_have_independent_groups():
+    validate_choices(
+        [
+            dict(group="algorithm", contrast_threshold=0.1),
+            dict(
+                group="algorithm",
+                contrast_threshold=0.1,
+                overrides={"reconstruction": {"tv_alpha": 0.06}},
+            ),
+            dict(group="display", contrast_threshold=0.1),
+            dict(group="weights", contrast_threshold=0.1, weight_method="analytic"),
+            dict(group="support", background_degree=1, support_threshold=2, tangent_sigma=0),
+        ]
+    )
+
+
+def test_frozen_beam_background_removes_uniform_slab_and_retains_excess():
+    from cafetomo.robustness import beam_contrast_volume, freeze_beam_background
+
+    grid = VoxelGrid((0, 0, 0), 1.0, (5, 1, 2))
+    rho = np.ones(grid.shape)
+    rho[2, 0, :] += 3
+    volume = VoxelSolution(rho.ravel(), grid, {}, ())
+    background = freeze_beam_background(volume, np.ones(grid.shape, bool))
+    np.testing.assert_array_equal(background, np.ones(grid.shape))
+    contrast = beam_contrast_volume(volume, background, grid)
+    assert (contrast.rho > 0.1).sum() == 2
+    null = VoxelSolution(np.ones(grid.n_voxels), grid, {}, ())
+    assert np.all(beam_contrast_volume(null, background, grid).rho == 0)
+    shifted = VoxelSolution(np.ones(grid.n_voxels), replace_grid(grid), {}, ())
+    assert np.all(beam_contrast_volume(shifted, background, grid).rho == 0)
+
+
+def replace_grid(grid):
+    from dataclasses import replace
+
+    return replace(grid, origin=(0.5, 0, 0))
+
+
+def test_sweep_archives_separate_density_and_beam_excess_null(cfg, monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    import cafetomo.robustness as r
+    from cafetomo.prediction import FrozenFold
+
+    grid = VoxelGrid((0, 0, 0), 1.0, (5, 1, 2))
+    volume = VoxelSolution(np.ones(grid.n_voxels), grid, {}, ())
+    fold = FrozenFold(cfg, volume, "training", "choice", {"weight_hash": "weights", "pose": {}})
+    data = SimpleNamespace(w=np.ones(1))
+    monkeypatch.setattr(r, "fit_training_fold", lambda *a, **kw: fold)
+    monkeypatch.setattr(r, "training_data", lambda *a, **kw: data)
+    monkeypatch.setattr(r, "positive_weight_coverage", lambda *a, **kw: np.ones(grid.shape, bool))
+    monkeypatch.setattr(r, "solve_voxels", lambda *a, **kw: {"full": volume})
+    result = r.run_robustness(
+        None, {}, cfg, [dict(group="algorithm", contrast_threshold=0.1)], seed=2, out_dir=tmp_path
+    )
+    assert result["variants"][0]["variant_beams"]["peaks"] == []
+    assert "not beam-only" in result["density_frequency_interpretation"]
+    np.testing.assert_array_equal(np.load(tmp_path / "algorithm.npz")["frequency"], 1)
+    np.testing.assert_array_equal(np.load(tmp_path / "beam-excess-algorithm.npz")["frequency"], 0)

@@ -16,7 +16,7 @@ from scipy.sparse import csr_matrix
 
 from cafetomo.angular import AnalysisGrid
 from cafetomo.bootstrap import resample
-from cafetomo.config import Config
+from cafetomo.config import Config, Reconstruction, Volume
 from cafetomo.forward import build_forward_model
 from cafetomo.opacity import build_fit_data, opacity_sigma, poisson_sigma, solve_opacity
 from cafetomo.prediction import _training_grid, fit_training_fold
@@ -25,24 +25,131 @@ from cafetomo.support import feature_mask_diagnostics, geometry_support, support
 from cafetomo.voxels import VoxelGrid
 
 
-def validate_choices(choices):
+def validate_choices(choices, cfg=None):
+    """Reject cross-group fields and duplicate effective estimators before fitting.
+
+    Labels and convergence-evidence prose are metadata, not estimator settings.
+    Omitted/empty overrides, zero lattice shift and explicit baseline values all
+    normalize to the same algorithm. Independent count replicas use no such
+    duplicate check: identical stochastic outputs remain valid observations.
+    """
     if not choices:
         raise ValueError("at least one declared choice required")
+    baseline = dict(
+        reconstruction=asdict(cfg.reconstruction if cfg else Reconstruction()),
+        volume=asdict(cfg.volume if cfg else Volume()),
+    )
+    keys, thresholds = [], set()
+    common = {"group", "label"}
     for choice in choices:
-        if choice.get("group") == "support" and "contrast_threshold" in choice:
-            raise ValueError("support thresholds are angular significance, not density")
-        if choice.get("weight_method") == "poisson" and not choice.get("convergence_evidence"):
-            raise ValueError("Poisson weight choices require declared convergence evidence")
-    thresholds = {
-        c["contrast_threshold"] for c in choices if c.get("group") in {"algorithm", "weights"}
-    }
+        group = choice.get("group")
+        group_fields = {
+            "algorithm": {
+                "contrast_threshold",
+                "overrides",
+                "lattice_shift",
+                "beam_background_rule",
+            },
+            "display": {"contrast_threshold", "beam_background_rule"},
+            "support": {"background_degree", "support_threshold", "tangent_sigma"},
+            "weights": {
+                "contrast_threshold",
+                "weight_method",
+                "n_sigma_replicas",
+                "convergence_evidence",
+                "beam_background_rule",
+            },
+        }
+        if group not in group_fields or set(choice) - common - group_fields[group]:
+            raise ValueError(f"unsupported or ignored options for {group} group")
+        effective = {"group": group}
+        if (
+            group != "support"
+            and choice.get("beam_background_rule", "per_z_median") != "per_z_median"
+        ):
+            raise ValueError("beam background rule must be the declared frozen per_z_median")
+        if group == "support":
+            required = group_fields[group]
+            if not required <= set(choice):
+                raise ValueError(
+                    "support choices require declared degree, threshold and broadening"
+                )
+            degree = choice["background_degree"]
+            threshold, broadening = (
+                float(choice["support_threshold"]),
+                float(choice["tangent_sigma"]),
+            )
+            if (
+                not isinstance(degree, int)
+                or degree < 0
+                or not np.isfinite(threshold)
+                or threshold <= 0
+                or not np.isfinite(broadening)
+                or broadening < 0
+            ):
+                raise ValueError("invalid support settings")
+            effective.update(
+                background_degree=degree, support_threshold=threshold, tangent_sigma=broadening
+            )
+        else:
+            if group == "weights":
+                method = choice.get("weight_method")
+                if method == "poisson":
+                    if not choice.get("convergence_evidence"):
+                        raise ValueError("Poisson choices require declared convergence evidence")
+                    n = choice.get("n_sigma_replicas")
+                    if not isinstance(n, int) or n < 2:
+                        raise ValueError(
+                            "Poisson weights require declared integer replica count >=2"
+                        )
+                    effective["n_sigma_replicas"] = n
+                elif method == "analytic":
+                    if {"n_sigma_replicas", "convergence_evidence"} & set(choice):
+                        raise ValueError("analytic weights cannot accept ignored Poisson options")
+                else:
+                    raise ValueError("unknown weight method")
+                effective["weight_method"] = method
+            if "contrast_threshold" not in choice:
+                raise ValueError("declared contrast threshold required")
+            threshold = float(choice["contrast_threshold"])
+            if not np.isfinite(threshold) or threshold < 0:
+                raise ValueError("finite nonnegative contrast threshold required")
+            effective["contrast_threshold"] = threshold
+            if group in {"algorithm", "weights"}:
+                thresholds.add(threshold)
+            if group == "algorithm":
+                overrides = choice.get("overrides", {})
+                allowed = {
+                    "reconstruction": {"tv_alpha", "coverage_damping"},
+                    "volume": {"spacing_m"},
+                }
+                if set(overrides) - set(allowed):
+                    raise ValueError("unapproved algorithm override section")
+                changes = {}
+                for section, values in overrides.items():
+                    if set(values) - allowed[section]:
+                        raise ValueError("unapproved algorithm override factor")
+                    for name, value in values.items():
+                        value = float(value)
+                        if (
+                            not np.isfinite(value)
+                            or value < 0
+                            or (name == "spacing_m" and value == 0)
+                        ):
+                            raise ValueError("invalid algorithm factor")
+                        if value != baseline[section][name]:
+                            changes[f"{section}.{name}"] = value
+                shift = float(choice.get("lattice_shift", 0))
+                if not np.isfinite(shift):
+                    raise ValueError("invalid lattice shift")
+                if len(changes) + bool(shift) > 1:
+                    raise ValueError("run one-factor choices before Cartesian sweeps")
+                effective.update(changes=changes, lattice_shift=shift)
+        keys.append(json.dumps(effective, sort_keys=True))
     if len(thresholds) > 1:
         raise ValueError("algorithm and weight variants require one frozen contrast threshold")
-    keys = [
-        json.dumps({k: v for k, v in c.items() if k != "label"}, sort_keys=True) for c in choices
-    ]
     if len(set(keys)) != len(keys):
-        raise ValueError("duplicate choice configurations")
+        raise ValueError("duplicate effective choice configurations")
 
 
 def _overlap(source, target, axis):
@@ -75,7 +182,9 @@ def stability_map(
     *,
     reference_grid: VoxelGrid,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Covered volume-weighted binary contrast frequency and exposure count.
+    """Covered volume-weighted raw-density threshold frequency and exposure count.
+
+    This is density/display persistence, not beam-only background excess.
 
     Independent replicas may yield identical outputs. Missing input replicas,
     invalid coverage and nonfinite measured density are errors, never discarded.
@@ -242,10 +351,46 @@ def run_count_replicas(
         replicas=replica_records,
         contrast_threshold=contrast_threshold,
         cfg=asdict(cfg),
-        interpretation="conditional stability, not accuracy",
+        interpretation="conditional raw-density/display persistence, not beam-only or accuracy",
     )
     (out / "manifest.json").write_text(json.dumps(metadata, indent=2, default=str))
     return metadata
+
+
+def freeze_beam_background(volume, coverage):
+    """Declared per-z median baseline-training background, effective opacity 1/m.
+
+    All covered x/y cells enter; no beam count or desired geometry is used.
+    This robust rule assumes beam excess occupies less than half the lateral
+    covered plane. A plane without baseline coverage remains unmeasured.
+    """
+    rho = volume.rho3()
+    covered = np.asarray(coverage).reshape(volume.grid.shape)
+    levels = np.array(
+        [
+            np.median(rho[:, :, k][covered[:, :, k]]) if covered[:, :, k].any() else np.nan
+            for k in range(volume.grid.shape[2])
+        ]
+    )
+    return np.broadcast_to(levels[None, None, :], volume.grid.shape).copy()
+
+
+def beam_contrast_volume(volume, background, baseline_grid):
+    """Subtract a frozen training background in world coordinates, keep excess.
+
+    Baseline background is constant laterally within each covered z plane. Exact
+    overlap resampling divides by supported volume fraction at boundary cells;
+    zero overlap stays NaN instead of inventing zero background.
+    """
+    finite = np.isfinite(background)
+    exposure = world_resample(finite, baseline_grid, volume.grid)
+    total = world_resample(np.where(finite, background, 0), baseline_grid, volume.grid)
+    mapped = np.divide(total, exposure, out=np.full(volume.grid.shape, np.nan), where=exposure > 0)
+    return replace(
+        volume,
+        rho=np.maximum(volume.rho3() - mapped, 0).ravel(),
+        info={"estimator": "positive excess above frozen per-z training median", "units": "1/m"},
+    )
 
 
 def beam_diagnostics(volume, coverage, threshold, *, prominence, lateral_half_width_m):
@@ -353,43 +498,20 @@ def run_robustness(
     frozen and compare analytic sigma against declared Poisson n/2n draws.
     Support choices use angular significance, separately from density display.
     """
-    validate_choices(choices)
+    validate_choices(choices, cfg)
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     fold = fit_training_fold(grid, live, cfg, observation_mask=None, cache_dir=out / "cache")
     data = training_data(grid, live, fold)
     grouped = {}
+    beam_grouped = {}
     records = []
     baseline_coverage = positive_weight_coverage(data, fold.cfg, fold.volume.grid)
+    background = freeze_beam_background(fold.volume, baseline_coverage)
+    np.save(out / "beam-background-per-z-training-median.npy", background)
+    baseline_contrast = beam_contrast_volume(fold.volume, background, fold.volume.grid)
     for index, choice in enumerate(choices):
-        allowed = {
-            "group",
-            "overrides",
-            "contrast_threshold",
-            "lattice_shift",
-            "label",
-            "weight_method",
-            "n_sigma_replicas",
-            "convergence_evidence",
-            "background_degree",
-            "support_threshold",
-            "tangent_sigma",
-        }
-        if set(choice) - allowed or choice["group"] not in {
-            "algorithm",
-            "display",
-            "support",
-            "weights",
-        }:
-            raise ValueError("unsupported choice or nuisance scope")
         overrides = choice.get("overrides", {})
-        if (
-            sum(len(values) for values in overrides.values()) + bool(choice.get("lattice_shift", 0))
-            > 1
-        ):
-            raise ValueError("run one-factor choices before Cartesian sweeps")
-        if set(overrides) - {"reconstruction", "volume"}:
-            raise ValueError("only reconstruction/volume choices use frozen nuisance scope")
         variant = replace(
             fold.cfg,
             **{
@@ -485,7 +607,9 @@ def run_robustness(
         grouped.setdefault(choice["group"], []).append((volume, threshold, covered))
         if choice["group"] != "support":
             baseline_density = np.where(
-                baseline_coverage & (fold.volume.rho3() > threshold), fold.volume.rho3(), 0
+                baseline_coverage & (baseline_contrast.rho3() > threshold),
+                baseline_contrast.rho3(),
+                0,
             )
             baseline_profile = baseline_density.sum(axis=(1, 2)) * fold.volume.grid.spacing**2
             baseline_seen = baseline_coverage.any(axis=(1, 2))
@@ -494,16 +618,25 @@ def run_robustness(
                 if baseline_seen.any()
                 else 0.0
             )
+            variant_contrast = beam_contrast_volume(volume, background, fold.volume.grid)
+            beam_coverage = covered & np.isfinite(variant_contrast.rho3())
+            beam_grouped.setdefault(choice["group"], []).append(
+                (variant_contrast, threshold, beam_coverage)
+            )
+            np.save(
+                out / f"beam-contrast-{index:03d}.npy",
+                beam_coverage & (variant_contrast.rho3() > threshold),
+            )
             baseline_beams = beam_diagnostics(
-                fold.volume,
+                baseline_contrast,
                 baseline_coverage,
                 threshold,
                 prominence=prominence,
                 lateral_half_width_m=cfg.beams.match_tol_m,
             )
             variant_beams = beam_diagnostics(
-                volume,
-                covered,
+                variant_contrast,
+                beam_coverage,
                 threshold,
                 prominence=prominence,
                 lateral_half_width_m=cfg.beams.match_tol_m,
@@ -546,6 +679,14 @@ def run_robustness(
         np.savez_compressed(
             out / f"{group}.npz", frequency=frequency, exposure=exposure, common_coverage=common
         )
+    for group, items in beam_grouped.items():
+        volumes, thresholds, coverage = zip(*items, strict=True)
+        frequency, exposure = stability_map(
+            volumes, thresholds, coverage, reference_grid=fold.volume.grid
+        )
+        np.savez_compressed(
+            out / f"beam-excess-{group}.npz", frequency=frequency, exposure=exposure
+        )
     result = dict(
         seed=seed,
         source_train_hash=fold.train_hash,
@@ -555,6 +696,8 @@ def run_robustness(
         weight_hash=fold.metadata["weight_hash"],
         nuisance_scope="training pose and weights frozen",
         variants=records,
+        beam_background_rule="per_z_median frozen baseline training, world overlap",
+        density_frequency_interpretation="raw density/display threshold persistence, not beam-only",
         interpretation="choice sensitivity, not probability or truth",
     )
     (out / "manifest.json").write_text(
