@@ -2,7 +2,7 @@
 
 [Code and data repository](https://github.com/h-cohen/muontomography-tau-cafeteria).
 
-Code, data and manuscript for *Seeing the Ceiling with Cosmic Muons: Two-View Tomography of a Real Room*.
+Code, data and manuscript for *Three-Dimensional Muon Imaging of a Building Ceiling from Two Detector Positions*.
 Two positions of one four-plane tracker, normalized by an open-sky run, provide a
 three-dimensional room reconstruction, beam-height and pitch estimates, and
 model-dependent beam-depth estimates.
@@ -21,7 +21,7 @@ Run commands from the repository root. Requirements:
 - GNU make >= 4.3.
 - Node >= 24 for viewer unit tests.
 - For `make paper`/`make all`: `latexmk`, `pdflatex`, BibTeX and the LaTeX packages
-  `siunitx`, `natbib`, `hyperref`, `booktabs`, `geometry` and `float`.
+  `siunitx`, `natbib`, `hyperref`, `booktabs`, `geometry`, `float` and `balance`.
 
 ```bash
 uv sync
@@ -159,10 +159,9 @@ make paper
 make arxiv
 ```
 
-Every paper quantity is generated from `results/*.json`. Add the author-provided
-3D room figure as `paper/figures/room_voxels.pdf` or `paper/figures/room_voxels.png`,
-then run `make paper` again. Without that file, the paper retains a labelled
-placeholder. The archive includes the figure when present, generated figures,
+Every paper quantity is generated from `results/*.json`. The author-provided 3D room figure is retained as
+`paper/figures/voxels.jpeg` (copied from the supplied generated figure). Replace
+that source image and run `make paper` to update the two-column manuscript. The archive includes the figure when present, generated figures,
 number macros, manuscript sections and the formatted bibliography.
 
 If the local Tectonic executable is available under `runs/tools/`, it can compile
@@ -339,3 +338,34 @@ runs; it leaves the tracked result JSON files in place.
 ## Citation and license
 
 See `CITATION.cff`. MIT license; see `LICENSE`.
+
+Internal validation runs are isolated from the paper pipeline:
+
+```bash
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 uv run cafetomo internal-validate \
+  --config configs/cafeteria.yaml --ingest runs/ingest \
+  --settings configs/internal-validation.yaml \
+  --out runs/internal-validation/pilot-001 \
+  --cache runs/internal-validation/scientific-cache
+```
+
+The settings explicitly select `pilot`, `full`, or `smoke`. Global `--fast`
+forces smoke scope. Pilot settings are declared before fitting: three count
+splits, five guarded angular folds, inner selection over nine TV/damping choices,
+two direct controls and five count realizations for each of two synthetic scenes.
+Inner candidates share one training-only nuisance fit; the selected model refits
+pose on all outer training counts. Angular inner/outer folds retain the complete
+roof calibration and its acquisition time. Count folds thin the shared roof once.
+The first fold of each protocol has two conditional prediction replicas; other
+folds report descriptive predictions. Five refitted-pose count replicas and
+one-factor reconstruction sensitivities use the first count training partition.
+
+All new artifacts live under the supplied output root. Completed JSON summaries
+appear in `results/` only after all stages succeed; `manifest.json` records
+incomplete runs and failures. Scientific completed-training cache keys include
+counts, masks, exposure, configuration and package source, with payload checksums.
+The local cache is trusted generated data, not an interchange format. Use a new
+output root for each attempt and reuse the scientific cache to avoid repeated
+completed training fits. Full mode requires a written `production_budget` in the
+settings before outcomes. These checks remain retrospective and conditional;
+persistence and geometric support do not measure real-world accuracy.

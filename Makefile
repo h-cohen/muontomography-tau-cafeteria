@@ -25,7 +25,7 @@ TEXROOT := $(abspath $(dir $(GEN)))
 POSE    := $(RESULTS)/pose.json
 FIGS    := setup opacity height depth
 FIGPDF  := $(FIGS:%=$(GEN)/figures/%.pdf)
-AUTHORFIG := $(wildcard paper/figures/room_voxels.pdf paper/figures/room_voxels.png)
+AUTHORFIG := $(wildcard paper/figures/voxels.jpeg paper/figures/room_voxels.pdf paper/figures/room_voxels.png)
 
 .PHONY: all ingest selfcal opacity reconstruct analysis depthcheck arraydepth validation uncertainty export figures numbers paper viewer test clean arxiv
 .DELETE_ON_ERROR:
@@ -125,3 +125,13 @@ arxiv: paper
 
 clean:
 	rm -rf runs paper/generated
+
+# Explicit isolated campaign; choose a fresh IVOUT for each attempt.
+IVOUT ?= runs/internal-validation/pilot-001
+IVCACHE ?= runs/internal-validation/scientific-cache
+IVSETTINGS ?= configs/internal-validation.yaml
+.PHONY: internal-validate
+internal-validate:
+	OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 $(CLI) internal-validate \
+	  --config $(CONFIG) --ingest runs/ingest --settings $(IVSETTINGS) \
+	  --out $(IVOUT) --cache $(IVCACHE)

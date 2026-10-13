@@ -266,6 +266,7 @@ def run_count_replicas(
     pose_mode,
     observation_mask=None,
     frozen_fold=None,
+    nuisance_cfg=None,
 ):
     """Training Poisson replicas, fixed settings; failures propagate.
 
@@ -287,9 +288,10 @@ def run_count_replicas(
         try:
             replica = resample(clean, rng)
             if pose_mode == "reestimated_pose":
-                fold = fit_training_fold(
-                    replica, live, cfg, observation_mask=masks, cache_dir=out / "cache"
-                )
+                kwargs = dict(observation_mask=masks, cache_dir=out / "cache")
+                if nuisance_cfg is not None:
+                    kwargs["nuisance_cfg"] = nuisance_cfg
+                fold = fit_training_fold(replica, live, cfg, **kwargs)
                 data = training_data(replica, live, fold, masks)
                 volume, replica_cfg = fold.volume, fold.cfg
             else:
@@ -322,6 +324,8 @@ def run_count_replicas(
                     grid=asdict(volume.grid),
                     solver_info=volume.info,
                     pose_scope=pose_mode,
+                    pose=asdict(replica_cfg.exposure(cfg.selfcal.free_pose).pose),
+                    weight_hash=hashlib.sha256(np.ascontiguousarray(data.w).tobytes()).hexdigest(),
                 )
             )
         except Exception as error:
@@ -344,6 +348,7 @@ def run_count_replicas(
     )
     np.savez_compressed(out / "stability.npz", frequency=frequency, exposure=exposure)
     metadata = dict(
+        nuisance_prior=asdict(nuisance_cfg or cfg),
         kind="conditional_count",
         pose_mode=pose_mode,
         seed=seed,
@@ -502,6 +507,7 @@ def run_robustness(
     *,
     seed: int,
     out_dir: Path,
+    nuisance_cfg=None,
 ) -> dict:
     """One-factor choices using an explicit frozen training nuisance scope.
 
@@ -515,7 +521,10 @@ def run_robustness(
     validate_choices(choices, cfg)
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
-    fold = fit_training_fold(grid, live, cfg, observation_mask=None, cache_dir=out / "cache")
+    fit_kwargs = dict(observation_mask=None, cache_dir=out / "cache")
+    if nuisance_cfg is not None:
+        fit_kwargs["nuisance_cfg"] = nuisance_cfg
+    fold = fit_training_fold(grid, live, cfg, **fit_kwargs)
     data = training_data(grid, live, fold)
     grouped = {}
     beam_grouped = {}
@@ -580,8 +589,25 @@ def run_robustness(
                     p95_relative_sigma_change=float(np.quantile(relative, 0.95))
                     if relative.size
                     else float("nan"),
+                    predeclared_criterion=choice["convergence_evidence"],
                     interpretation="diagnostic only; caller declares acceptance tolerance",
                 )
+                criterion = choice["convergence_evidence"]
+                if isinstance(criterion, dict):
+                    metric = criterion.get("metric")
+                    maximum = criterion.get("maximum")
+                    measured = convergence.get(metric)
+                    convergence["criterion_passed"] = bool(
+                        measured is not None
+                        and maximum is not None
+                        and np.isfinite(measured)
+                        and measured <= maximum
+                    )
+                    convergence["status"] = (
+                        "converged" if convergence["criterion_passed"] else "unconverged"
+                    )
+                else:
+                    convergence["status"] = "criterion_not_machine_evaluable"
             else:
                 convergence = None
         if choice["group"] == "support":
@@ -709,6 +735,7 @@ def run_robustness(
         contrast_units="effective opacity density 1/m; support group angular sigma",
         weight_hash=fold.metadata["weight_hash"],
         nuisance_scope="training pose and weights frozen",
+        nuisance_prior=asdict(nuisance_cfg or cfg),
         variants=records,
         beam_background_rule="per_z_median frozen baseline training, world overlap",
         density_frequency_interpretation="raw density/display threshold persistence, not beam-only",

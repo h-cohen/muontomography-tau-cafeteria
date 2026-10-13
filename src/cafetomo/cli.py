@@ -338,6 +338,34 @@ def cmd_numbers(args) -> None:
     write_numbers(Path(args.results), Path(args.out))
 
 
+def cmd_internal_validate(args) -> None:
+    import hashlib
+
+    import yaml
+
+    from cafetomo.internal_validation import run_campaign
+
+    cfg = _cfg(args)
+    settings = yaml.safe_load(Path(args.settings).read_text())
+    if args.fast:
+        settings["mode"] = "smoke"
+    grid, live = _grid(cfg, Path(args.ingest))
+    provenance = {
+        name: hashlib.sha256(Path(path).read_bytes()).hexdigest()
+        for name, path in (("config_file_hash", args.config), ("settings_file_hash", args.settings))
+    }
+    provenance["config_path"] = str(Path(args.config).resolve())
+    run_campaign(
+        grid,
+        live,
+        cfg,
+        settings,
+        out=args.out,
+        cache=args.cache or str(Path(args.out) / "cache"),
+        provenance=provenance,
+    )
+
+
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(prog="cafetomo", description=__doc__)
     ap.add_argument("--fast", action="store_true", help="cheap settings for CI and smoke runs")
@@ -351,6 +379,9 @@ def main(argv: list[str] | None = None) -> None:
         for o in opts:
             p.add_argument(f"--{o}", required=o not in {"cache", "pose"})
 
+    stage(
+        "internal-validate", cmd_internal_validate, "config", "ingest", "settings", "out", "cache"
+    )
     stage("ingest", cmd_ingest, "config", "out", "results")
     stage("selfcal", cmd_selfcal, "config", "ingest", "out")
     stage("opacity", cmd_opacity, "config", "pose", "ingest", "out")

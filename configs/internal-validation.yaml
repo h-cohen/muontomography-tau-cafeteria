@@ -1,3 +1,4 @@
+mode: pilot
 # Retrospective internal validation; no independent surveyed ceiling truth.
 root_seed: 314159
 seed_streams: [stage, fold, replica]  # separate NumPy SeedSequence streams
@@ -24,3 +25,36 @@ features:
 recovery:
   noiseless_cases: 2
   noise_replicas_per_case: 5
+
+# Frozen before outcomes; representative-fold counting uncertainty only.
+prediction_uncertainty:
+  replicas: 2
+  scope: first_outer_fold_per_protocol
+stability:
+  count_replicas: 5
+  algorithm_target_sweeps:
+    tv_alpha: [0.015, 0.03, 0.06]
+    coverage_damping: [0, 0.05, 0.1]
+  contrast_threshold: 0.01
+  choices:
+    - {group: algorithm, contrast_threshold: 0.01, overrides: {}}
+    - {group: algorithm, contrast_threshold: 0.01, overrides: {volume: {spacing_m: 0.15}}}
+    - {group: algorithm, contrast_threshold: 0.01, overrides: {volume: {spacing_m: 0.25}}}
+    - {group: algorithm, contrast_threshold: 0.01, lattice_shift: 0.5}
+    - {group: display, contrast_threshold: 0.005}
+    - {group: display, contrast_threshold: 0.02}
+    - {group: support, background_degree: 1, support_threshold: 2, tangent_sigma: 0}
+    - {group: support, background_degree: 1, support_threshold: 3, tangent_sigma: 0}
+    - {group: support, background_degree: 1, support_threshold: 4, tangent_sigma: 0}
+    - {group: support, background_degree: 2, support_threshold: 2, tangent_sigma: 0}
+    - {group: support, background_degree: 2, support_threshold: 3, tangent_sigma: 0}
+    - {group: support, background_degree: 2, support_threshold: 4, tangent_sigma: 0}
+    - {group: weights, contrast_threshold: 0.01, weight_method: analytic}
+    - group: weights
+      contrast_threshold: 0.01
+      weight_method: poisson
+      n_sigma_replicas: 256
+      convergence_evidence:
+        metric: p95_relative_sigma_change
+        maximum: 0.10
+        comparison: same-seed n versus 2n on common positive rows

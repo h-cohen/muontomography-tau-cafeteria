@@ -73,11 +73,23 @@ def fit_training_fold(
     *,
     observation_mask: dict[str, np.ndarray] | None,
     cache_dir: Path,
+    frozen_nuisance: FrozenFold | None = None,
+    nuisance_cfg: Config | None = None,
 ) -> FrozenFold:
     clean, masks = _training_grid(grid, cfg, observation_mask)
     train_hash = _digest(cfg, clean, live, masks)
-    fitted = fit_pose(clean, cfg, live, observation_mask=masks)
-    trained_cfg = cfg.with_pose(cfg.selfcal.free_pose, fitted.pose)
+    if frozen_nuisance is None:
+        fitted = fit_pose(clean, nuisance_cfg or cfg, live, observation_mask=masks)
+        trained_cfg = cfg.with_pose(cfg.selfcal.free_pose, fitted.pose)
+        pose_record = asdict(fitted.pose)
+    else:
+        if (
+            _digest(replace(cfg, reconstruction=None), clean, live, masks)
+            != frozen_nuisance.metadata["nuisance_input_hash"]
+        ):
+            raise ValueError("shared nuisance requires identical counts masks live and model")
+        trained_cfg = replace(cfg, exposures=frozen_nuisance.cfg.exposures)
+        pose_record = frozen_nuisance.metadata["pose"]
     sigma = opacity_sigma(
         clean,
         trained_cfg,
@@ -98,7 +110,9 @@ def fit_training_fold(
         train_hash,
         _digest(trained_cfg),
         dict(
-            pose=asdict(fitted.pose),
+            pose=pose_record,
+            nuisance_prior=asdict(nuisance_cfg or cfg),
+            nuisance_input_hash=_digest(replace(cfg, reconstruction=None), clean, live, masks),
             grid=asdict(volume.grid),
             n_training_bins={p: int(m.sum()) for p, m in masks.items()},
             n_rows=data.rows.n_rows,
@@ -209,7 +223,18 @@ def score_raw_counts(observed, predicted, *, observation_mask=None):
 
 
 def select_and_refit(
-    grid, live, candidates, *, cache_dir, seed=0, fraction=0.5, observation_mask=None
+    grid,
+    live,
+    candidates,
+    *,
+    cache_dir,
+    seed=0,
+    fraction=0.5,
+    observation_mask=None,
+    shared_nuisance=False,
+    full_roof_id=None,
+    fitter=None,
+    nuisance_cfg=None,
 ):
     """Choose on an inner count split, then refit the complete outer training set.
 
@@ -223,11 +248,27 @@ def select_and_refit(
         raise ValueError("at least one declared candidate required")
     clean, masks = _training_grid(grid, candidates[0], observation_mask)
     part = split_counts(clean, live, fraction=fraction, seed=seed)
+    if full_roof_id is not None:
+        part.train.counts[full_roof_id] = clean.counts[full_roof_id].copy()
+        part.test.counts[full_roof_id] = clean.counts[full_roof_id].copy()
+        part.train_live[full_roof_id] = live[full_roof_id]
+        part.test_live[full_roof_id] = live[full_roof_id]
+    train_fit = fitter or fit_training_fold
     predictions = []
+    nuisance = None
+    if shared_nuisance and any(
+        replace(c, reconstruction=candidates[0].reconstruction) != candidates[0] for c in candidates
+    ):
+        raise ValueError("shared nuisance candidates may differ only in reconstruction")
     for cfg in candidates:
-        fold = fit_training_fold(
-            part.train, part.train_live, cfg, observation_mask=masks, cache_dir=cache_dir
-        )
+        kwargs = dict(observation_mask=masks, cache_dir=cache_dir)
+        if nuisance_cfg is not None:
+            kwargs["nuisance_cfg"] = nuisance_cfg
+        if shared_nuisance and nuisance is not None:
+            kwargs["frozen_nuisance"] = nuisance
+        fold = train_fit(part.train, part.train_live, cfg, **kwargs)
+        if nuisance is None:
+            nuisance = fold
         predicted = predict_raw_counts(fold, part.train, part.train_live, part.test_live)
         predictions.append(predicted)
     common_masks = {
@@ -243,12 +284,17 @@ def select_and_refit(
     if not np.isfinite(scores).any():
         raise RuntimeError("all inner candidates failed coverage")
     chosen = int(np.argmin(scores))
-    final_fold = fit_training_fold(
-        clean, live, candidates[chosen], observation_mask=masks, cache_dir=cache_dir
-    )
+    final_kwargs = dict(observation_mask=masks, cache_dir=cache_dir)
+    if nuisance_cfg is not None:
+        final_kwargs["nuisance_cfg"] = nuisance_cfg
+    final_fold = train_fit(clean, live, candidates[chosen], **final_kwargs)
     metadata = dict(final_fold.metadata)
     metadata["inner_selection"] = dict(
         fraction=fraction,
+        nuisance_scope="shared_inner_training_original_selfcal"
+        if shared_nuisance
+        else "per_candidate",
+        roof_scope="full_reference_conditional" if full_roof_id else "inner_count_split",
         seed=seed,
         chosen=chosen,
         scores=scores,
@@ -265,7 +311,17 @@ def select_and_refit(
 
 
 def training_prediction_replicas(
-    grid, live, cfg, *, target_live, observation_mask=None, cache_dir, n_replicas, seed
+    grid,
+    live,
+    cfg,
+    *,
+    target_live,
+    observation_mask=None,
+    cache_dir,
+    n_replicas,
+    seed,
+    nuisance_cfg=None,
+    artifact_dir=None,
 ):
     """Refit each training-only Poisson replica, including shared roof and pose.
 
@@ -277,11 +333,25 @@ def training_prediction_replicas(
     clean, masks = _training_grid(grid, cfg, observation_mask)
     rng = np.random.default_rng(seed)
     results = []
-    for _ in range(n_replicas):
+    for index in range(n_replicas):
         replica = AnalysisGrid(
             clean.edges, {p: rng.poisson(clean.counts[p]) for p in sorted(clean.counts)}
         )
-        fold = fit_training_fold(replica, live, cfg, observation_mask=masks, cache_dir=cache_dir)
+        kwargs = dict(observation_mask=masks, cache_dir=cache_dir)
+        if nuisance_cfg is not None:
+            kwargs["nuisance_cfg"] = nuisance_cfg
+        fold = fit_training_fold(replica, live, cfg, **kwargs)
+        if artifact_dir is not None:
+            out = Path(artifact_dir) / str(index)
+            out.mkdir(parents=True, exist_ok=True)
+            fold.volume.save(out / "volume.npz")
+            (out / "training.json").write_text(
+                json.dumps(
+                    dict(seed=seed, replica=index, cfg=asdict(fold.cfg), training=fold.metadata),
+                    default=str,
+                    indent=2,
+                )
+            )
         results.append(predict_raw_counts(fold, replica, live, target_live))
     return results
 
