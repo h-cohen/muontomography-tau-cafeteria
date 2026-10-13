@@ -18,7 +18,7 @@ def test_raw_alignment_and_zero_gauge(cfg):
         np.linspace(-0.2, 0.2, 4), {cfg.sky_reference.id: np.arange(9).reshape(3, 3) + 100}
     )
     volume = VoxelSolution(
-        np.zeros(1), VoxelGrid((-1, -1, 1), 2.0, (1, 1, 1)), {}, cfg.position_ids
+        np.zeros(1), VoxelGrid((-20, -20, 1), 40.0, (1, 1, 1)), {}, cfg.position_ids
     )
     fold = FrozenFold(cfg, volume, "train", "choice")
     out = predict_raw_counts(
@@ -112,7 +112,11 @@ def test_original_direction_rows_and_gauge(cfg, monkeypatch):
         np.testing.assert_allclose(rows.sx, sx.ravel())
         np.testing.assert_allclose(rows.sy, sy.ravel())
         assert kwargs["grid"] is volume.grid
-        return SimpleNamespace(predict=lambda rho: np.arange(9) / 10)
+        from scipy import sparse
+
+        return SimpleNamespace(
+            A=sparse.csr_matrix(np.ones((9, 1))), predict=lambda rho: np.arange(9) / 10
+        )
 
     monkeypatch.setattr(p, "build_forward_model", build)
     out = p.predict_raw_counts(
@@ -244,3 +248,30 @@ def test_replica_summary_requires_two_supported_values():
     np.testing.assert_array_equal(out["n_supported"], [2, 0, 1])
     assert np.isclose(out["std"][0], np.sqrt(2))
     assert np.isnan(out["std"][1:]).all()
+
+
+def test_geometric_coverage_distinguishes_missed_lattice_from_zero_density(cfg):
+    from dataclasses import replace
+
+    from cafetomo.config import Pose
+    from cafetomo.prediction import score_raw_counts
+
+    cfg = replace(cfg, exposures=tuple(replace(e, pose=Pose(0, 0, 0)) for e in cfg.exposures))
+    grid = AnalysisGrid(np.array([-0.2, 0.2, 0.6]), {cfg.sky_reference.id: np.full((2, 2), 100)})
+    volume = VoxelSolution(
+        np.zeros(1), VoxelGrid((-0.5, -0.5, 10), 1.0, (1, 1, 1)), {}, cfg.position_ids
+    )
+    out = predict_raw_counts(
+        FrozenFold(cfg, volume, "a", "b"),
+        grid,
+        {cfg.sky_reference.id: 1},
+        {pid: 1 for pid in cfg.position_ids},
+    )
+    for pid, mu in out.items():
+        assert mu[0, 0] == 100
+        assert np.isnan(mu[1, 0])
+        record = score_raw_counts({pid: np.full((2, 2), 100)}, {pid: mu})[pid]
+        assert record["n_covered"] == 1
+        assert record["coverage"][0, 0]
+        assert not record["coverage"][1, 0]
+        assert record["deviance"] == 0

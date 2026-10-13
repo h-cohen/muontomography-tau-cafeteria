@@ -157,11 +157,13 @@ def predict_raw_counts(
                 np.arange(raw_flat.size, dtype=np.int64),
             )
             fwd = build_forward_model(rows, cfg, grid=fold.volume.grid)
-            lam = fwd.predict(fold.volume.rho)
-            mu = target_live[pid] / sky_live[sid] * ref.ravel()[raw_flat] * np.exp(-lam)
+            # Empty bundle rows have no geometric measurement support.
+            supported = np.asarray(fwd.A.sum(axis=1)).ravel() > 0
+            lam = fwd.predict(fold.volume.rho)[supported]
+            mu = target_live[pid] / sky_live[sid] * ref.ravel()[raw_flat[supported]] * np.exp(-lam)
             if np.any(~np.isfinite(mu)) or np.any(mu <= 0):
                 raise ValueError("nonpositive or nonfinite predictive means")
-            image.ravel()[raw_flat] = mu
+            image.ravel()[raw_flat[supported]] = mu
         out[pid] = image
     return out
 
