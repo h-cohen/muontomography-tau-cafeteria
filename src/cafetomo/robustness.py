@@ -11,6 +11,7 @@ from dataclasses import asdict, replace
 from pathlib import Path
 
 import numpy as np
+from scipy.signal import find_peaks
 from scipy.sparse import csr_matrix
 
 from cafetomo.angular import AnalysisGrid
@@ -247,6 +248,93 @@ def run_count_replicas(
     return metadata
 
 
+def beam_diagnostics(volume, coverage, threshold, *, prominence, lateral_half_width_m):
+    """Declared x peaks and local vertical contrast profiles, not physical boxes.
+
+    Lateral profile integrates selected density over world yz cell area. Peak
+    prominence is frozen from baseline-training profile scatter. Vertical extent
+    is the occupied contrast-cell extent inside a declared lateral window.
+    """
+    if not np.isfinite(prominence) or prominence < 0 or lateral_half_width_m <= 0:
+        raise ValueError("finite nonnegative prominence and positive lateral window required")
+    rho = volume.rho3()
+    covered = np.asarray(coverage).reshape(volume.grid.shape)
+    density = np.where(covered & (rho > threshold), rho, 0)
+    profile = density.sum(axis=(1, 2)) * volume.grid.spacing**2
+    measured = covered.any(axis=(1, 2))
+    profile[~measured] = np.nan
+    indices = find_peaks(np.where(measured, profile, -np.inf), prominence=prominence)[0]
+    peaks = []
+    x = volume.grid.axis_centers(0)
+    z = volume.grid.axis_centers(2)
+    for index in indices:
+        selected = abs(x - x[index]) <= lateral_half_width_m
+        z_profile = density[selected].sum(axis=(0, 1)) * volume.grid.spacing**2
+        active = np.flatnonzero(z_profile > 0)
+        total = z_profile.sum()
+        peaks.append(
+            dict(
+                x_m=float(x[index]),
+                x_index=int(index),
+                z_centroid_m=float(z_profile @ z / total) if total > 0 else float("nan"),
+                z_profile_extent_m=[
+                    float(z[active[0]] - volume.grid.spacing / 2),
+                    float(z[active[-1]] + volume.grid.spacing / 2),
+                ]
+                if active.size
+                else [float("nan"), float("nan")],
+                z_profile=z_profile.tolist(),
+                z_boundary_censored=bool(
+                    active.size and (active[0] == 0 or active[-1] == len(z) - 1)
+                ),
+            )
+        )
+    return dict(
+        peaks=peaks,
+        x_centers_m=x.tolist(),
+        x_profile=profile.tolist(),
+        z_centers_m=z.tolist(),
+        frozen_prominence=prominence,
+        lateral_half_width_m=lateral_half_width_m,
+        interpretation="conditional contrast peaks/profile extent, not physical beam depth",
+    )
+
+
+def associate_beam_peaks(baseline, variant, *, match_tol_m):
+    """Greedy nearest unique x matches within declared tolerance; retain losses.
+
+    Association refers to training-baseline detections, never surveyed truth or
+    a fixed desired beam count. Ties are resolved by baseline/variant index.
+    """
+    candidates = sorted(
+        (abs(a["x_m"] - b["x_m"]), i, j)
+        for i, a in enumerate(baseline)
+        for j, b in enumerate(variant)
+        if abs(a["x_m"] - b["x_m"]) <= match_tol_m
+    )
+    used_baseline, used_variant, matches = set(), set(), []
+    for _, i, j in candidates:
+        if i in used_baseline or j in used_variant:
+            continue
+        used_baseline.add(i)
+        used_variant.add(j)
+        matches.append(
+            dict(
+                baseline_index=i,
+                variant_index=j,
+                delta_x_m=variant[j]["x_m"] - baseline[i]["x_m"],
+                delta_z_centroid_m=variant[j]["z_centroid_m"] - baseline[i]["z_centroid_m"],
+            )
+        )
+    return dict(
+        matches=matches,
+        lost_baseline_indices=sorted(set(range(len(baseline))) - used_baseline),
+        new_variant_indices=sorted(set(range(len(variant))) - used_variant),
+        match_tol_m=match_tol_m,
+        interpretation="nearest unique conditional baseline association, not truth",
+    )
+
+
 def run_robustness(
     grid: AnalysisGrid,
     live: dict[str, float],
@@ -395,9 +483,40 @@ def run_robustness(
         np.save(out / f"coverage-{index:03d}.npy", covered)
         np.save(out / f"contrast-{index:03d}.npy", covered & (volume.rho3() > threshold))
         grouped.setdefault(choice["group"], []).append((volume, threshold, covered))
+        if choice["group"] != "support":
+            baseline_density = np.where(
+                baseline_coverage & (fold.volume.rho3() > threshold), fold.volume.rho3(), 0
+            )
+            baseline_profile = baseline_density.sum(axis=(1, 2)) * fold.volume.grid.spacing**2
+            baseline_seen = baseline_coverage.any(axis=(1, 2))
+            prominence = (
+                cfg.beams.prominence_sigmas * float(np.std(baseline_profile[baseline_seen]))
+                if baseline_seen.any()
+                else 0.0
+            )
+            baseline_beams = beam_diagnostics(
+                fold.volume,
+                baseline_coverage,
+                threshold,
+                prominence=prominence,
+                lateral_half_width_m=cfg.beams.match_tol_m,
+            )
+            variant_beams = beam_diagnostics(
+                volume,
+                covered,
+                threshold,
+                prominence=prominence,
+                lateral_half_width_m=cfg.beams.match_tol_m,
+            )
+            beam_changes = associate_beam_peaks(
+                baseline_beams["peaks"], variant_beams["peaks"], match_tol_m=cfg.beams.match_tol_m
+            )
         records.append(
             dict(
                 choice=choice,
+                baseline_beams=baseline_beams if choice["group"] != "support" else None,
+                variant_beams=variant_beams if choice["group"] != "support" else None,
+                beam_changes=beam_changes if choice["group"] != "support" else None,
                 centroid_xyz_m=contrast_location(volume, covered, threshold),
                 centroid_change_xyz_m=(
                     np.asarray(contrast_location(volume, covered, threshold))

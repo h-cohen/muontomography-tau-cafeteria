@@ -121,3 +121,31 @@ def test_algorithm_threshold_frozen_across_variants():
                 dict(group="algorithm", contrast_threshold=0.2),
             ]
         )
+
+
+def test_beam_peak_association_retains_shifted_lost_and_new():
+    from cafetomo.robustness import associate_beam_peaks
+
+    baseline = [dict(x_m=1.0, z_centroid_m=5.0), dict(x_m=3.0, z_centroid_m=6.0)]
+    variant = [dict(x_m=1.2, z_centroid_m=5.4), dict(x_m=6.0, z_centroid_m=7.0)]
+    result = associate_beam_peaks(baseline, variant, match_tol_m=0.6)
+    assert result["lost_baseline_indices"] == [1]
+    assert result["new_variant_indices"] == [1]
+    assert result["matches"][0]["delta_x_m"] == pytest.approx(0.2)
+    assert result["matches"][0]["delta_z_centroid_m"] == pytest.approx(0.4)
+
+
+def test_beam_diagnostics_frozen_prominence_and_height():
+    from cafetomo.robustness import beam_diagnostics
+
+    grid = VoxelGrid((0, 0, 4), 1.0, (5, 1, 3))
+    rho = np.zeros(grid.shape)
+    rho[1, 0, 1] = 2
+    rho[3, 0, 2] = 3
+    volume = VoxelSolution(rho.ravel(), grid, {}, ())
+    result = beam_diagnostics(
+        volume, np.ones(grid.shape, bool), 0.5, prominence=1.0, lateral_half_width_m=0.4
+    )
+    assert [p["x_m"] for p in result["peaks"]] == [1.5, 3.5]
+    assert [p["z_centroid_m"] for p in result["peaks"]] == [5.5, 6.5]
+    assert result["peaks"][0]["z_profile_extent_m"] == [5.0, 6.0]
