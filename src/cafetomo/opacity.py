@@ -68,11 +68,17 @@ def _check_live_time(cfg: Config, live_time: dict[str, float]) -> None:
 
 
 def _accumulate(
-    grid: AnalysisGrid, cfg: Config, sky: SkyGrid, live_time: dict[str, float]
+    grid: AnalysisGrid,
+    cfg: Config,
+    sky: SkyGrid,
+    live_time: dict[str, float],
+    observation_mask: dict[str, np.ndarray] | None = None,
 ) -> dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]]:
     """Per position: (observed counts, expected open-sky counts, raw sky counts)
     per sky bin."""
     _check_live_time(cfg, live_time)
+    if observation_mask is not None and set(observation_mask) - set(cfg.position_ids):
+        raise ValueError("observation masks may name only room positions")
     sky_id = cfg.sky_reference.id
     if sky_id not in grid.counts:
         raise ValueError(f"analysis grid has no {sky_id!r} counts; ingest the sky reference")
@@ -85,6 +91,13 @@ def _accumulate(
         sx, sy, on_sky = detector_to_sky(tx, ty, cfg.exposure(pid).pose)
         flat, in_grid = sky.bin_index(sx, sy)
         live = (acc > 0) & on_sky & in_grid & (n_sky >= cfg.opacity.min_sky)
+        if observation_mask is not None and pid in observation_mask:
+            mask = np.asarray(observation_mask[pid])
+            if mask.shape != tx.shape or mask.dtype != np.bool_:
+                raise ValueError(
+                    f"observation mask for {pid!r} must be boolean with shape {tx.shape}"
+                )
+            live &= mask
         obs = np.zeros(sky.flat_size)
         ref = np.zeros(sky.flat_size)
         raw = np.zeros(sky.flat_size)
@@ -95,11 +108,16 @@ def _accumulate(
     return out
 
 
-def solve_opacity(grid: AnalysisGrid, cfg: Config, live_time: dict[str, float]) -> OpacityMaps:
+def solve_opacity(
+    grid: AnalysisGrid,
+    cfg: Config,
+    live_time: dict[str, float],
+    observation_mask: dict[str, np.ndarray] | None = None,
+) -> OpacityMaps:
     """Absolute lambda per position and sky bin."""
     sky = _sky_grid(cfg)
     lam = {}
-    for pid, (obs, ref, _) in _accumulate(grid, cfg, sky, live_time).items():
+    for pid, (obs, ref, _) in _accumulate(grid, cfg, sky, live_time, observation_mask).items():
         out = np.full(sky.flat_size, np.nan)
         seen = ref > 0
         out[seen] = -np.log(np.clip(obs[seen] / ref[seen], cfg.opacity.t_floor, None))
@@ -108,13 +126,16 @@ def solve_opacity(grid: AnalysisGrid, cfg: Config, live_time: dict[str, float]) 
 
 
 def poisson_sigma(
-    grid: AnalysisGrid, cfg: Config, live_time: dict[str, float]
+    grid: AnalysisGrid,
+    cfg: Config,
+    live_time: dict[str, float],
+    observation_mask: dict[str, np.ndarray] | None = None,
 ) -> dict[str, np.ndarray]:
     """Analytic sigma of lambda, sqrt(1/n_pos + 1/n_sky): cheap weights for
     objectives evaluated many times (the pose fit)."""
     sky = _sky_grid(cfg)
     out = {}
-    for pid, (obs, ref, raw) in _accumulate(grid, cfg, sky, live_time).items():
+    for pid, (obs, ref, raw) in _accumulate(grid, cfg, sky, live_time, observation_mask).items():
         s = np.full(sky.flat_size, np.nan)
         seen = ref > 0
         s[seen] = np.sqrt(1.0 / np.maximum(obs[seen], 1.0) + 1.0 / raw[seen])
@@ -122,16 +143,47 @@ def poisson_sigma(
     return out
 
 
+def _poisson_replica(
+    grid: AnalysisGrid,
+    rng: np.random.Generator,
+    observation_mask: dict[str, np.ndarray] | None,
+) -> AnalysisGrid:
+    """Excluded room counts must not advance the training random stream.
+
+    Zero is only a sampling placeholder here: the unchanged observation mask
+    still excludes those bins from observations AND reference expectations.
+    """
+    counts = {}
+    for pid, values in grid.counts.items():
+        if observation_mask is not None and pid in observation_mask:
+            mask = np.asarray(observation_mask[pid])
+            if mask.shape != values.shape or mask.dtype != np.bool_:
+                raise ValueError(f"invalid observation mask for {pid!r}")
+            values = np.where(mask, values, 0)
+        counts[pid] = rng.poisson(values).astype(np.int64)
+    return AnalysisGrid(edges=grid.edges, counts=counts)
+
+
 def opacity_sigma(
-    grid: AnalysisGrid, cfg: Config, live_time: dict[str, float], *, n_replicas: int, seed: int
+    grid: AnalysisGrid,
+    cfg: Config,
+    live_time: dict[str, float],
+    *,
+    n_replicas: int,
+    seed: int,
+    observation_mask: dict[str, np.ndarray] | None = None,
 ) -> dict[str, np.ndarray]:
     """Per-bin sigma of lambda from a Poisson bootstrap of every histogram,
     sky run included: the weights of the delivered fits."""
     rng = np.random.default_rng(seed)
     stacks: dict[str, list[np.ndarray]] = {}
     for _ in range(n_replicas):
-        counts = {k: rng.poisson(v).astype(np.int64) for k, v in grid.counts.items()}
-        maps = solve_opacity(AnalysisGrid(edges=grid.edges, counts=counts), cfg, live_time)
+        maps = solve_opacity(
+            _poisson_replica(grid, rng, observation_mask),
+            cfg,
+            live_time,
+            observation_mask=observation_mask,
+        )
         for pid, lam in maps.lam.items():
             stacks.setdefault(pid, []).append(lam)
     with warnings.catch_warnings():

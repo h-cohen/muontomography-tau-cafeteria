@@ -22,7 +22,7 @@ from cafetomo.config import Config, Pose
 from cafetomo.fitdata import FitData
 from cafetomo.forward import build_forward_model
 from cafetomo.inversion import solve
-from cafetomo.opacity import build_fit_data, poisson_sigma, solve_opacity
+from cafetomo.opacity import _poisson_replica, build_fit_data, poisson_sigma, solve_opacity
 from cafetomo.voxels import VoxelGrid, auto_grid
 
 
@@ -157,7 +157,12 @@ def _scan_start(objective, cfg: Config) -> np.ndarray:
     return np.array([bearings[int(np.argmin(scores))], x0[1]])
 
 
-def fit_pose(grid: AnalysisGrid, cfg: Config, live_time: dict[str, float]) -> PoseFit:
+def fit_pose(
+    grid: AnalysisGrid,
+    cfg: Config,
+    live_time: dict[str, float],
+    observation_mask: dict[str, np.ndarray] | None = None,
+) -> PoseFit:
     """Minimise the cross-position score over the free position's pose,
     bounded around the config's prior.
 
@@ -174,14 +179,18 @@ def fit_pose(grid: AnalysisGrid, cfg: Config, live_time: dict[str, float]) -> Po
       pull the minimum; nothing here measures that pull."""
     s = cfg.selfcal
     nominal = build_fit_data(
-        solve_opacity(grid, cfg, live_time), cfg, poisson_sigma(grid, cfg, live_time)
+        solve_opacity(grid, cfg, live_time, observation_mask=observation_mask),
+        cfg,
+        poisson_sigma(grid, cfg, live_time, observation_mask=observation_mask),
     )
     vgrids = _objective_grids(cfg, nominal)
 
     def objective(theta: np.ndarray) -> float:
         c = cfg.with_pose(s.free_pose, _pose_from(theta, cfg))
         data = build_fit_data(
-            solve_opacity(grid, c, live_time), c, poisson_sigma(grid, c, live_time)
+            solve_opacity(grid, c, live_time, observation_mask=observation_mask),
+            c,
+            poisson_sigma(grid, c, live_time, observation_mask=observation_mask),
         )
         return float(np.mean([cross_position_score(data, c, g) for g in vgrids]))
 
@@ -204,7 +213,13 @@ def fit_pose(grid: AnalysisGrid, cfg: Config, live_time: dict[str, float]) -> Po
 
 
 def pose_bootstrap(
-    grid: AnalysisGrid, cfg: Config, live_time: dict[str, float], *, n: int, seed: int
+    grid: AnalysisGrid,
+    cfg: Config,
+    live_time: dict[str, float],
+    *,
+    n: int,
+    seed: int,
+    observation_mask: dict[str, np.ndarray] | None = None,
 ) -> dict[str, float]:
     """Spread of the fitted pose over Poisson replicas of every histogram.
 
@@ -218,8 +233,14 @@ def pose_bootstrap(
     rng = np.random.default_rng(seed)
     poses = []
     for _ in range(n):
-        counts = {k: rng.poisson(v).astype(np.int64) for k, v in grid.counts.items()}
-        poses.append(fit_pose(AnalysisGrid(edges=grid.edges, counts=counts), cfg, live_time).pose)
+        poses.append(
+            fit_pose(
+                _poisson_replica(grid, rng, observation_mask),
+                cfg,
+                live_time,
+                observation_mask=observation_mask,
+            ).pose
+        )
     arr = np.array([[p.x, p.y, p.az_deg] for p in poses])
     sd = arr.std(axis=0, ddof=1)
     return {"x": float(sd[0]), "y": float(sd[1]), "az_deg": float(sd[2])}

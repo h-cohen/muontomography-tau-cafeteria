@@ -1,0 +1,26 @@
+# Retrospective internal validation; no independent surveyed ceiling truth.
+root_seed: 314159
+seed_streams: [stage, fold, replica]  # separate NumPy SeedSequence streams
+count:
+  train_fraction: 0.5
+  outer_seeds: 3
+  inner_train_fraction: 0.5
+  roof_scope: training_split
+angular:
+  folds: 5
+  tile: 5
+  guard: 1
+  assignment: "(tile_x + 2 * tile_y) % folds"
+  roof_scope: full_reference_conditional
+  live_time_scope: full_acquisition
+selection:
+  scope: inner_partition
+  tv_alpha: [0.015, 0.03, 0.06]
+  coverage_damping: [0, 0.05, 0.1]
+  vertical_tv_weight: 0
+features:
+  signal_to_error: [2, 3, 4]
+  background_degree: [1, 2]
+recovery:
+  noiseless_cases: 2
+  noise_replicas_per_case: 5
