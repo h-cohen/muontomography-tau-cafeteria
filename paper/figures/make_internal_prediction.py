@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from internal_figure_utils import Archive, begin_output, cli, read_npz, save
+from internal_figure_utils import Archive, begin_output, cli, save
 from style import SEQUENTIAL, plt
 
 
@@ -12,9 +12,9 @@ def generate(root, out):
     records = []
     for fold in archive.folds:
         path, record, _ = archive.fold(fold["name"])
-        edges = read_npz(path / "test-counts.npz", ["edges"])["edges"]
+        edges = archive.npz(path / "test-counts.npz", ["edges"])["edges"]
         for pid in record["positions"]:
-            arrays = read_npz(
+            arrays = archive.npz(
                 path / f"{pid}-prediction.npz", ["observed", "predicted", "residual", "coverage"]
             )
             shape = (len(edges) - 1,) * 2
@@ -29,14 +29,51 @@ def generate(root, out):
                 raise ValueError("residual differs from archived count difference")
             uncertainty = None
             if "uncertainty_replicas" in record:
-                uncertainty = read_npz(
-                    path / f"{pid}-conditional-uncertainty.npz", ["std", "n_supported"]
+                uncertainty = archive.npz(
+                    path / f"{pid}-conditional-uncertainty.npz",
+                    ["std", "n_supported", "n_replicas"],
                 )
+                sd, support = uncertainty["std"], uncertainty["n_supported"]
+                replicas = record["uncertainty_replicas"]
+                if sd.shape != shape or support.shape != shape:
+                    raise ValueError("uncertainty array shape differs from detector bins")
+                if (
+                    uncertainty["n_replicas"].shape != ()
+                    or uncertainty["n_replicas"].item() != replicas
+                ):
+                    raise ValueError("uncertainty replica count differs from fold metadata")
+                if (
+                    np.any(~np.isfinite(support))
+                    or np.any(support < 0)
+                    or np.any(support > replicas)
+                    or np.any(support != np.floor(support))
+                ):
+                    raise ValueError("uncertainty support counts must be integers within replicas")
+                supported = support > 1
+                if (
+                    np.any(~np.isfinite(sd[supported]))
+                    or np.any(sd[supported] < 0)
+                    or np.any(~np.isnan(sd[~supported]))
+                ):
+                    raise ValueError(
+                        "uncertainty SD must be finite/nonnegative with >=2 supports, "
+                        "and NaN otherwise"
+                    )
             records.append((record, pid, arrays, edges, uncertainty))
     out = begin_output(
         archive,
         out,
         dict(
+            summed_deviance_scope="bookkeeping over reused observations",
+            summary_scope="separate protocols and covered bins; no calibrated significance",
+            fold_scopes=[
+                dict(
+                    name=fold["name"],
+                    protocol=fold["protocol"],
+                    point_score_reference_scope=fold["point_score_reference_scope"],
+                )
+                for fold in archive.folds
+            ],
             residual_normalization="observed - predicted counts; no independent pull",
             uncertainty="first fold per protocol; shared reference variation included",
         ),

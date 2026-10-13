@@ -9,8 +9,6 @@ from internal_figure_utils import (
     begin_output,
     check_volume,
     cli,
-    read_json,
-    read_npz,
     save,
     world_panel,
 )
@@ -19,11 +17,16 @@ from style import plt
 
 def generate(root, out):
     archive = Archive(root)
-    archive.result("stability")
+    result = archive.result("stability")
+    scope = result["scope"]
+    count_folds = [fold["name"] for fold in archive.folds if fold["protocol"] == "count"]
+    if not count_folds or scope != count_folds[0]:
+        raise ValueError("stability scope must be the declared first count-training fold")
+    fraction = archive.manifest["settings"]["count"]["train_fraction"]
     count_dir = archive.root / "stability" / "count"
-    count = read_json(count_dir / "manifest.json")
+    count = archive.json(count_dir / "manifest.json")
     choices_dir = archive.root / "stability" / "choices"
-    choices = read_json(choices_dir / "manifest.json")
+    choices = archive.json(choices_dir / "manifest.json")
     entries = [
         (
             "Conditional count: raw density persistence",
@@ -55,7 +58,7 @@ def generate(root, out):
             )
     loaded = []
     for name, path, grid in entries:
-        data = read_npz(path, ["frequency", "exposure"])
+        data = archive.npz(path, ["frequency", "exposure"])
         coverage = data["exposure"] > 0
         check_volume(data["frequency"], coverage, grid)
         if np.any((data["frequency"][coverage] < 0) | (data["frequency"][coverage] > 1)):
@@ -65,6 +68,12 @@ def generate(root, out):
         archive,
         out,
         dict(
+            training_fold_scope=scope,
+            room_and_roof_train_fraction=fraction,
+            reconstruction_settings_scope="selected settings of first count-training fold",
+            world_grid_scopes=dict(
+                count=count["replicas"][0]["grid"], choices=choices["reference_grid"]
+            ),
             count_density_threshold=count["contrast_threshold"],
             frequency="fraction of covered replicas/variants; not posterior confidence",
             beam_background="frozen baseline training per-z median; raw density separate",
@@ -95,7 +104,9 @@ def generate(root, out):
                 [0, max(1, data["exposure"].max())],
             )
         fig.suptitle(
-            name + "\nFrequency is not posterior confidence; grey is unmeasured", fontsize=8
+            f"{name}\nFirst count-training fold {scope}: {fraction:g} room/roof fraction\n"
+            "Frequency is not posterior confidence; grey is unmeasured",
+            fontsize=8,
         )
         save(fig, out, f"stability-{index:02d}")
     variants = choices["variants"]
@@ -112,7 +123,10 @@ def generate(root, out):
     ax.set(
         ylabel="Centroid change from baseline (m)",
         xlabel="Predeclared variant index",
-        title="Parameter sensitivity; NaN is unmeasured, support variants have no density centroid",
+        title=(
+            f"First count-training fold {scope}: parameter sensitivity\n"
+            "NaN unmeasured; support variants have no density centroid"
+        ),
     )
     ax.legend()
     save(fig, out, "choice-sensitivity")

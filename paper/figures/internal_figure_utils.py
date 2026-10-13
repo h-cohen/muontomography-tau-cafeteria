@@ -2,6 +2,7 @@
 
 import argparse
 import hashlib
+import io
 import json
 from pathlib import Path
 
@@ -23,33 +24,52 @@ DISPLAY = dict(
 )
 
 
-def read_json(path):
-    return json.loads(Path(path).read_text())
-
-
-def read_npz(path, keys):
-    with np.load(path, allow_pickle=False) as data:
-        return {key: data[key].copy() for key in keys}
-
-
 class Archive:
     def __init__(self, root):
         self.root = Path(root).resolve()
-        self.manifest = read_json(self.root / "manifest.json")
+        self.input_files = {}
+        self.manifest = self.json(self.root / "manifest.json")
         if self.manifest["status"] != "complete":
             raise ValueError("campaign must be complete before figure generation")
         if self.manifest["mode"] == "smoke":
             raise ValueError("smoke campaigns cannot produce publication figures")
         self.folds = self.manifest["folds"]
-        if not self.folds:
+        names = [fold["name"] for fold in self.folds]
+        if not names:
             raise ValueError("complete campaign has no folds")
+        if len(names) != len(set(names)):
+            raise ValueError("duplicate declared folds")
+
+    def bytes(self, path):
+        """Hash the bytes actually parsed, avoiding a separate path re-read for provenance."""
+        path = Path(path).resolve()
+        payload = path.read_bytes()
+        within_archive = path.is_relative_to(self.root)
+        name = str(path.relative_to(self.root)) if within_archive else str(path)
+        self.input_files[name] = dict(
+            path=name,
+            sha256=hashlib.sha256(payload).hexdigest(),
+            size_bytes=len(payload),
+            location="archive" if within_archive else "explicit",
+        )
+        return payload
+
+    def json(self, path):
+        return json.loads(self.bytes(path))
+
+    def npz(self, path, keys):
+        with np.load(io.BytesIO(self.bytes(path)), allow_pickle=False) as data:
+            return {key: data[key].copy() for key in keys}
+
+    def npy(self, path):
+        return np.load(io.BytesIO(self.bytes(path)), allow_pickle=False)
 
     def result(self, name):
-        return read_json(self.root / "results" / f"{name}.json")
+        return self.json(self.root / "results" / f"{name}.json")
 
     def fold(self, name):
         path = self.root / "folds" / name
-        record = read_json(path / "fold.json")
+        record = self.json(path / "fold.json")
         return path, record, record["training"]["grid"]
 
 
@@ -102,7 +122,8 @@ def begin_output(archive, out, extra=None):
     document = dict(
         DISPLAY,
         source_archive=str(archive.root),
-        manifest_sha256=hashlib.sha256((archive.root / "manifest.json").read_bytes()).hexdigest(),
+        manifest_sha256=archive.input_files["manifest.json"]["sha256"],
+        input_files=[archive.input_files[name] for name in sorted(archive.input_files)],
     )
     document.update(extra or {})
     (out / "display-settings.json").write_text(json.dumps(document, indent=2) + "\n")

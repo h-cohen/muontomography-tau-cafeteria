@@ -3,6 +3,7 @@
 import json
 
 import numpy as np
+from matplotlib.lines import Line2D
 
 from internal_figure_utils import Archive, begin_output, cli, save
 from style import plt
@@ -37,9 +38,10 @@ def generate(root, out):
         ),
     )
     fig, axes = plt.subplots(2, 1, figsize=(7, 6), layout="constrained")
+    colors = ("#1b6ca8", "#d1495b", "#65843c")
     for i, key in enumerate(ids):
         values = np.asarray(errors[key]).reshape(-1, 3)
-        for axis, color in enumerate(("#1b6ca8", "#d1495b", "#65843c")):
+        for axis, color in enumerate(colors):
             finite = values[:, axis][np.isfinite(values[:, axis])]
             if len(finite):
                 axes[0].scatter(
@@ -48,7 +50,6 @@ def generate(root, out):
                     color=color,
                     alpha=0.55,
                     s=12,
-                    label="xyz"[axis] if i == 0 else None,
                 )
                 axes[0].plot(i + (axis - 1) * 0.2, finite.mean(), "_", color=color, ms=12)
     axes[0].axhline(0, color="grey", lw=0.7)
@@ -56,7 +57,11 @@ def generate(root, out):
         ylabel="Localization error (m)",
         title="Synthetic beam centroid error: xyz; bar is mean bias",
     )
-    axes[0].legend(title="Coordinate")
+    handles = [
+        Line2D([], [], marker="o", linestyle="", color=color, label=axis)
+        for axis, color in zip("xyz", colors, strict=True)
+    ]
+    axes[0].legend(handles=handles, title="Coordinate")
     bottom = np.zeros(len(ids))
     all_statuses = sorted({r["status"] for r in cases})
     for status in all_statuses:

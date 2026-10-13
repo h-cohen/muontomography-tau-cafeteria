@@ -1,6 +1,7 @@
 """Voxel-only world view and separate dimensionless geometric support comparison."""
 
 import hashlib
+import io
 import json
 from pathlib import Path
 
@@ -14,11 +15,15 @@ from internal_figure_utils import (
     begin_output,
     check_volume,
     cli,
-    read_npz,
     save,
     world_panel,
 )
 from style import SEQUENTIAL, plt
+
+
+def archive_source_key(archive, path):
+    path = Path(path).resolve()
+    return str(path.relative_to(archive.root)) if path.is_relative_to(archive.root) else str(path)
 
 
 def main_coverage_mask(views):
@@ -33,14 +38,32 @@ def main_coverage_mask(views):
 def generate(root, out, *, overlay=None, main_volume=None, main_coverage=None):
     archive = Archive(root)
     result = archive.result("support")
+    declared_names = {fold["name"] for fold in archive.folds}
+    summaries = result["folds"]
+    names = [summary["fold"] for summary in summaries]
+    if not names or len(names) != len(set(names)) or set(names) != declared_names:
+        raise ValueError("support folds must match all declared folds without duplicates")
+    features = archive.manifest["settings"].get("features")
+    if not features:
+        raise ValueError("missing declared feature sensitivity settings")
+    declared_choices = {
+        (degree, threshold)
+        for degree in features["background_degree"]
+        for threshold in features["signal_to_error"]
+    }
+    if not declared_choices:
+        raise ValueError("missing declared feature sensitivity settings")
     folds = []
     for summary in result["folds"]:
         path, record, grid = archive.fold(summary["fold"])
-        rho = np.load(path / "rho.npy", allow_pickle=False)
+        rho = archive.npy(path / "rho.npy")
         supports = []
+        keys = [(choice["degree"], choice["threshold"]) for choice in summary["sensitivity"]]
+        if not keys or len(keys) != len(set(keys)) or set(keys) != declared_choices:
+            raise ValueError("support sensitivity must match declared choices without duplicates")
         for choice in summary["sensitivity"]:
             name = f"support-degree{choice['degree']}-threshold{choice['threshold']:g}"
-            data = read_npz(path / f"{name}.npz", ["joint", "coverage"])
+            data = archive.npz(path / f"{name}.npz", ["joint", "coverage"])
             if data["coverage"].dtype != np.bool_:
                 raise ValueError("support coverage must be boolean")
             check_volume(rho, data["coverage"], grid)
@@ -53,17 +76,21 @@ def generate(root, out, *, overlay=None, main_volume=None, main_coverage=None):
         raise ValueError("main-volume and main-coverage must be provided together")
     main = None
     if main_volume is not None:
-        values = read_npz(main_volume, ["rho", "origin", "spacing", "shape"])
+        values = archive.npz(main_volume, ["rho", "origin", "spacing", "shape"])
         grid = dict(
             origin=values["origin"].tolist(),
             spacing=float(values["spacing"]),
             shape=values["shape"].tolist(),
         )
-        coverage = main_coverage_mask(np.load(main_coverage, allow_pickle=False))
+        coverage = main_coverage_mask(archive.npy(main_coverage))
         check_volume(values["rho"], coverage, grid)
         main = values["rho"], coverage, grid
-    overlay_bytes = Path(overlay).read_bytes() if overlay is not None else None
-    overlay_image = plt.imread(overlay) if overlay is not None else None
+    overlay_bytes = archive.bytes(overlay) if overlay is not None else None
+    overlay_image = (
+        plt.imread(io.BytesIO(overlay_bytes), format=Path(overlay).suffix[1:])
+        if overlay is not None
+        else None
+    )
     out = begin_output(
         archive,
         out,
@@ -71,13 +98,21 @@ def generate(root, out, *, overlay=None, main_volume=None, main_coverage=None):
             main_coverage_rule="boolean mask or integer position-count >= 2",
             main_volume_scope="nominal full-data reconstruction" if main is not None else None,
             main_volume=str(Path(main_volume).resolve()) if main is not None else None,
-            main_volume_sha256=hashlib.sha256(Path(main_volume).read_bytes()).hexdigest()
+            main_volume_sha256=archive.input_files[archive_source_key(archive, main_volume)][
+                "sha256"
+            ]
             if main is not None
             else None,
             main_coverage=str(Path(main_coverage).resolve()) if main is not None else None,
-            main_coverage_sha256=hashlib.sha256(Path(main_coverage).read_bytes()).hexdigest()
+            main_coverage_sha256=archive.input_files[archive_source_key(archive, main_coverage)][
+                "sha256"
+            ]
             if main is not None
             else None,
+            support_fold_scopes=[
+                dict(name=record["name"], grid=grid, scope="fitted training-fold counts and pose")
+                for record, grid, _, _ in folds
+            ],
             voxel_coverage="joint geometric support coverage",
             support="dimensionless alternative sharing training counts and fitted pose",
             overlay="conditional box overlays excluded; author image remains separate",
