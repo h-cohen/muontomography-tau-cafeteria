@@ -72,6 +72,7 @@ def run_bootstrap(
     vgrid: VoxelGrid,
     sky: SkyGrid,
     cache_dir: str | Path | None = None,
+    replica_dir: str | Path | None = None,
 ) -> BootstrapResult:
     """A replica whose measurement raises stops the bootstrap: dropping it
     would bias the spread toward the replicas the chain happens to survive."""
@@ -83,9 +84,20 @@ def run_bootstrap(
     vols = []
     for replica in range(u.n_replicas):
         maps = solve_opacity(resample(grid, rng), cfg, live_time)
-        m = measure(
-            build_fit_data(maps, cfg, sigma, rows=rows), cfg, sky, vgrid=vgrid, cache_dir=cache_dir
-        )
+        data = build_fit_data(maps, cfg, sigma, rows=rows)
+        m = measure(data, cfg, sky, vgrid=vgrid, cache_dir=cache_dir)
+        if replica_dir is not None:
+            # Explicit opt-in: preserve each conditional fixed-pose volume.
+            from cafetomo.robustness import positive_weight_coverage
+
+            out = Path(replica_dir)
+            out.mkdir(parents=True, exist_ok=True)
+            solution = m.details["solution"]
+            solution.save(out / f"replica-{replica:03d}.npz")
+            np.save(
+                out / f"coverage-{replica:03d}.npy",
+                positive_weight_coverage(data, cfg, solution.grid),
+            )
         for k, v in m.values.items():
             values.setdefault(k, []).append(v)
         vols.append(m.volume)
