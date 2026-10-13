@@ -6,7 +6,7 @@ is conditional counting uncertainty, including the shared roof and fitted pose.
 
 import hashlib
 import json
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 
 import numpy as np
@@ -241,13 +241,25 @@ def select_and_refit(
     if not np.isfinite(scores).any():
         raise RuntimeError("all inner candidates failed coverage")
     chosen = int(np.argmin(scores))
-    return (
-        fit_training_fold(
-            clean, live, candidates[chosen], observation_mask=masks, cache_dir=cache_dir
-        ),
-        chosen,
-        scores,
+    final_fold = fit_training_fold(
+        clean, live, candidates[chosen], observation_mask=masks, cache_dir=cache_dir
     )
+    metadata = dict(final_fold.metadata)
+    metadata["inner_selection"] = dict(
+        fraction=fraction,
+        seed=seed,
+        chosen=chosen,
+        scores=scores,
+        common_masks=common_masks,
+        candidate_available_bins=[
+            {
+                pid: int(np.count_nonzero(masks[pid] & np.isfinite(pred[pid]) & (pred[pid] > 0)))
+                for pid in masks
+            }
+            for pred in predictions
+        ],
+    )
+    return replace(final_fold, metadata=metadata), chosen, scores
 
 
 def training_prediction_replicas(
@@ -270,3 +282,27 @@ def training_prediction_replicas(
         fold = fit_training_fold(replica, live, cfg, observation_mask=masks, cache_dir=cache_dir)
         results.append(predict_raw_counts(fold, replica, live, target_live))
     return results
+
+
+def summarize_prediction_replicas(replicas):
+    """Raw-bin conditional mean/spread, with successful replica coverage counts.
+
+    Fewer than two supported values cannot yield an uncertainty estimate.
+    """
+    if not replicas:
+        raise ValueError("at least one replica required")
+    out = {}
+    for pid in replicas[0]:
+        values = np.stack([replica[pid] for replica in replicas])
+        supported = np.isfinite(values) & (values > 0)
+        count = supported.sum(axis=0)
+        total = np.where(supported, values, 0).sum(axis=0)
+        mean = np.divide(total, count, out=np.full(total.shape, np.nan), where=count > 0)
+        squared = np.where(supported, values - mean, 0) ** 2
+        variance = np.divide(
+            squared.sum(axis=0), count - 1, out=np.full(total.shape, np.nan), where=count > 1
+        )
+        out[pid] = dict(
+            mean=mean, std=np.sqrt(variance), n_supported=count, n_replicas=len(replicas)
+        )
+    return out

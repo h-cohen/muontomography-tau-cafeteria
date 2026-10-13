@@ -146,7 +146,6 @@ def test_scoring_coverage_and_zero_observation():
 
 def test_inner_selection_then_full_training_refit(cfg, monkeypatch, tmp_path):
     from dataclasses import replace
-    from types import SimpleNamespace
 
     import cafetomo.prediction as p
 
@@ -160,7 +159,7 @@ def test_inner_selection_then_full_training_refit(cfg, monkeypatch, tmp_path):
 
     def fit(g, live_times, c, **kw):
         calls.append((g, live_times, c))
-        return SimpleNamespace(cfg=c)
+        return FrozenFold(c, None, "a", "b")
 
     monkeypatch.setattr(p, "fit_training_fold", fit)
     monkeypatch.setattr(
@@ -207,3 +206,41 @@ def test_replica_rng_independent_of_excluded_counts(cfg, monkeypatch, tmp_path):
     for a, b in zip(captured[:2], captured[2:], strict=True):
         for pid in a:
             np.testing.assert_array_equal(a[pid], b[pid])
+
+
+def test_inner_candidates_score_identical_common_directions(cfg, monkeypatch, tmp_path):
+    from dataclasses import replace
+
+    import cafetomo.prediction as p
+
+    other = replace(cfg, reconstruction=replace(cfg.reconstruction, tv_alpha=0.1))
+    grid = AnalysisGrid(
+        np.array([-0.2, 0, 0.2]),
+        {pid: np.full((2, 2), 100) for pid in (*cfg.position_ids, cfg.sky_reference.id)},
+    )
+    live = {pid: 1 for pid in grid.counts}
+    monkeypatch.setattr(p, "fit_training_fold", lambda g, t, c, **kw: FrozenFold(c, None, "a", "b"))
+
+    def predict(fold, g, t, target):
+        mu = np.full((2, 2), 50.0)
+        mu[0, 0] = 10000 if fold.cfg is cfg else np.nan
+        return {pid: mu.copy() for pid in cfg.position_ids}
+
+    monkeypatch.setattr(p, "predict_raw_counts", predict)
+    fold, chosen, scores = p.select_and_refit(grid, live, [cfg, other], cache_dir=tmp_path)
+    assert scores[0] == scores[1] and chosen == 0
+    metadata = fold.metadata["inner_selection"]
+    assert all(not mask[0, 0] for mask in metadata["common_masks"].values())
+    assert metadata["candidate_available_bins"][0][cfg.position_ids[0]] == 4
+    assert metadata["candidate_available_bins"][1][cfg.position_ids[0]] == 3
+
+
+def test_replica_summary_requires_two_supported_values():
+    from cafetomo.prediction import summarize_prediction_replicas
+
+    out = summarize_prediction_replicas(
+        [{"p": np.array([1.0, np.nan, 2.0])}, {"p": np.array([3.0, np.nan, np.nan])}]
+    )["p"]
+    np.testing.assert_array_equal(out["n_supported"], [2, 0, 1])
+    assert np.isclose(out["std"][0], np.sqrt(2))
+    assert np.isnan(out["std"][1:]).all()
