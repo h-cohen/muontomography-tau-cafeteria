@@ -275,3 +275,49 @@ def test_geometric_coverage_distinguishes_missed_lattice_from_zero_density(cfg):
         assert record["coverage"][0, 0]
         assert not record["coverage"][1, 0]
         assert record["deviance"] == 0
+
+
+def test_replica_archive_labels_shared_roof_variation(cfg, tmp_path, monkeypatch):
+    import json
+
+    import cafetomo.prediction as p
+
+    grid = AnalysisGrid(
+        np.array([-0.1, 0.1]),
+        {pid: np.full((1, 1), 100) for pid in (*cfg.position_ids, cfg.sky_reference.id)},
+    )
+    live = {pid: 123.0 for pid in grid.counts}
+    volume = VoxelSolution(
+        np.zeros(1), VoxelGrid((-20, -20, 1), 40.0, (1, 1, 1)), {}, cfg.position_ids
+    )
+    seen = []
+
+    def fit(replica, times, config, **kwargs):
+        seen.append(replica.counts[cfg.sky_reference.id].copy())
+        assert times == live
+        return FrozenFold(cfg, volume, "a", "b", {})
+
+    monkeypatch.setattr(p, "fit_training_fold", fit)
+    scope = {
+        "reference_counting_scope": "full-reference counting variation included",
+        "roof_live_time_s": 123.0,
+        "reference_sampling_scope": (
+            "one Poisson roof draw shared across all room views per replica"
+        ),
+    }
+    predictions = p.training_prediction_replicas(
+        grid,
+        live,
+        cfg,
+        target_live=live,
+        cache_dir=tmp_path,
+        n_replicas=2,
+        seed=4,
+        artifact_dir=tmp_path / "replicas",
+        reference_scope=scope,
+    )
+    for index, predicted in enumerate(predictions):
+        record = json.loads((tmp_path / "replicas" / str(index) / "training.json").read_text())
+        assert record["reference_scope"] == scope
+        for pid in cfg.position_ids:
+            np.testing.assert_array_equal(predicted[pid], seen[index])

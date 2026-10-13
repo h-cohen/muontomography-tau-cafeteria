@@ -369,3 +369,13 @@ output root for each attempt and reuse the scientific cache to avoid repeated
 completed training fits. Full mode requires a written `production_budget` in the
 settings before outcomes. These checks remain retrospective and conditional;
 persistence and geometric support do not measure real-world accuracy.
+
+Angular point scores condition on the observed complete roof calibration. Their
+representative Poisson uncertainty replicas include full-reference counting
+variation: one complete roof-count draw is shared across all room views in each
+replica, while the full roof acquisition time stays unchanged. Fold and replica
+manifests record this scope explicitly. These intervals therefore differ from
+uncertainty with a fixed observed roof. Every fold's input counts, assignments,
+masks, live times and reference/nuisance scope are registered before any fold
+fitting, including for failed or interrupted attempts. Excluded training bins are
+sanitized in archives and accompanied by masks defining their missingness.

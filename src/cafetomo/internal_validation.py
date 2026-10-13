@@ -236,6 +236,83 @@ def slab_baseline(part, fold, predictions):
     }
 
 
+def uncertainty_reference_scope(protocol, reference_id, roof_live_time):
+    return dict(
+        reference_id=reference_id,
+        roof_live_time_s=roof_live_time,
+        reference_sampling_scope="one Poisson roof draw shared across all room views per replica",
+        reference_counting_scope=(
+            "full-reference counting variation included"
+            if protocol == "angular"
+            else "training-reference counting variation included"
+        ),
+        point_score_reference_scope=(
+            "conditional on observed full roof calibration"
+            if protocol == "angular"
+            else "conditional on observed training roof split"
+        ),
+        roof_counting_variation=True,
+        roof_time_scope="unchanged full acquisition"
+        if protocol == "angular"
+        else "thinned training exposure",
+    )
+
+
+def register_fold_inputs(part, index, cfg, settings, out, manifest):
+    directory = out / "folds" / part["name"]
+    directory.mkdir(parents=True)
+    clean, masks = _training_grid(part["train"], cfg, part["train_masks"])
+    test_masks = part["test_masks"] or {
+        p: np.ones((clean.n_bins, clean.n_bins), bool) for p in cfg.position_ids
+    }
+    np.savez_compressed(directory / "training-counts.npz", edges=clean.edges, **clean.counts)
+    np.savez_compressed(
+        directory / "test-counts.npz", edges=part["test"].edges, **part["test"].counts
+    )
+    np.savez_compressed(directory / "masks.npz", **masks)
+    np.savez_compressed(directory / "test-masks.npz", **test_masks)
+    fraction = settings["count"]["inner_train_fraction"]
+    inner_train_live = {p: t * fraction for p, t in part["train_live"].items()}
+    inner_test_live = {p: t * (1 - fraction) for p, t in part["train_live"].items()}
+    if part["protocol"] == "angular":
+        inner_train_live[cfg.sky_reference.id] = part["train_live"][cfg.sky_reference.id]
+        inner_test_live[cfg.sky_reference.id] = part["train_live"][cfg.sky_reference.id]
+    registration = dict(
+        inner_fraction=fraction,
+        inner_train_live=inner_train_live,
+        inner_test_live=inner_test_live,
+        name=part["name"],
+        protocol=part["protocol"],
+        partition_seed=part["seed"],
+        inner_selection_seed=seed(settings, 3, index),
+        train_live=part["train_live"],
+        test_live=part["test_live"],
+        roof_scope=part["roof_scope"],
+        inner_roof_scope="full_reference_conditional"
+        if part["protocol"] == "angular"
+        else "inner_training_split",
+        nuisance_scope=manifest["nuisance_scope"],
+        nuisance_config_hash=_digest(cfg),
+        source_hash=manifest["source_hash"],
+        original_input_hash=manifest["input_hash"],
+        training_input_hash=_digest(cfg, clean, part["train_live"], masks),
+        raw_training_input_hash=_digest(cfg, part["train"], part["train_live"], masks),
+        test_input_hash=_digest(cfg, part["test"], part["test_live"], test_masks),
+        provenance=manifest["provenance"],
+        training_archive_scope=(
+            "excluded room bins sanitized to zero; masks define missingness, never measured zeros"
+        ),
+        test_archive_scope="raw observations; test-masks define evaluation assignment",
+        train_masks="masks.npz",
+        test_masks="test-masks.npz",
+        uncertainty_reference_scope=uncertainty_reference_scope(
+            part["protocol"], cfg.sky_reference.id, part["train_live"][cfg.sky_reference.id]
+        ),
+    )
+    write_json(directory / "inputs.json", registration)
+    return registration
+
+
 def run_campaign(grid, live, cfg, document, *, out, cache, provenance=None):
     settings = settings_document(document)
     out, cache = Path(out).resolve(), Path(cache).resolve()
@@ -305,14 +382,17 @@ def run_campaign(grid, live, cfg, document, *, out, cache, provenance=None):
         predictions, support_records = [], []
         first = None
         uncertainty_protocols = set()
-        for index, part in enumerate(partitions(grid, live, cfg, settings)):
+        planned_parts = list(partitions(grid, live, cfg, settings))
+        manifest["registered_folds"] = [
+            register_fold_inputs(part, index, cfg, settings, out, manifest)
+            for index, part in enumerate(planned_parts)
+        ]
+        manifest["stages"].update({part["name"]: "registered" for part in planned_parts})
+        write_json(out / "manifest.json", manifest)
+        for index, part in enumerate(planned_parts):
             manifest["stages"][part["name"]] = "running"
             write_json(out / "manifest.json", manifest)
             stage_out = out / "folds" / part["name"]
-            stage_out.mkdir(parents=True)
-            np.savez_compressed(
-                stage_out / "training-counts.npz", edges=part["train"].edges, **part["train"].counts
-            )
             fold, chosen, scores = select_and_refit(
                 part["train"],
                 part["train_live"],
@@ -337,6 +417,9 @@ def run_campaign(grid, live, cfg, document, *, out, cache, provenance=None):
                 protocol=part["protocol"],
                 seed=part["seed"],
                 roof_scope=part["roof_scope"],
+                point_score_reference_scope=manifest["registered_folds"][index][
+                    "uncertainty_reference_scope"
+                ]["point_score_reference_scope"],
                 train_live=part["train_live"],
                 test_live=part["test_live"],
                 selected_index=chosen,
@@ -373,6 +456,9 @@ def run_campaign(grid, live, cfg, document, *, out, cache, provenance=None):
                     cache_dir=cache,
                     nuisance_cfg=cfg,
                     artifact_dir=stage_out / "uncertainty-replicas",
+                    reference_scope=manifest["registered_folds"][index][
+                        "uncertainty_reference_scope"
+                    ],
                     n_replicas=n_uncertainty,
                     seed=seed(settings, 7, index),
                 )
@@ -381,6 +467,9 @@ def run_campaign(grid, live, cfg, document, *, out, cache, provenance=None):
                     np.savez_compressed(stage_out / f"{pid}-conditional-uncertainty.npz", **values)
                 record["uncertainty_scope"] = "representative first outer fold per protocol"
                 record["uncertainty_replicas"] = n_uncertainty
+                record["uncertainty_reference_scope"] = manifest["registered_folds"][index][
+                    "uncertainty_reference_scope"
+                ]
                 uncertainty_protocols.add(part["protocol"])
             manifest["stages"][part["name"]] = "complete"
             write_json(stage_out / "fold.json", record)

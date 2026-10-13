@@ -90,6 +90,17 @@ def test_isolated_complete_campaign_and_test_perturbation(cfg, tmp_path, monkeyp
         assert config.selfcal == cfg.selfcal
         assert config.reconstruction.coverage_damping == 0
         assert kwargs["nuisance_cfg"] == cfg
+        reference = kwargs["reference_scope"]
+        assert reference["roof_live_time_s"] == times[cfg.sky_reference.id]
+        if times[cfg.sky_reference.id] == live[cfg.sky_reference.id]:
+            assert (
+                reference["reference_counting_scope"]
+                == "full-reference counting variation included"
+            )
+            assert (
+                reference["point_score_reference_scope"]
+                == "conditional on observed full roof calibration"
+            )
         return [{p: np.ones((10, 10)) for p in cfg.position_ids}] * 2
 
     monkeypatch.setattr(v, "training_prediction_replicas", replica_spy)
@@ -322,3 +333,51 @@ def test_stability_preserves_original_nuisance_prior(cfg, tmp_path, monkeypatch)
         tmp_path,
         tmp_path / "results",
     )
+
+
+def test_first_fit_failure_retains_all_registered_inputs(cfg, tmp_path, monkeypatch):
+    import cafetomo.internal_validation as v
+
+    grid = AnalysisGrid(
+        np.linspace(-0.2, 0.2, 11),
+        {p: np.full((10, 10), 100) for p in (*cfg.position_ids, cfg.sky_reference.id)},
+    )
+    live = {p: 100.0 for p in grid.counts}
+
+    def fail(*a, **kw):
+        manifest = json.loads((tmp_path / "run" / "manifest.json").read_text())
+        assert len(manifest["registered_folds"]) == 2
+        angular = next(r for r in manifest["registered_folds"] if r["protocol"] == "angular")
+        assert angular["train_live"] == live
+        assert angular["roof_scope"] == "full_reference_conditional"
+        assert angular["inner_selection_seed"] == v.seed(
+            v.settings_document({"mode": "smoke"}), 3, 1
+        )
+        directory = tmp_path / "run" / "folds" / angular["name"]
+        masks = np.load(directory / "masks.npz")
+        counts = np.load(directory / "training-counts.npz")
+        for p in cfg.position_ids:
+            assert np.all(counts[p][~masks[p]] == 0)
+        assert (directory / "test-masks.npz").exists()
+        assert angular["source_hash"] == manifest["source_hash"]
+        assert angular["training_input_hash"]
+        raise RuntimeError("audit failure after registration")
+
+    monkeypatch.setattr(v, "select_and_refit", fail)
+    with pytest.raises(RuntimeError, match="audit failure"):
+        v.run_campaign(
+            grid, live, cfg, {"mode": "smoke"}, out=tmp_path / "run", cache=tmp_path / "cache"
+        )
+
+
+def test_angular_uncertainty_scope_is_declared(cfg):
+    from cafetomo.internal_validation import uncertainty_reference_scope
+
+    scope = uncertainty_reference_scope("angular", cfg.sky_reference.id, 123.0)
+    assert scope["roof_live_time_s"] == 123.0
+    assert scope["reference_counting_scope"] == "full-reference counting variation included"
+    assert (
+        scope["reference_sampling_scope"]
+        == "one Poisson roof draw shared across all room views per replica"
+    )
+    assert scope["point_score_reference_scope"] == "conditional on observed full roof calibration"

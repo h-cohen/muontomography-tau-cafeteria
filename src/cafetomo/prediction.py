@@ -322,6 +322,7 @@ def training_prediction_replicas(
     seed,
     nuisance_cfg=None,
     artifact_dir=None,
+    reference_scope=None,
 ):
     """Refit each training-only Poisson replica, including shared roof and pose.
 
@@ -347,7 +348,20 @@ def training_prediction_replicas(
             fold.volume.save(out / "volume.npz")
             (out / "training.json").write_text(
                 json.dumps(
-                    dict(seed=seed, replica=index, cfg=asdict(fold.cfg), training=fold.metadata),
+                    dict(
+                        seed=seed,
+                        replica=index,
+                        cfg=asdict(fold.cfg),
+                        training=fold.metadata,
+                        reference_scope=reference_scope
+                        or {
+                            "reference_sampling_scope": (
+                                "one Poisson roof draw shared across all room views per replica"
+                            ),
+                            "roof_live_time_s": live[cfg.sky_reference.id],
+                            "roof_counting_variation": True,
+                        },
+                    ),
                     default=str,
                     indent=2,
                 )
