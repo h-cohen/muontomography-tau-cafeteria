@@ -286,3 +286,38 @@ def test_sweep_archives_separate_density_and_beam_excess_null(cfg, monkeypatch, 
     assert "not beam-only" in result["density_frequency_interpretation"]
     np.testing.assert_array_equal(np.load(tmp_path / "algorithm.npz")["frequency"], 1)
     np.testing.assert_array_equal(np.load(tmp_path / "beam-excess-algorithm.npz")["frequency"], 0)
+
+
+@pytest.mark.parametrize(
+    "rho_value, measured", [(0.0, [False, True, False]), (2.0, [False, True, True, True, False])]
+)
+def test_beam_detection_does_not_turn_coverage_islands_into_peaks(rho_value, measured):
+    from cafetomo.robustness import beam_diagnostics
+
+    grid = VoxelGrid((0, 0, 0), 1.0, (len(measured), 1, 1))
+    volume = VoxelSolution(np.full(grid.n_voxels, rho_value), grid, {}, ())
+    if rho_value == 0:
+        from cafetomo.robustness import beam_contrast_volume, freeze_beam_background
+
+        slab = VoxelSolution(np.ones(grid.n_voxels), grid, {}, ())
+        background = freeze_beam_background(slab, np.array(measured, bool).reshape(grid.shape))
+        volume = beam_contrast_volume(slab, background, grid)
+    result = beam_diagnostics(
+        volume,
+        np.array(measured, bool).reshape(grid.shape),
+        0.1,
+        prominence=0.0,
+        lateral_half_width_m=0.4,
+    )
+    assert result["peaks"] == []
+
+
+def test_localized_positive_beam_inside_measured_segment_near_gap():
+    from cafetomo.robustness import beam_diagnostics
+
+    grid = VoxelGrid((0, 0, 0), 1.0, (5, 1, 1))
+    volume = VoxelSolution(np.array([0.0, 0.0, 3.0, 0.0, 0.0]), grid, {}, ())
+    coverage = np.array([False, True, True, True, False]).reshape(grid.shape)
+    result = beam_diagnostics(volume, coverage, 0.1, prominence=1.0, lateral_half_width_m=0.4)
+    assert [p["x_m"] for p in result["peaks"]] == [2.5]
+    assert result["peaks"][0]["z_centroid_m"] == 0.5

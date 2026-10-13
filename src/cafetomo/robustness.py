@@ -408,7 +408,15 @@ def beam_diagnostics(volume, coverage, threshold, *, prominence, lateral_half_wi
     profile = density.sum(axis=(1, 2)) * volume.grid.spacing**2
     measured = covered.any(axis=(1, 2))
     profile[~measured] = np.nan
-    indices = find_peaks(np.where(measured, profile, -np.inf), prominence=prominence)[0]
+    # Unknown lateral coverage is not a trough. Search only the interiors of
+    # contiguous measured segments; boundary features have no measured flank.
+    padded = np.r_[False, measured, False].astype(int)
+    starts = np.flatnonzero(np.diff(padded) == 1)
+    stops = np.flatnonzero(np.diff(padded) == -1)
+    indices = []
+    for start, stop in zip(starts, stops, strict=True):
+        local = find_peaks(profile[start:stop], prominence=prominence)[0] + start
+        indices.extend(int(index) for index in local if profile[index] > 0)
     peaks = []
     x = volume.grid.axis_centers(0)
     z = volume.grid.axis_centers(2)
@@ -441,6 +449,12 @@ def beam_diagnostics(volume, coverage, threshold, *, prominence, lateral_half_wi
         z_centers_m=z.tolist(),
         frozen_prominence=prominence,
         lateral_half_width_m=lateral_half_width_m,
+        measured_x_segments=[
+            [int(start), int(stop)] for start, stop in zip(starts, stops, strict=True)
+        ],
+        peak_detection_scope=(
+            "interior of contiguous measured segments; boundary features unreported"
+        ),
         interpretation="conditional contrast peaks/profile extent, not physical beam depth",
     )
 
