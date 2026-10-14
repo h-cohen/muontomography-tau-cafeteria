@@ -1,0 +1,189 @@
+{
+  "scope": "retrospective pilot; conditional internal evidence",
+  "count_folds": 3,
+  "count_deviance": 10890.02878276025,
+  "count_slab_deviance": 27027.7275776499,
+  "count_covered_bins": 7714,
+  "count_improvement_percent": 59.7079378890678,
+  "count_worse_folds": 0,
+  "angular_folds": 5,
+  "angular_deviance": 14351.97328592339,
+  "angular_slab_deviance": 15173.188947791541,
+  "angular_covered_bins": 2586,
+  "angular_improvement_percent": 5.412281259357011,
+  "angular_worse_folds": 2,
+  "thin_replicas": 5,
+  "thin_truth_thickness": 0.3,
+  "thin_boundary": 4,
+  "thin_z_bias": -1.1859122537308446,
+  "thick_replicas": 5,
+  "thick_truth_thickness": 1.8,
+  "thick_boundary": 0,
+  "thick_z_bias": -1.8527204347973965,
+  "recovery_outcomes": 10,
+  "excess_peak_outcomes": 7,
+  "count_replicas": 5,
+  "count_train_fraction": 0.5,
+  "prediction_uncertainty_replicas": 2,
+  "corrected_analytic_objective": 0.42748762505865867,
+  "corrected_poisson_objective": 0.4242107444752525,
+  "corrected_weight_peaks": 4,
+  "original_weight_objective": 5.044662591463292e+22,
+  "input_files": [
+    {
+      "path": "/home/hadar/Cloud/Work/Postdoc/03_projects/muontomography-tau-cafeteria/paper/figures/voxels.jpeg",
+      "sha256": "bbc16df3132450d8cc7370c61499cb99b2c0afdc8151ed29d0b24e8145617d25",
+      "size_bytes": 118631,
+      "location": "explicit"
+    },
+    {
+      "path": "/home/hadar/Cloud/Work/Postdoc/03_projects/muontomography-tau-cafeteria/runs/internal-validation/weight-correction-2026-10-14/choices/beam-excess-weights.npz",
+      "sha256": "26508efad21cf50be09762ba1d89d496b4ddead7e02407b58808801f1199abed",
+      "size_bytes": 146944,
+      "location": "explicit"
+    },
+    {
+      "path": "/home/hadar/Cloud/Work/Postdoc/03_projects/muontomography-tau-cafeteria/runs/internal-validation/weight-correction-2026-10-14/choices/manifest.json",
+      "sha256": "cbf56c18b6f51b9c00899ac72fa05643a14d86c00e30b80538b7d80ebf6721d0",
+      "size_bytes": 63707,
+      "location": "explicit"
+    },
+    {
+      "path": "/home/hadar/Cloud/Work/Postdoc/03_projects/muontomography-tau-cafeteria/runs/internal-validation/weight-correction-2026-10-14/comparison.json",
+      "sha256": "27b801ce37b3e86e889b1e4462312976c0a60dcf508f8477c77ec4b1546fcdec",
+      "size_bytes": 119786,
+      "location": "explicit"
+    },
+    {
+      "path": "/home/hadar/Cloud/Work/Postdoc/03_projects/muontomography-tau-cafeteria/runs/internal-validation/weight-correction-2026-10-14/registration.json",
+      "sha256": "8cf9c3845ee742832f8bf11cf66e70f4cc2679f6e681a90e642dfa8f33d091f9",
+      "size_bytes": 4837,
+      "location": "explicit"
+    },
+    {
+      "path": "/home/hadar/Cloud/Work/Postdoc/03_projects/muontomography-tau-cafeteria/runs/response-aware-2026-10-07/voxels/views.npy",
+      "sha256": "9ff0ea6ca9753890bd466dbdd8416d2a2df1ff5015fb12f09146e49d71d2c807",
+      "size_bytes": 618928,
+      "location": "explicit"
+    },
+    {
+      "path": "/home/hadar/Cloud/Work/Postdoc/03_projects/muontomography-tau-cafeteria/runs/response-aware-2026-10-07/voxels/volume_full.npz",
+      "sha256": "05293c662ede7a4f587588a414112399bf226dc404c93acb88c5669b86fa1055",
+      "size_bytes": 1099055,
+      "location": "explicit"
+    },
+    {
+      "path": "folds/count-0/fold.json",
+      "sha256": "ea2b26cea5ba42ffbd6e62961d4b7d614e8a7e86441c0434284cfd5cd4710e48",
+      "size_bytes": 102416,
+      "location": "archive"
+    },
+    {
+      "path": "folds/count-0/support-degree2-threshold3.npz",
+      "sha256": "5a5a0e45a5b26801253fdfb2bdefeaf87e33b58c0d7013fc37e9e8d222d9fe68",
+      "size_bytes": 31095,
+      "location": "archive"
+    },
+    {
+      "path": "manifest.json",
+      "sha256": "a245335adea5073b6d22f1be5cf226c55f32b280437c29538f74437e4afa6e1a",
+      "size_bytes": 1026157,
+      "location": "archive"
+    },
+    {
+      "path": "results/prediction.json",
+      "sha256": "8dd06523dbbed7ab913ff4efa1c9972dcbae8718a8b5785bf70cd3fe70ca8241",
+      "size_bytes": 997201,
+      "location": "archive"
+    },
+    {
+      "path": "results/recovery.json",
+      "sha256": "157be5299e9a4d6b1ddcc24cd43d1e410bcc43d0f3a10733b3bbdc65c46d3e69",
+      "size_bytes": 308126,
+      "location": "archive"
+    },
+    {
+      "path": "results/stability.json",
+      "sha256": "9651188f9cff56991777dbb6536fa0aa88d8b7682685fa9e845c1cff2c7b863d",
+      "size_bytes": 408173,
+      "location": "archive"
+    },
+    {
+      "path": "results/support.json",
+      "sha256": "a0295edcf92a8798a51e1018e471780b87971e3ed819497e7a66c0d8ab6d0100",
+      "size_bytes": 14355,
+      "location": "archive"
+    },
+    {
+      "path": "stability/count/manifest.json",
+      "sha256": "628df073e1ac5806e7c4ec325557c04bf813b19b306bc2f1c3e5cf1e6c74fc40",
+      "size_bytes": 11930,
+      "location": "archive"
+    },
+    {
+      "path": "stability/count/stability.npz",
+      "sha256": "f0e41b0fc47ed0c2fcf721f02240772dde8d65d524608a75d144771b22920b00",
+      "size_bytes": 527559,
+      "location": "archive"
+    }
+  ],
+  "baseline_inputs": [
+    {
+      "path": "arraydepth.json",
+      "source_path": "/home/hadar/Cloud/Work/Postdoc/03_projects/muontomography-tau-cafeteria/results/arraydepth.json",
+      "sha256": "d9b2c069775d2e5b56eaf35664d5f67843d422286c402c0f1ef9400ef4f7f8ae"
+    },
+    {
+      "path": "autofocus.json",
+      "source_path": "/home/hadar/Cloud/Work/Postdoc/03_projects/muontomography-tau-cafeteria/results/autofocus.json",
+      "sha256": "a08523ef1d60c1f0d04496ef7c09717fa0bb00238d7fbda1052c699cda47d03f"
+    },
+    {
+      "path": "beamdepth.json",
+      "source_path": "/home/hadar/Cloud/Work/Postdoc/03_projects/muontomography-tau-cafeteria/results/beamdepth.json",
+      "sha256": "140f172fdb825cd8d4cd8cf69d75ca4abef1df29dd5e96bf7e1ca491c0514d6d"
+    },
+    {
+      "path": "beams.json",
+      "source_path": "/home/hadar/Cloud/Work/Postdoc/03_projects/muontomography-tau-cafeteria/results/beams.json",
+      "sha256": "ccd56c7c86fede9727198f03ea1643a0f8b2fab5d3ee934578be375883b7ab2a"
+    },
+    {
+      "path": "data.json",
+      "source_path": "/home/hadar/Cloud/Work/Postdoc/03_projects/muontomography-tau-cafeteria/results/data.json",
+      "sha256": "c87bf673b17cf52e25cbfed242b7ec8a05b13bd97ff015833362611c52b8d015"
+    },
+    {
+      "path": "depthdiagnostics.json",
+      "source_path": "/home/hadar/Cloud/Work/Postdoc/03_projects/muontomography-tau-cafeteria/results/depthdiagnostics.json",
+      "sha256": "3b92f8464664bf5c2b62551e7b67f483668953c112a181f070dfdada676b7b76"
+    },
+    {
+      "path": "inputs.json",
+      "source_path": "/home/hadar/Cloud/Work/Postdoc/03_projects/muontomography-tau-cafeteria/results/inputs.json",
+      "sha256": "36b5a6c23507a5f6af6db13cb5480e897f166bfec8a4fab08de9d53106717941"
+    },
+    {
+      "path": "pose.json",
+      "source_path": "/home/hadar/Cloud/Work/Postdoc/03_projects/muontomography-tau-cafeteria/results/pose.json",
+      "sha256": "d89b9fbe006b06b0889bbccbdfac54db3dcdf23af25a86af5f1cc51e1d069bad"
+    },
+    {
+      "path": "reconstruction.json",
+      "source_path": "/home/hadar/Cloud/Work/Postdoc/03_projects/muontomography-tau-cafeteria/results/reconstruction.json",
+      "sha256": "63d6c72b00162088bae71df817e05fa7244c9c9510d3eabd3f7805ceb6e01cc4"
+    },
+    {
+      "path": "uncertainty.json",
+      "source_path": "/home/hadar/Cloud/Work/Postdoc/03_projects/muontomography-tau-cafeteria/results/uncertainty.json",
+      "sha256": "ccb85dc0925945aaeddb1440c1d069dd4360126996f4295da338222f2f17e6a5"
+    },
+    {
+      "path": "validation.json",
+      "source_path": "/home/hadar/Cloud/Work/Postdoc/03_projects/muontomography-tau-cafeteria/results/validation.json",
+      "sha256": "8ba47f426342a983e6f903b2fc60e41c6897b2b566c94a5ba58c7183a4c01939"
+    }
+  ],
+  "original_archive": "/home/hadar/Cloud/Work/Postdoc/03_projects/muontomography-tau-cafeteria/runs/internal-validation/pilot-2026-10-13-a",
+  "corrected_comparison": "/home/hadar/Cloud/Work/Postdoc/03_projects/muontomography-tau-cafeteria/runs/internal-validation/weight-correction-2026-10-14"
+}

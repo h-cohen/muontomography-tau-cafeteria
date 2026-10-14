@@ -1,24 +1,35 @@
-\documentclass[11pt,a4paper]{article}
-\usepackage[margin=2.5cm]{geometry}
+\documentclass[10pt,a4paper,twocolumn]{article}
+\usepackage[margin=1.8cm,columnsep=0.7cm]{geometry}
 \usepackage{amsmath,amssymb}
 \usepackage{graphicx}
 \usepackage{float}
+\usepackage{balance}
+\usepackage{needspace}
 \usepackage{booktabs}
 \usepackage[separate-uncertainty=true]{siunitx}
 \usepackage[numbers,sort&compress]{natbib}
 \usepackage[hidelinks]{hyperref}
 \graphicspath{{generated/figures/}}
 \input{generated/numbers.tex}
+\input{generated/figures/internal-numbers.tex}
 
-\title{Seeing the Ceiling with Cosmic Muons:\\Two-View Tomography of a Real Room}
+\title{Seeing a Ceiling with Cosmic Muons:\\Three-Dimensional Imaging from Two Views}
 \author{AUTHORS}
 \date{}
 
 \begin{document}
+\special{pdf:minorversion 7}
+\raggedbottom
+\makeatletter
+\twocolumn[\begin{@twocolumnfalse}
 \maketitle
 \begin{abstract}
 \input{sections/abstract}
 \end{abstract}
+\vspace{1em}
+\end{@twocolumnfalse}]
+\makeatother
+\input{sections/volume-figure}
 \input{sections/intro}
 \input{sections/apparatus}
 \input{sections/method}
@@ -28,6 +39,7 @@
 \input{sections/volume}
 \input{sections/discussion}
 \input{sections/conclusion}
+\balance
 \bibliographystyle{unsrtnat}
 \bibliography{refs}
 \end{document}

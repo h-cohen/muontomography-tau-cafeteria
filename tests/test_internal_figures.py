@@ -390,3 +390,114 @@ def test_xyz_legend_survives_first_case_failure(bundle, tmp_path, monkeypatch):
     module.generate(bundle, tmp_path / "reversed")
     assert captured["coordinates"] == ["x", "y", "z"]
     assert set(captured["outcomes"]) == {"boundary", "fit_failure"}
+
+
+def test_paper_summary_keeps_protocols_separate_and_all_outcomes():
+    module = load("internal_paper")
+
+    def fold(protocol, deviance, slab):
+        return dict(
+            protocol=protocol,
+            slab_deviance=slab,
+            positions=dict(pos0=dict(deviance=deviance, n_covered=10)),
+        )
+
+    prediction = dict(
+        folds=[
+            fold("count", 2, 20),
+            fold("count", 24, 80),
+            fold("angular", 12, 10),
+            fold("angular", 8, 20),
+        ]
+    )
+    recovery = dict(
+        cases=[
+            dict(
+                case=dict(thickness_m=0.3),
+                status="boundary",
+                beams=dict(n_beams_x=5),
+                voxel_beam_localization=dict(beams=[dict(error_xyz_m=[0.01, 0, -1])]),
+            ),
+            dict(
+                case=dict(thickness_m=1.8),
+                status="ok",
+                beams=dict(n_beams_x=4),
+                voxel_beam_localization=dict(beams=[dict(error_xyz_m=[0.02, 0, -2])]),
+            ),
+        ]
+    )
+    summary = module.summarize(prediction, recovery)
+    assert summary["count_improvement_percent"] == pytest.approx(74)
+    assert summary["angular_worse_folds"] == 1
+    assert summary["count_covered_bins"] == 20
+    assert summary["thin_boundary"] == 1
+    assert summary["excess_peak_outcomes"] == 1
+    assert summary["thin_z_bias"] == -1
+    assert summary["scope"] == "retrospective pilot; conditional internal evidence"
+
+
+def test_selected_macros_read_promoted_json_with_percent_precision(tmp_path):
+    module = load("internal_paper")
+    source = tmp_path / "internalvalidation.json"
+    source.write_text(
+        json.dumps(
+            dict(
+                count_improvement_percent=59.70758,
+                thin_boundary=4,
+                scope="conditional",
+                input_files=[],
+            )
+        )
+    )
+    out = tmp_path / "internal-numbers.tex"
+    module.write_summary_macros(source, out)
+    assert r"\newcommand{\InternalCountImprovementPercent}{59.71}" in out.read_text()
+    assert r"\newcommand{\InternalThinBoundary}{4}" in out.read_text()
+
+
+def test_publication_binding_rejects_changed_baseline_numbers(tmp_path):
+    module = load("internal_paper")
+    baseline = tmp_path / "baseline"
+    baseline.mkdir()
+    reconstruction = dict(rows=12, nx=2, ny=2, nz=2, voxels=8, spacing=0.2, chisq_per_row=0.5)
+    source = baseline / "reconstruction.json"
+    source.write_text(json.dumps(reconstruction))
+    nominal = tmp_path / "nominal.npz"
+    np.savez(
+        nominal,
+        rho=np.ones((2, 2, 2)),
+        shape=[2, 2, 2],
+        spacing=0.2,
+        meta=json.dumps(dict(info=dict(n_rows_used=12, best_chi2=0.5))),
+    )
+    summary = dict(count_improvement_percent=59.71)
+    module.bind_baseline_inputs(summary, nominal, baseline)
+    module.verify_baseline_inputs(summary, baseline)
+    source.write_text(source.read_text().replace('"rows": 12', '"rows": 13'))
+    with pytest.raises(ValueError, match="baseline"):
+        module.verify_baseline_inputs(summary, baseline)
+    with pytest.raises(ValueError, match="nominal"):
+        module.bind_baseline_inputs({}, nominal, baseline)
+
+
+def test_baseline_binding_is_portable_between_checkouts(tmp_path):
+    import shutil
+
+    module = load("internal_paper")
+    old = tmp_path / "old"
+    old.mkdir()
+    (old / "reconstruction.json").write_text(
+        json.dumps(dict(rows=1, nx=1, ny=1, nz=1, voxels=1, spacing=0.2, chisq_per_row=0.5))
+    )
+    nominal = tmp_path / "nominal.npz"
+    np.savez(
+        nominal,
+        shape=[1, 1, 1],
+        spacing=0.2,
+        meta=json.dumps(dict(info=dict(n_rows_used=1, best_chi2=0.5))),
+    )
+    summary = {}
+    module.bind_baseline_inputs(summary, nominal, old)
+    relocated = tmp_path / "relocated"
+    shutil.copytree(old, relocated)
+    module.verify_baseline_inputs(summary, relocated)

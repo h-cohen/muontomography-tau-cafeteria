@@ -16,5 +16,6 @@
   "depth_start_low": 0.6,
   "depth_start_middle": 1.2,
   "depth_start_high": 1.8,
-  "aperture_samples_per_axis": 4
+  "aperture_samples_per_axis": 4,
+  "opacity_weight_replicas": 12
 }

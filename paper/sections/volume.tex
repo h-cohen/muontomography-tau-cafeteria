@@ -1,25 +1,31 @@
-\section{Three-dimensional room reconstruction}\label{sec:volume}
-The three-dimensional room image is a principal result. It combines response-corrected projections, fitted detector geometry and cross-position constraints in one voxel field, revealing repeated elongated ceiling structures beyond individual angular shadows or height estimates.
+\section{Three-dimensional imaging}\label{sec:volume}
+The nominal full-data field in Fig.~\ref{fig:volume} is the central imaging result: \ReconstructionRows{} angular bins constrain \ReconstructionVoxels{} voxels of effective opacity, not mass density. Repeated lateral bands appear within the jointly admitted footprint, together with scattered voxels and broad vertical extent. The nominal weighted residual is $\ReconstructionChisqPerRow$ per bin; regularization and unknown effective degrees of freedom prevent a calibrated goodness-of-fit interpretation. Its beam-minus-gap profile has half-maximum width $\BeamdepthZprofileFwhm\,\mathrm{m}$, which is an image diagnostic rather than physical beam thickness.
 
-The joint reconstruction used \ReconstructionRows{} angular rows and \ReconstructionVoxels{} voxels, with residual statistic $\ReconstructionChisqPerRow$ per row. Figure~\ref{fig:volume} emphasizes the beams and their spatial arrangement. The shared-view check supports lateral placement; the preceding uncertainty analysis qualifies inferred dimensions. The field represents effective opacity, with vertical extent less constrained than lateral structure.
+\subsection{Retrospective prediction}
+After examining the full data, we registered an internal pilot using integer-count thinning and masked angular blocks. Each of \InternalCountFolds{} count splits assigns half the counts and live time of every room run and the one shared roof reference to training. The \InternalAngularFolds{} guarded angular folds instead withhold room directions without shrinking live time; their point scores condition on the observed full roof. Missing directions are masked, not filled with zero. Pose, weights and reconstruction choices use training data; an inner partition selects among declared choices, followed by a training-only refit. Predictions use the original detector-bin directions and admitted aperture.
 
+Compared on common covered bins with a uniform-slab predictor, summed held-out Poisson deviance is \InternalCountImprovementPercent\% lower for count splits and \InternalAngularImprovementPercent\% lower for angular folds (Fig.~\ref{fig:checks}). However, \InternalAngularWorseFolds{} of \InternalAngularFolds{} angular folds are worse than the slab. Reused observations across folds make these descriptive protocol summaries, not independent tests or significance levels. Angular training objectives continue decreasing at the final iteration, so stage completion does not establish full numerical convergence. Coverage is approximately half the requested bins per view. Only the first fold of each protocol has \InternalPredictionUncertaintyReplicas{} predictive replicas; these include one shared roof draw per replica, including full-reference counting variation for angular checks, and cannot calibrate intervals.
 
-The beam-minus-between-beam voxel profile has half-maximum extent $\BeamdepthZprofileFwhm\,\mathrm{m}$, with crossings at $\BeamdepthZprofileBottom\,\mathrm{m}$ and $\BeamdepthZprofileTop\,\mathrm{m}$. This exceeds the conditional box depth, but the distributed inverse field and the parametric angular fit need not have the same extent. The discrepancy may reflect finite angular/aperture resolution, the two-view null space, reconstruction choices or box-model assumptions; display thresholds further change visible extent. Vertical smoothing is disabled but does not remove that ambiguity. The analytic feature-height scale $\BeamdepthZprofileResolution\,\mathrm{m}$ is not a measured point-spread kernel for deconvolving this profile. Neither its FWHM nor the number of visible voxel layers is a physical beam-depth measurement.
+\subsection{Support and persistence}
+Figure~\ref{fig:support} compares the training-fold reconstruction with an aperture-aware intersection of independently selected positive features from the two views. This geometric support is a dimensionless envelope approximation sharing counts and fitted pose, not a second density estimate or independent truth. Both declared background degrees and all three signal-to-error thresholds are retained in the diagnostic archive; the displayed degree-two, three-sigma example is a fixed comparison.
 
-The interactive overlay distinguishes the conditional box model from the unresolved matched-beam baseline. Box depth is explicitly the vertical difference $z_{\rm top}-z_{\rm bottom}=h$; their long $y$ extent and transverse $x$ width are separate dimensions. Filled faces and edges share display opacity and color, so hiding them reveals the voxel field without changing its reconstruction.
+The \InternalCountReplicas{} counting replicas reestimate pose on the first count-training split, combining counting and pose variation. Raw-density persistence includes background and remains distinct from excess above a frozen training-background estimate. Frequency denotes a fraction of covered reconstructions, not posterior confidence. A coverage-damping change moves the volume centroid by about $1.42\,\mathrm{m}$ in $z$, underscoring vertical sensitivity.
 
-\begin{figure}[H]
+A separately registered weight comparison corrected roundoff-positive bootstrap spreads in exactly constant clipped bins. The original affected Poisson variant had an anomalous weighted objective of \num{\InternalOriginalWeightObjective}; it is a numerical failure, not evidence of robustness. At a reproduced fixed pose, with the original baseline weight hash checked, corrected Poisson and analytic objectives are \InternalCorrectedPoissonObjective{} and \InternalCorrectedAnalyticObjective{}, respectively, and both retain \InternalCorrectedWeightPeaks{} baseline-associated lateral peaks. Audited opacity weights for the actual registered pilot and nominal full-data reconstruction remain unchanged. Their differently weighted objectives are diagnostics, not a statistical model comparison. This narrow comparison does not validate arbitrary response errors or physical dimensions.
+
+\subsection{Synthetic recovery}
+Independent fine ray--box transmission averaging generated \InternalThinReplicas{} noisy realizations each for \InternalThinTruthThickness{} and \InternalThickTruthThickness{} metre beam thicknesses. Of the thin-scene conditional box fits, \InternalThinBoundary{} of \InternalThinReplicas{} reach a boundary; the thick-scene fits have \InternalThickBoundary{} boundary outcomes. Detected peak counts exceed the four truth beams in \InternalExcessPeakOutcomes{} of \InternalRecoveryOutcomes{} realizations. Noisy null and misspecified scenes were outside this pilot, and no calibrated interval coverage is available.
+
+Truth-associated centroid windows give small lateral errors but mean voxel $z$ errors of $\InternalThinZBias{}$ and $\InternalThickZBias{}$ metres for the thin and thick scenes, respectively (Fig.~\ref{fig:checks}). These windows are scoring aids using known truth positions, not blind detection. Their negative $z$ bias is distinct from the conditional box-bottom bias. Consequently, repeated lateral structure has stronger internal support than vertical localization or physical depth; neither the voxel image nor the box overlay supplies external ground truth.
+
+\begin{figure*}[t]
 \centering
-\IfFileExists{figures/room_voxels.pdf}{%
-  \includegraphics[width=\linewidth]{figures/room_voxels.pdf}%
-}{\IfFileExists{figures/room_voxels.png}{%
-  \includegraphics[width=\linewidth]{figures/room_voxels.png}%
-}{%
-  \fbox{\begin{minipage}[c][4cm][c]{0.94\linewidth}
-  \centering\textbf{AUTHOR FIGURE PLACEHOLDER}\\[0.8em]
-  Main result: three-dimensional voxel reconstruction of the room,\\
-  with emphasis on the ceiling beams.
-  \end{minipage}}%
-}}
-\caption{Room-scale muon tomography: a three-dimensional voxel view combining measured projections and two-position geometry, with emphasis on the repeated overhead beams. Apparent thickness remains subject to the depth ambiguity.}\label{fig:volume}
-\end{figure}
+\includegraphics[width=0.96\textwidth]{internal-support-stability.pdf}
+\caption{Support and conditional sensitivity on the first count-training split (half room and roof counts). Columns show dimensionless geometric support, raw-density persistence with refitted pose, and beam-excess persistence from the separately registered corrected analytic/Poisson weight comparison. Rows show top, side and top-view coverage or denominators. Maps use archived scientific world grids and maximum projections over covered voxels; grey is unmeasured. Frequencies are conditional covered-outcome fractions, not posterior probabilities. Spatial persistence can be widespread and need not isolate beams or verify geometry. The nominal full-data image in Fig.~\ref{fig:volume} has a separate source and scope.}\label{fig:support}
+\end{figure*}
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.92\textwidth]{internal-prediction-recovery.pdf}
+\caption{Left: held-out deviance per covered detector bin, summed across views, separately for retrospective count and angular protocols; dashed lines are the slab comparison. Fold reuse prevents an independent-significance interpretation. Right: truth-associated beam centroid errors by coordinate in the noisy synthetic scenes, including outcomes with boundary-censored box fits. The windows use truth positions only for scoring. Small $x$ errors coexist with severe negative $z$ bias; no physical-depth accuracy is established.}\label{fig:checks}
+\end{figure*}

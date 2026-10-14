@@ -1,12 +1,12 @@
-\section{Measurement geometry}\label{sec:apparatus}
-One scintillator tracker with \InputsDetectorPlanes{} planes and \InputsBarsPerPlane{} bars per plane was placed at two floor positions beneath the ceiling. Its active width was $\InputsActiveWidthCm\,\mathrm{cm}$ and layer separation $\InputsLayerGapCm\,\mathrm{cm}$, determined from the open-sky hit distribution and angular acceptance edge. The roof exposure used the same instrument as the response reference.
+\section{Measurement}\label{sec:apparatus}
+The detector is a tracker of \InputsDetectorPlanes{} scintillator planes with \InputsBarsPerPlane{} bars each. Its active width is $\InputsActiveWidthCm\,\mathrm{cm}$ and the gap between the outer layers is $\InputsLayerGapCm\,\mathrm{cm}$. We took data at two floor positions under the ceiling (pos0 and pos1) and on the roof with open sky above, using the same detector for all three runs.
 
-The retained samples contained \DataFirstTracks{} tracks over $\DataFirstHours\,\mathrm{h}$ at pos0, \DataSecondTracks{} tracks over $\DataSecondHours\,\mathrm{h}$ at pos1, and \DataSkyTracks{} tracks over $\DataSkyHours\,\mathrm{h}$ in open sky. Live time was obtained from the inter-track interval histogram; its unlabelled time unit was inferred from the acquisition rate.
+After selection we kept \DataFirstTracks{} tracks in $\DataFirstHours\,\mathrm{h}$ at pos0, \DataSecondTracks{} tracks in $\DataSecondHours\,\mathrm{h}$ at pos1 and \DataSkyTracks{} tracks in $\DataSkyHours\,\mathrm{h}$ under open sky. Live time was taken from the distribution of time intervals between tracks. The acquisition files do not state the unit of these intervals; we inferred it from the trigger rate.
 
-The coordinate origin is pos0, $z$ points upwards and the main beams run along $y$. The pos1 pose was fitted from the angular data. The rough floor-distance estimate was not treated as an exact survey. The on-site beam bottom and depth were $\InputsMeasuredBeamBottom\,\mathrm{m}$ and $\InputsMeasuredBeamDepth\,\mathrm{m}$; their uncertainties were not supplied. Comparison assumes a common height origin, since a separate tracker-reference-to-floor offset was not calibrated.
+The origin is at pos0, $z$ points up and the main beams run along $y$. The position and orientation of pos1 relative to pos0 were fitted from the muon data (Sec.~\ref{sec:method}); only a rough floor distance was known. On site, the beam bottom is at $\InputsMeasuredBeamBottom\,\mathrm{m}$ and the vertical beam thickness is $\InputsMeasuredBeamDepth\,\mathrm{m}$, from a rough tape measurement without stated uncertainty. The detector reference height above the floor was not calibrated, so direct height comparison assumes a common origin.
 
-\begin{figure}[htbp]
+\begin{figure}[t]
 \centering
-\includegraphics[width=\linewidth]{setup.pdf}
-\caption{Measurement geometry and the wider beam array. Extra centres are schematic pitch continuations; the thin boxes illustrate conditional fit geometry, not physical depth.}\label{fig:setup}
+\includegraphics[width=\columnwidth]{setup.pdf}
+\caption{Measurement layout and beam array. Beams beyond the matched set are drawn by continuing the pitch; box sizes are illustrative.}\label{fig:setup}
 \end{figure}

@@ -1,17 +1,14 @@
-\section{Locating the ceiling beams}\label{sec:beams}
-Two complementary diagnostics localized the overhead structure. Autofocus fitted a thin layer to one view and scored its prediction of the other; the minimum gave $\AutofocusZ\pm\UncertaintyAutofocusZTotal\,\mathrm{m}$. Averaging shifted lattices reduced beam-pitch aliasing. Synthetic layer-centre recovery had signed bias $\ValidationFocusBias\,\mathrm{m}$ and maximum error $\ValidationFocusMaxError\,\mathrm{m}$.
+\section{Ceiling height}\label{sec:beams}
+These supporting diagnostics locate an effective ceiling plane. Here height is its vertical position relative to the detector reference, not beam thickness $h=z_{\rm top}-z_{\rm bottom}$.
 
-Beam-shadow peaks supplied a geometric check. A feature at $(X_k,z)$ obeys
-\begin{equation}
-s_{x,p,k}=\frac{X_k-x_p}{z-z_p}.
-\label{eq:triangulation}
-\end{equation}
-Matching transverse peaks between positions yielded $z_x=\BeamsZX\pm\UncertaintyBeamsZxTotal\,\mathrm{m}$. The joint-height solution gave beam pitch $\BeamsPitch\,\mathrm{m}$. This transverse estimate is emphasized because displacement along the beams is less identifiable. Autofocus measures an effective layer centre; triangulation localizes shadow features, so neither is automatically a bottom-face measurement.
+\emph{Autofocus and triangulation.} A thin-layer cross-position prediction scan gives $\AutofocusZ\pm\UncertaintyAutofocusZTotal\,\mathrm{m}$, averaged over two half-voxel-shifted grids. Independently matched angular shadows obey $s_{x,p,k}=(X_k-x_p)/(z-z_p)$; their common transverse height is $z_x=\BeamsZX\pm\UncertaintyBeamsZxTotal\,\mathrm{m}$, with pitch $\BeamsPitch\,\mathrm{m}$.
 
-\begin{figure}[htbp]
+The estimates agree within their evaluated budgets but share the data and fitted pose, so they are not independent scale checks. They localize effective shadow features rather than the bottom face. Comparison with the on-site bottom $\InputsMeasuredBeamBottom\,\mathrm{m}$ also requires height registration; agreement with the building is not established by the quoted errors alone.
+
+\begin{figure}[t]
 \centering
-\includegraphics[width=\linewidth]{height.pdf}
-\caption{One height diagnostic figure: cross-position autofocus (a) and transverse parallax (b). Dashed lines mark each estimator and shaded bands show its count-bootstrap spread.}\label{fig:height}
+\includegraphics[width=\columnwidth]{height.pdf}
+\caption{Supporting ceiling-height diagnostics. (a) Autofocus: cross-position prediction error versus layer height. (b) Triangulation of the transverse beam shadows. Shaded bands show the statistical spread from resampled counts.}\label{fig:height}
 \end{figure}
 
-Within the overlap of both views, the reconstructed layer at the triangulated height reproduced the raw-data beam positions with mean offset $\BeamsGateMeanAbsOffset\,\mathrm{m}$ and passed the verification gate. Single-view edge features were retained as separate diagnostics. This checks lateral placement, not beam depth or absolute scale.
+As a check of the image, we took the voxel layer at the triangulated height and located the beams in it. Where both positions see the ceiling, they match the beam positions found directly in the opacity maps with a mean offset of $\BeamsGateMeanAbsOffset\,\mathrm{m}$. This is a shared-data lateral check, not independent depth or scale.

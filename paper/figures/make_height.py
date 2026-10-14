@@ -19,7 +19,7 @@ def main(argv=None) -> None:
         color=style.GRID,
         label="count-bootstrap spread",
     )
-    ax.set(xlabel="trial layer height (m)", ylabel="prediction score")
+    ax.set(xlabel="trial ceiling-plane height (m)", ylabel="prediction score")
     ax.legend(loc="upper right")
     bx.plot(beams["scan_z"], beams["scan_corr_x"], color=style.POSITION_COLORS["pos0"])
     bx.axvline(beams["z_x"], color=style.INK, ls="--", lw=0.8, label="transverse triangulation")
@@ -29,7 +29,7 @@ def main(argv=None) -> None:
         color=style.GRID,
         label="count-bootstrap spread",
     )
-    bx.set(xlabel="trial beam height (m)", ylabel="transverse parallax correlation")
+    bx.set(xlabel="trial ceiling height (m)", ylabel="transverse parallax correlation")
     bx.legend(loc="lower left")
     style.label_panels((ax, bx))
     style.save(fig, a)

@@ -379,3 +379,45 @@ uncertainty with a fixed observed roof. Every fold's input counts, assignments,
 masks, live times and reference/nuisance scope are registered before any fold
 fitting, including for failed or interrupted attempts. Excluded training bins are
 sanitized in archives and accompanied by masks defining their missingness.
+
+## Reviewed internal pilot in the paper
+
+The selected publication panels use the completed original pilot and the
+separately registered clipped-bootstrap weight correction. Their quantities
+are promoted only to `results/internalvalidation.json`; baseline result JSON
+files retain their original values. The nominal main image is explicitly
+`runs/response-aware-2026-10-07/voxels/volume_full.npz`, with both-position
+coverage from its `views.npy`. Training-fold support and persistence have their
+own fitted grids and scope. The original `paper/figures/voxels.jpeg` remains an
+unchanged, separately labelled conditional box illustration.
+
+```bash
+make internal-selected
+make internal-paper TECTONIC=runs/tools/tectonic
+make arxiv TECTONIC=runs/tools/tectonic
+```
+
+Normal `make paper` and `make arxiv` use this same reviewed publication path.
+They require the completed original/corrective archives and the archived baseline
+figures; a fresh checkout must restore or generate those reviewed inputs first.
+These publication targets never run baseline analysis again. The selected summary
+binds baseline JSON hashes and checks nominal reconstruction metadata, refusing
+changed macro inputs instead of silently mixing a new baseline with the fixed
+nominal image. `make all` completes the analysis/viewer before this guarded build. The default reviewed selection lives in
+`runs/figure-review/selected-paper-publication-2026-10-14/`. To create a new selection,
+set `IVFIGOUT` to a new directory; existing directories are refused by the
+renderer. `IVPAPERARCHIVE`, `IVCORRECTION`, and `IVNOMINAL` specify the explicit
+source bundles. Each selection records every consumed file and its SHA-256.
+The generated paper is `paper/generated/paper.pdf`; its self-contained LaTeX
+source archive is `paper/generated/arxiv.tar.gz` (`arxiv-internal` is an alias).
+
+The full original diagnostic set is under
+`runs/figure-review/pilot-2026-10-13-a-2026-10-14/`: 16 per-view prediction
+panels, all 48 declared support settings and eight fold-volume images, outcome
+and recovery plots, and separately labelled persistence groups. The original
+Poisson-weight sensitivity is retained as a numerical failure, while corrected
+weight evidence is identified as a separate registered comparison. Neither
+bundle supplies external geometry, calibrated physical depth, or posterior
+confidence. Count and angular summaries remain separate descriptive checks
+using repeated data; the pilot's negative vertical and detection findings are
+reported in the manuscript.

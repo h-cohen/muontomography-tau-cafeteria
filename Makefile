@@ -30,7 +30,8 @@ AUTHORFIG := $(wildcard paper/figures/voxels.jpeg paper/figures/room_voxels.pdf 
 .PHONY: all ingest selfcal opacity reconstruct analysis depthcheck arraydepth validation uncertainty export figures numbers paper viewer test clean arxiv
 .DELETE_ON_ERROR:
 
-all: paper viewer
+all: viewer
+	$(MAKE) paper
 
 $(RESULTS)/inputs.json: configs/paper-inputs.json
 	mkdir -p $(RESULTS)
@@ -105,12 +106,7 @@ numbers: $(GEN)/numbers.tex
 $(GEN)/numbers.tex: $(NUMERIC) $(CODE)
 	$(CLI) numbers --results $(RESULTS) --out $@
 
-paper: $(GEN)/paper.pdf
-$(GEN)/paper.pdf: paper/main.tex $(wildcard paper/sections/*.tex) paper/refs.bib \
-                  $(GEN)/numbers.tex $(FIGPDF) $(AUTHORFIG)
-	cd paper && TEXINPUTS=$(TEXROOT): BIBINPUTS=$(abspath paper): latexmk -pdf -interaction=nonstopmode -halt-on-error \
-	  -outdir=$(abspath $(GEN)) main.tex
-	mv $(GEN)/main.pdf $@
+paper: internal-paper
 
 test:
 	uv run ruff check . && uv run ruff format --check .
@@ -118,10 +114,9 @@ test:
 	uv run pytest -m "not slow"
 	node --test viewer/test/*.test.mjs
 
-arxiv: paper
-	tar -czf $(GEN)/arxiv.tar.gz -C paper main.tex sections refs.bib $(AUTHORFIG:paper/%=%) \
-	  -C $(abspath $(GEN)) main.bbl -C $(TEXROOT) \
-	  generated/numbers.tex $(FIGS:%=generated/figures/%.pdf)
+arxiv: internal-paper
+	tar -czf $(GEN)/arxiv.tar.gz -C paper main.tex refs.bib sections generated/numbers.tex generated/figures \
+	  -C $(abspath $(GEN)) main.bbl
 
 clean:
 	rm -rf runs paper/generated
@@ -135,3 +130,37 @@ internal-validate:
 	OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 $(CLI) internal-validate \
 	  --config $(CONFIG) --ingest runs/ingest --settings $(IVSETTINGS) \
 	  --out $(IVOUT) --cache $(IVCACHE)
+
+# Reviewed pilot publication: uses archived baseline numbers/figures, never refits them.
+IVPAPERARCHIVE ?= runs/internal-validation/pilot-2026-10-13-a
+IVCORRECTION ?= runs/internal-validation/weight-correction-2026-10-14
+IVNOMINAL ?= runs/response-aware-2026-10-07/voxels
+IVFIGOUT ?= runs/figure-review/selected-paper-publication-2026-10-14
+TECTONIC ?= runs/tools/tectonic
+IVSELECTED := $(IVFIGOUT)/internal-main.pdf $(IVFIGOUT)/internal-overlay.pdf \
+              $(IVFIGOUT)/internal-support-stability.pdf \
+              $(IVFIGOUT)/internal-prediction-recovery.pdf $(IVFIGOUT)/internal-numbers.tex
+.PHONY: internal-selected internal-paper arxiv-internal
+internal-selected: $(IVSELECTED)
+
+$(IVSELECTED) &: paper/figures/make_internal_paper.py paper/figures/make_support.py \
+                paper/figures/internal_figure_utils.py paper/figures/style.py \
+                $(IVPAPERARCHIVE)/manifest.json $(IVCORRECTION)/comparison.json
+	uv run python paper/figures/make_internal_paper.py --archive $(IVPAPERARCHIVE) \
+	  --correction $(IVCORRECTION) --main-volume $(IVNOMINAL)/volume_full.npz \
+	  --main-coverage $(IVNOMINAL)/views.npy --overlay paper/figures/voxels.jpeg \
+	  --out $(IVFIGOUT) --summary results/internalvalidation.json --baseline-results $(RESULTS)
+
+internal-paper: internal-selected
+	uv run python -c "import json,sys; from pathlib import Path; sys.path.insert(0, 'paper/figures'); from make_internal_paper import verify_baseline_inputs; verify_baseline_inputs(json.loads(Path('results/internalvalidation.json').read_text()), Path('$(RESULTS)'))"
+	mkdir -p $(GEN)/figures
+	uv run python paper/figures/make_height.py --config $(CONFIG) --pose $(POSE) \
+	  --results $(RESULTS) --runs $(dir $(IVNOMINAL)) --out $(GEN)/figures/height.pdf
+	cp $(IVFIGOUT)/internal-*.pdf $(IVFIGOUT)/internal-numbers.tex $(GEN)/figures/
+	cp $(IVFIGOUT)/display-settings.json $(GEN)/figures/internal-display-settings.json
+	uv run python -c "from pathlib import Path; from cafetomo.numbers import write_numbers; write_numbers(Path('$(RESULTS)'), Path('$(GEN)/numbers.tex'))"
+	cd paper && $(abspath $(TECTONIC)) --keep-logs --keep-intermediates -o $(abspath $(GEN)) main.tex
+	mv $(GEN)/main.pdf $(GEN)/paper.pdf
+
+arxiv-internal: arxiv
+	cp $(GEN)/arxiv.tar.gz $(GEN)/arxiv-internal.tar.gz

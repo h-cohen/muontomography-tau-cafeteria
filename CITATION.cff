@@ -1,6 +1,6 @@
 cff-version: 1.2.0
 message: "If you use this software or data, please cite the accompanying paper."
-title: "Seeing the Ceiling with Cosmic Muons: Two-View Tomography of a Real Room: code and data"
+title: "Seeing a Ceiling with Cosmic Muons: Three-Dimensional Imaging from Two Views: code and data"
 authors:
   - name: AUTHORS
 license: MIT

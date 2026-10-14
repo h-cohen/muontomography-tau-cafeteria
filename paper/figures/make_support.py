@@ -189,7 +189,7 @@ def generate(root, out, *, overlay=None, main_volume=None, main_coverage=None):
             save(fig, out, f"{record['name']}-{name}")
 
 
-def voxel_panel(rho, coverage, grid, out, name, scope):
+def voxel_panel(rho, coverage, grid, out, name, scope, *, compact=False):
     fig = plt.figure(figsize=(7, 4.7), layout="constrained")
     ax = fig.add_subplot(projection="3d")
     shape = tuple(grid["shape"])
@@ -208,7 +208,9 @@ def voxel_panel(rho, coverage, grid, out, name, scope):
         xlabel="x (m)",
         ylabel="y (m)",
         zlabel="z (m)",
-        title=(
+        title=scope
+        if compact
+        else (
             f"{scope}\nVoxel-only effective opacity; detector world coordinates\n"
             f"Display threshold {DISPLAY['density_threshold']:g} 1/m; extent is not physical depth"
         ),
@@ -226,6 +228,7 @@ def voxel_panel(rho, coverage, grid, out, name, scope):
         ax=ax,
         label="effective opacity density (1/m)",
         shrink=0.65,
+        pad=0.10 if compact else 0.05,
     )
     save(fig, out, name)
 
