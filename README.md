@@ -2,16 +2,41 @@
 
 [Code and data repository](https://github.com/h-cohen/muontomography-tau-cafeteria).
 
-Code, data and manuscript for *Three-Dimensional Muon Imaging of a Building Ceiling from Two Detector Positions*.
+Code, data and manuscript for *Seeing a Ceiling with Cosmic Muons:
+Three-Dimensional Imaging from Two Views*.
 Two positions of one four-plane tracker, normalized by an open-sky run, provide a
-three-dimensional room reconstruction, beam-height and pitch estimates, and
-model-dependent beam-depth estimates.
+three-dimensional room reconstruction. Ceiling-height and pitch estimates,
+conditional beam-depth fits, and internal validation support that main result.
 
 The detector separation is self-calibrated; its scale remains conditional on the
 floor-offset prior and fitting objective. On-site bottom/depth measurements
 (7.3 m / 1.2 m) are comparison inputs, not fitting targets. The continued-array
 depth estimate fixes relative beam centres and array completeness; its count
 spread excludes uncertainty in those assumptions.
+
+## Current status
+
+The retrospective internal-validation pilot and its reviewed paper are complete.
+The larger scientific validation program remains open: physical beam depth,
+calibrated uncertainty, and voxel-solver convergence have not been established.
+
+- Held-out count Poisson deviance is 59.71% below a uniform slab; guarded angular
+  deviance is 5.41% below it overall, with two of five angular folds worse.
+  These reused-data checks are descriptive, not independent significance tests.
+- Synthetic recovery retains thin-scene boundary fits (four of five), extra
+  peaks (seven of ten noisy cases), and substantial vertical centroid bias.
+- A separately registered weight correction removes a constant-bootstrap
+  roundoff defect. The original pilot is retained unchanged.
+- Ten noisy recovery replays and two direct controls reproduce original outcomes
+  within registered tolerances, with saved volumes and solver diagnostics.
+  All 48 support selections reproduce with background diagnostics retained.
+- Latest verification: 465 Python and 118 viewer tests passed; 22 slow tests
+  were deselected from the default suite. Registered numerical campaigns ran
+  separately. The six-page, double-column paper and source archive compiled
+  with identical extracted text.
+
+Local agent handoff: `docs/dev/handoff-2026-10-14.md` (intentionally untracked).
+It maps the completed work, preserved reviews, numerical evidence, and next tasks.
 
 ## Setup
 
@@ -47,16 +72,26 @@ Run the analysis and generate all figures/numbers without a TeX installation:
 make validation uncertainty arraydepth viewer figures numbers
 ```
 
-Make resolves upstream dependencies automatically. The full run includes the
-50-replica reconstruction bootstrap and a separate 50-replica conditional depth
-study. Up-to-date stages are reused; changes to analysis code, dependencies or
-configuration rebuild affected stages.
+Make resolves upstream dependencies automatically. The analysis commands above
+include the 50-replica reconstruction bootstrap and a separate 50-replica
+conditional depth study. Up-to-date stages are reused; changes to analysis code,
+dependencies or configuration rebuild affected stages. `make all` builds the
+viewer and then the guarded publication; internal validation is a separate
+registered campaign and is not launched by `make all`.
 
-To force a complete rebuild, including the paper:
+To force a fresh full analysis without replacing the reviewed products, choose
+an unused output directory:
 
 ```bash
-make -B all
+make -B validation uncertainty arraydepth viewer figures numbers \
+  RUNS=runs/rebuild-YYYY-MM-DD \
+  RESULTS=runs/rebuild-YYYY-MM-DD/results \
+  GEN=runs/rebuild-YYYY-MM-DD/generated
 ```
+
+Replace `YYYY-MM-DD` with a unique run label. This does not promote new paper
+measurements. Publication uses explicitly reviewed archives and baseline hashes;
+changed baseline results require a fresh reviewed selection before compilation.
 
 ## Individual stages
 
@@ -321,9 +356,7 @@ make clean
 This removes `runs/` and `paper/generated/`, including caches and local diagnostic
 runs; it leaves the tracked result JSON files in place.
 
-## Citation and license
-
-See `CITATION.cff`. MIT license; see `LICENSE`.
+## Internal validation execution
 
 Internal validation runs are isolated from the paper pipeline:
 
@@ -334,6 +367,17 @@ OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 uv run cafetomo internal-validate \
   --out runs/internal-validation/pilot-001 \
   --cache runs/internal-validation/scientific-cache
 ```
+
+Or, after generating `runs/ingest/`, use the Make wrapper with a fresh output root:
+
+```bash
+make internal-validate IVOUT=runs/internal-validation/pilot-NEW \
+  IVSETTINGS=configs/internal-validation.yaml
+```
+
+The wrapper uses `runs/ingest/`. The completed reviewed campaign instead used
+`runs/response-aware-2026-10-07/ingest/`; preserve that distinction when
+reproducing its evidence. Inspect options with `uv run cafetomo internal-validate --help`.
 
 The settings explicitly select `pilot`, `full`, or `smoke`. Global `--fast`
 forces smoke scope. Pilot settings are declared before fitting: three count
@@ -433,3 +477,7 @@ records polynomial coefficients, powers, excluded rows, and eligible rows for
 all eight folds and six settings. Its corrected comparison reproduces all 48
 original masks exactly. The first rebuild, which omitted angular observation
 masks, is retained in `attempt-1/` with its correction note and amendment record.
+
+## Citation and license
+
+See `CITATION.cff`. MIT license; see `LICENSE`.
