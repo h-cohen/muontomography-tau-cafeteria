@@ -265,6 +265,16 @@ def test_completed_fit_cache_is_scientific(cfg, tmp_path, monkeypatch):
     assert len(calls) == 2
     v.cached_fitter("changed-source")(grid, live, cfg, observation_mask=None, cache_dir=tmp_path)
     assert len(calls) == 3
+    reordered = AnalysisGrid(grid.edges, dict(reversed(list(grid.counts.items()))))
+    cached(reordered, live, cfg, observation_mask=None, cache_dir=tmp_path)
+    assert len(calls) == 4
+    cached(reordered, live, cfg, observation_mask=None, cache_dir=tmp_path)
+    assert len(calls) == 4
+    records = [
+        json.loads(p.read_text()) for p in tmp_path.glob("completed-training/*/complete.json")
+    ]
+    assert any(r["source_order"] == list(reordered.counts) for r in records)
+    assert all(r["cache_scope"].startswith("ordered count sources") for r in records)
 
 
 def test_protect_checkout_outputs_from_other_cwd(cfg, tmp_path, monkeypatch):

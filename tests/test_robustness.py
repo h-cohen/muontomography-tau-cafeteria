@@ -50,6 +50,34 @@ def test_coverage_uses_only_positive_weights(monkeypatch, cfg):
     )
 
 
+def test_rebuilt_weight_mismatch_rejected(monkeypatch, cfg):
+    import hashlib
+    from types import SimpleNamespace
+
+    import cafetomo.robustness as r
+    from cafetomo.angular import AnalysisGrid
+    from cafetomo.prediction import FrozenFold
+
+    grid = AnalysisGrid(
+        np.array([-0.1, 0.1]),
+        {p: np.ones((1, 1), int) for p in (*cfg.position_ids, cfg.sky_reference.id)},
+    )
+    original = np.array([1.0, 2.0])
+    changed = np.array([1.0, 3.0])
+    fold = FrozenFold(
+        cfg,
+        solution(),
+        "train",
+        "choice",
+        {"weight_hash": hashlib.sha256(original.tobytes()).hexdigest()},
+    )
+    monkeypatch.setattr(r, "opacity_sigma", lambda *a, **kw: None)
+    monkeypatch.setattr(r, "solve_opacity", lambda *a, **kw: None)
+    monkeypatch.setattr(r, "build_fit_data", lambda *a: SimpleNamespace(w=changed))
+    with pytest.raises(ValueError, match="rebuilt training weights differ"):
+        r.training_data(grid, {p: 1.0 for p in grid.counts}, fold)
+
+
 def test_spacing_overlap_and_partial_signal():
     v = solution(spacing=0.5, shape=(2, 2, 2))
     v.rho[:4] = 0

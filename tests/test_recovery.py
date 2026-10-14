@@ -39,6 +39,47 @@ def test_failure_classifier():
     assert recovery.expected_failure(RuntimeError("beam triangulation failed: none"))
     assert not recovery.expected_failure(ValueError("bad input"))
     assert not recovery.expected_failure(RuntimeError("unexpected bug"))
+    assert recovery.expected_failure(ValueError("pos0: insufficient background coverage"))
+    assert recovery.expected_failure(ValueError("pos1: background clipping did not converge"))
+    assert recovery.expected_failure(
+        ValueError("no constrained sky directions: every lambda or sigma is non-finite")
+    )
+    assert not recovery.expected_failure(ValueError("insufficient background coverage"))
+    assert not recovery.expected_failure(ValueError("pos0: insufficient background coverage extra"))
+    assert not recovery.expected_failure(
+        ValueError("no constrained sky directions: every lambda or sigma is non-finite extra")
+    )
+
+
+def test_volume_archive_survives_downstream_classified_failure(cfg, monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    from cafetomo.reconstruct import VoxelSolution
+    from cafetomo.voxels import VoxelGrid
+
+    volume = VoxelSolution(
+        np.array([0.25]),
+        VoxelGrid((0, 0, 1), 1, (1, 1, 1)),
+        {"pos0": 0.0},
+        cfg.position_ids,
+        {"n_iter_used": 5, "best_iter": 2},
+    )
+    fold = SimpleNamespace(cfg=cfg, volume=volume, metadata={"weight_hash": "x"})
+    monkeypatch.setattr(recovery, "fit_training_fold", lambda *a, **kw: fold)
+    monkeypatch.setattr(
+        recovery,
+        "solve_opacity",
+        lambda *a, **kw: (_ for _ in ()).throw(
+            ValueError("pos0: insufficient background coverage")
+        ),
+    )
+    result = recovery.run_recovery_case(
+        recovery.standard_cases()[0], None, {}, cfg, seed=12, out_dir=tmp_path
+    )
+    assert result["status"] == "fit_failure"
+    assert result["artifacts"] == {"volume": "volume.npz", "solver_info": "solver-info.json"}
+    np.testing.assert_allclose(VoxelSolution.load(tmp_path / "volume.npz").rho, volume.rho)
+    assert (tmp_path / "solver-info.json").read_text().find('"best_iter": 2') > 0
 
 
 def test_boundary_record():

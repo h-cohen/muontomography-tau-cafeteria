@@ -119,6 +119,7 @@ def fit_training_fold(
             n_weighted_rows=int(np.count_nonzero(data.w)),
             weight_hash=hashlib.sha256(np.ascontiguousarray(data.w).tobytes()).hexdigest(),
             source_count_totals={p: int(v.sum()) for p, v in clean.counts.items()},
+            source_order=list(clean.counts),
             live=dict(live),
         ),
     )

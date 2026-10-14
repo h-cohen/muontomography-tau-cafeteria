@@ -164,11 +164,15 @@ def cached_fitter(source):
         grid, live, cfg, *, observation_mask, cache_dir, frozen_nuisance=None, nuisance_cfg=None
     ):
         clean, masks = _training_grid(grid, cfg, observation_mask)
+        # opacity_sigma consumes one RNG in source insertion order. The data
+        # digest intentionally remains order-independent for historical records.
+        source_order = list(clean.counts)
         key = hashlib.sha256(
             (
                 source
                 + _digest(nuisance_cfg or cfg)
                 + _digest(cfg, clean, live, masks)
+                + json.dumps(source_order)
                 + (frozen_nuisance.choice_hash if frozen_nuisance else "fresh")
             ).encode()
         ).hexdigest()
@@ -199,6 +203,8 @@ def cached_fitter(source):
             dict(
                 scientific_hash=key,
                 source_hash=source,
+                source_order=source_order,
+                cache_scope="ordered count sources (Poisson RNG consumption)",
                 payload_hash=hashlib.sha256(data).hexdigest(),
             ),
         )
@@ -543,6 +549,10 @@ def run_support(part, fold, stage_out, settings):
                 joint=support.joint_support,
                 coverage=support.jointly_covered,
                 **diagnostics.masks,
+                **{f"coefficients_{p}": v for p, v in diagnostics.coefficients.items()},
+                **{f"excluded_{p}": v for p, v in diagnostics.excluded.items()},
+                **{f"eligible_{p}": v for p, v in diagnostics.eligible.items()},
+                powers=np.asarray(diagnostics.powers, dtype=np.int64),
             )
             records.append(
                 dict(
@@ -608,7 +618,8 @@ def run_recovery(grid, live, cfg, settings, out, results):
             cases=records,
             budget=budget,
             convergence_scope=(
-                "converged refers to thickness fit; voxel solver info preserved separately"
+                "converged refers to box fit only; voxel fit uses a fixed iteration budget, "
+                "with per-case solver diagnostics in linked recovery artifacts"
             ),
         ),
     )

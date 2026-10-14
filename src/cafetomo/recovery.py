@@ -207,6 +207,7 @@ def _run_recovery_case(case, grid, live, analysis_cfg, *, seed, out_dir):
     cfg = replace(analysis_cfg, reconstruction=replace(analysis_cfg.reconstruction, seed=seed))
     fold = fit_training_fold(grid, live, cfg, observation_mask=None, cache_dir=out_dir / "cache")
     record["training"] = fold.metadata
+    record["artifacts"] = archive_volume(fold.volume, out_dir)
     (out_dir / "outcome.json").write_text(json.dumps(record, indent=2, default=_json_default))
     maps = solve_opacity(grid, fold.cfg, live)
     sigma = opacity_sigma(grid, fold.cfg, live, n_replicas=cfg.opacity.n_sigma_replicas, seed=seed)
@@ -320,6 +321,8 @@ def direct_controls(cfg, *, out_dir, n_sub=16):
         data = FitData(lambdas[-1], np.full(rows.n_rows, 1 / 0.002**2), rows)
         fit = fit_beam_depth(data, truth_cfg, xs_init=TRUTH_CENTRES, z0_init=case.bottom_m)
         volume = solve_voxels(data, truth_cfg, cache_dir=out_dir / "cache", holdouts=False)["full"]
+        case_out = out_dir / case.case_id
+        artifacts = archive_volume(volume, case_out)
         # Peak x per truth-local column; truth is used only for scoring.
         image = volume.rho.reshape(volume.grid.shape).sum(axis=(1, 2))
         x = volume.grid.axis_centers(0)
@@ -346,6 +349,7 @@ def direct_controls(cfg, *, out_dir, n_sub=16):
                 lateral_pass=bool(np.max(np.abs(errors)) <= volume.grid.spacing),
                 vertical_geometric_scale_m=float(scale),
                 fit=score_fit(case, fit),
+                artifacts={k: f"{case.case_id}/{v}" for k, v in artifacts.items()},
                 vertical_pass=bool(abs(fit.z0 - case.bottom_m) <= scale),
             )
         )
@@ -400,6 +404,17 @@ def _json_default(value):
     if isinstance(value, np.generic):
         return value.item()
     raise TypeError(f"cannot serialize {type(value)}")
+
+
+def archive_volume(volume, out_dir):
+    """Persist the fitted field before any downstream diagnostic can fail."""
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    volume.save(out_dir / "volume.npz")
+    (out_dir / "solver-info.json").write_text(
+        json.dumps(volume.info, indent=2, default=_json_default)
+    )
+    return dict(volume="volume.npz", solver_info="solver-info.json")
 
 
 def voxel_localization(case, volume):
