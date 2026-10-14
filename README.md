@@ -136,12 +136,39 @@ To rebuild only the HTML from an existing export, bypassing upstream Make target
 uv run cafetomo viewer --export runs/export --out runs/viewer.html
 ```
 
+To rebuild the viewer of the published baseline (the nominal full-data volume in
+the paper) without refitting anything, export the archived volume with the
+canonical `results/` into a fresh directory, then build the HTML:
+
+```bash
+uv run cafetomo export --config configs/cafeteria.yaml --pose results/pose.json \
+  --voxels runs/response-aware-2026-10-07/voxels \
+  --bootstrap runs/response-aware-2026-10-07/bootstrap \
+  --results results --out runs/viewer-baseline/export
+uv run cafetomo viewer --export runs/viewer-baseline/export --out runs/viewer.html
+xdg-open runs/viewer.html
+```
+
+Choose a new `--out` directory rather than writing into the archived
+`runs/response-aware-2026-10-07/export/`.
+
 The viewer displays the reconstructed room and toggleable fitted-beam bodies and outlines.
-Use **Fitted beams** to show/hide the overlay, **beam opacity** to fade it
-(0% hides both faces and edges), and **beam color** to choose its color. These controls are
+Overlays sit in cards under **Camera & view**. Use **Fitted beams** to show/hide
+the overlay, its **opacity** slider to fade it (0% hides both faces and edges),
+and its round color swatch to choose its color. These controls are
 independent of voxel opacity, thresholds and the fitted dimensions. The PNG
 export includes the currently displayed overlays; uncheck **Fitted beams** or
-set beam opacity to 0% for a voxel-only room image.
+set the beam opacity to 0% for a voxel-only room image.
+
+**Fields of view** (off by default) draws each detector position's geometric
+acceptance as a translucent square frustum rising to the top of the volume.
+A track is accepted when it crosses both outer planes of the active square
+(width W, layer gap D), so the frustum starts as the W×W detector square and
+widens by W/D per metre of height (|tan θ| ≤ W/D per detector axis, ≈ 0.91);
+each frustum is rotated by its fitted azimuth. Use **opacity** to fade walls and
+edges together (0% hides them) and the color swatch to recolor them. The
+frusta come from `detector_geometry` in `meta.json`; exports made before that
+field existed hide the control. Like the beams, this is display-only context.
 
 **Beam fit** selects the geometry shown. When available, the default is the
 **Conditional continued array (z depth)**: its vertical extent is

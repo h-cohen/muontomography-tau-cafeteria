@@ -10,6 +10,7 @@ import { captureView, loadViews, saveViews } from './views.mjs';
 import { SHORTCUTS, keyToAction } from './shortcuts.mjs';
 import { markerVertices, dedupeDetectors, projectToScreen } from './markers.mjs';
 import { beamBoxVertices, beamDisplayGeometry, beamFaceVertices, sortedBeamFaces, beamLegendText } from './beams.mjs';
+import { fovGeometry, fovLegendText, FOV_STRIDE } from './fov.mjs';
 import { voxelGates, spatialGates } from './gates.mjs';
 import { pickVoxel } from './picker.mjs';
 import { readRun, embeddedFiles } from './runload.mjs';
@@ -267,6 +268,32 @@ void main() {
   outColor = uMarkerColor;
 }`;
 
+// Fields of view: world-space walls and edges carrying a per-vertex alpha
+// weight (fov.mjs), so walls fade as they rise while edges stay crisp.
+const FOV_VERTEX_SRC = `#version 300 es
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in float aWeight;
+uniform mat4 uFovViewProj;
+out float vWeight;
+void main() {
+  vWeight = aWeight;
+  gl_Position = uFovViewProj * vec4(aPos, 1.0);
+}`;
+
+const FOV_FRAGMENT_SRC = `#version 300 es
+precision highp float;
+uniform vec3 uFovColor;
+uniform float uFovOpacity;
+in float vWeight;
+out vec4 outColor;
+void main() {
+  outColor = vec4(uFovColor, clamp(vWeight * uFovOpacity, 0.0, 1.0));
+}`;
+
+function hexToRgb(hex) {
+  return [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+}
+
 function compileShader(gl, type, src) {
   const sh = gl.createShader(type);
   gl.shaderSource(sh, src);
@@ -365,6 +392,27 @@ export function initViewer(root) {
   gl.bindVertexArray(null);
   let beamFaces = new Float32Array(0);
   let beamModels = {};
+
+  const fovProgram = linkProgram(gl, FOV_VERTEX_SRC, FOV_FRAGMENT_SRC);
+  const fovUniforms = {
+    uFovViewProj: gl.getUniformLocation(fovProgram, 'uFovViewProj'),
+    uFovColor: gl.getUniformLocation(fovProgram, 'uFovColor'),
+    uFovOpacity: gl.getUniformLocation(fovProgram, 'uFovOpacity'),
+  };
+  function fovVao(buffer) {
+    const v = gl.createVertexArray();
+    gl.bindVertexArray(v);
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 4 * FOV_STRIDE, 0);
+    gl.enableVertexAttribArray(1);
+    gl.vertexAttribPointer(1, 1, gl.FLOAT, false, 4 * FOV_STRIDE, 12);
+    gl.bindVertexArray(null);
+    return v;
+  }
+  const fovFaceBuffer = gl.createBuffer(), fovEdgeBuffer = gl.createBuffer();
+  const fovFaceVao = fovVao(fovFaceBuffer), fovEdgeVao = fovVao(fovEdgeBuffer);
+  let fovFaces = new Float32Array(0);
   const CAMERA_NEAR = 0.05, CAMERA_FAR = 100;
   const RAY_STEPS = 200; // max samples per ray INSIDE the volume box
   const ADAPTIVE_STEPS = 64; // fast-preview step count while state.interacting
@@ -594,6 +642,9 @@ export function initViewer(root) {
     if (state.showDetectors && state.meta && state.markerVertexCount > 0) {
       drawMarkers(viewProj);
     }
+    if (state.showFov && state.fovOpacity > 0 && state.meta && state.fovFaceVertexCount > 0) {
+      drawFov(viewProj);
+    }
     if (state.showBeams && state.beamOpacity > 0 && state.meta && state.beamVertexCount > 0) {
       drawBeams(viewProj);
     }
@@ -670,8 +721,7 @@ export function initViewer(root) {
     gl.useProgram(markerProgram);
     gl.bindVertexArray(beamVao);
     gl.uniformMatrix4fv(markerUniforms.uMarkerViewProj, false, viewProj);
-    const rgb = [1, 3, 5].map((i) => parseInt(state.beamColor.slice(i, i + 2), 16) / 255);
-    gl.uniform4fv(markerUniforms.uMarkerColor, [...rgb, state.beamOpacity]);
+    gl.uniform4fv(markerUniforms.uMarkerColor, [...hexToRgb(state.beamColor), state.beamOpacity]);
     gl.enable(gl.BLEND);
     gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.bindVertexArray(beamFaceVao);
@@ -685,6 +735,67 @@ export function initViewer(root) {
     gl.drawArrays(gl.LINES, 0, state.beamVertexCount);
     gl.disable(gl.BLEND);
     gl.bindVertexArray(null);
+  }
+
+  // Fields of view: drawn before the beams, so boxes inside a frustum read
+  // through its translucent walls. Walls are two-sided (no culling): the
+  // far inner wall is what gives the frustum its volume.
+  function drawFov(viewProj) {
+    gl.useProgram(fovProgram);
+    gl.uniformMatrix4fv(fovUniforms.uFovViewProj, false, viewProj);
+    gl.uniform3fv(fovUniforms.uFovColor, hexToRgb(state.fovColor));
+    gl.uniform1f(fovUniforms.uFovOpacity, state.fovOpacity);
+    gl.enable(gl.BLEND);
+    gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.bindBuffer(gl.ARRAY_BUFFER, fovFaceBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, sortedBeamFaces(fovFaces, viewProj, FOV_STRIDE), gl.DYNAMIC_DRAW);
+    gl.bindVertexArray(fovFaceVao);
+    gl.drawArrays(gl.TRIANGLES, 0, state.fovFaceVertexCount);
+    gl.bindVertexArray(fovEdgeVao);
+    gl.drawArrays(gl.LINES, 0, state.fovEdgeVertexCount);
+    gl.disable(gl.BLEND);
+    gl.bindVertexArray(null);
+  }
+
+  // Offered only when the run carries the tracker geometry; off by default,
+  // since the frusta are context for the volume rather than a result.
+  function applyFov(meta) {
+    const geometry = meta.detector_geometry;
+    const detectors = meta.detectors || [];
+    const available = !!geometry && detectors.length > 0;
+    const { min, extent } = worldBounds();
+    const built = available
+      ? fovGeometry(detectors, geometry, min[2] + extent[2])
+      : { faces: new Float32Array(0), edges: new Float32Array(0) };
+    fovFaces = built.faces;
+    state.fovFaceVertexCount = fovFaces.length / FOV_STRIDE;
+    state.fovEdgeVertexCount = built.edges.length / FOV_STRIDE;
+    gl.bindBuffer(gl.ARRAY_BUFFER, fovEdgeBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, built.edges, gl.STATIC_DRAW);
+    state.showFov = false;
+    root.querySelector('#fov-control').hidden = !available;
+    root.querySelector('#toggle-fov').checked = false;
+    const legendEl = root.querySelector('#fov-legend');
+    legendEl.textContent = available ? fovLegendText(geometry) : '';
+    legendEl.hidden = true;
+    syncOverlayCards();
+  }
+
+  // Card accents and dimmed bodies follow the overlay state.
+  function syncOverlayCards() {
+    for (const [card, on, color] of [
+      ['#beams-control', state.showBeams, state.beamColor],
+      ['#fov-control', state.showFov, state.fovColor],
+    ]) {
+      const el = root.querySelector(card);
+      el.classList.toggle('on', !!on);
+      el.style.setProperty('--swatch', color);
+    }
+    const legend = root.querySelector('#overlay-legend');
+    legend.style.setProperty('--beam-swatch', state.beamColor);
+    legend.style.setProperty('--fov-swatch', state.fovColor);
+    const fovLegend = root.querySelector('#fov-legend');
+    fovLegend.hidden = !(state.showFov && fovLegend.textContent);
   }
 
   // A run without a fitted beam model hides the control and
@@ -873,6 +984,7 @@ export function initViewer(root) {
     }
     selector.value = meta.beam_model_default || Object.keys(beamModels)[0] || '';
     applyBeams(beamModels[selector.value] || null);
+    applyFov(meta);
 
     const banner = root.querySelector('#resolution-banner');
     const res = meta.resolution || {};
@@ -1081,6 +1193,7 @@ export function initViewer(root) {
 
   root.querySelector('#toggle-beams').addEventListener('change', (ev) => {
     commit({ showBeams: ev.target.checked });
+    syncOverlayCards();
   });
 
   root.querySelector('#beam-model').addEventListener('change', ev => {
@@ -1097,6 +1210,20 @@ export function initViewer(root) {
   });
   root.querySelector('#beam-color').addEventListener('input', (ev) => {
     commit({ beamColor: ev.target.value });
+    syncOverlayCards();
+  });
+  root.querySelector('#toggle-fov').addEventListener('change', (ev) => {
+    commit({ showFov: ev.target.checked });
+    syncOverlayCards();
+  });
+  root.querySelector('#fov-opacity').addEventListener('input', (ev) => {
+    const value = Number(ev.target.value);
+    root.querySelector('#fov-opacity-readout').textContent = `${Math.round(100 * value)}%`;
+    commit({ fovOpacity: value });
+  });
+  root.querySelector('#fov-color').addEventListener('input', (ev) => {
+    commit({ fovColor: ev.target.value });
+    syncOverlayCards();
   });
 
   function renderViewList() {

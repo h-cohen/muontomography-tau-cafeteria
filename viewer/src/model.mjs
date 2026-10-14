@@ -67,6 +67,13 @@ export function createState() {
     beamColor: '#f24dd9',
     beamVertexCount: 0,
     beamFaceVertexCount: 0,
+    // Detector fields of view (meta.detector_geometry): offered when the run
+    // carries the tracker geometry, off until the user asks for them.
+    showFov: false,
+    fovOpacity: 1,
+    fovColor: '#7cc7ff',
+    fovFaceVertexCount: 0,
+    fovEdgeVertexCount: 0,
     window: null,
   };
 }
@@ -84,6 +91,7 @@ export const EFFECTS = {
   shading: RENDER_ONLY, adaptiveQuality: RENDER_ONLY,
   showDetectors: RENDER_ONLY, showBeams: RENDER_ONLY,
   beamOpacity: RENDER_ONLY, beamColor: RENDER_ONLY,
+  showFov: RENDER_ONLY, fovOpacity: RENDER_ONLY, fovColor: RENDER_ONLY,
   window: ['histogram', 'render'],
   transferStops: ['lut', 'render'],
 };

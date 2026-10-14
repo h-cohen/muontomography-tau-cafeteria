@@ -80,19 +80,20 @@ export function beamFaceVertices(beams) {
 }
 
 // Transparent surfaces are drawn far-to-near, using the current camera.
-export function sortedBeamFaces(vertices, matrix) {
+// `stride` floats per vertex, xyz first (extra attributes travel along).
+export function sortedBeamFaces(vertices, matrix, stride = 3) {
+  const size = 3 * stride;
   const triangles = [];
-  for (let i = 0; i < vertices.length; i += 9) {
-    const x = (vertices[i] + vertices[i+3] + vertices[i+6]) / 3;
-    const y = (vertices[i+1] + vertices[i+4] + vertices[i+7]) / 3;
-    const z = (vertices[i+2] + vertices[i+5] + vertices[i+8]) / 3;
+  for (let i = 0; i < vertices.length; i += size) {
+    const c = (k) => (vertices[i+k] + vertices[i+stride+k] + vertices[i+2*stride+k]) / 3;
+    const x = c(0), y = c(1), z = c(2);
     const depth = (matrix[2]*x + matrix[6]*y + matrix[10]*z + matrix[14]) /
       (matrix[3]*x + matrix[7]*y + matrix[11]*z + matrix[15]);
-    triangles.push({ depth, vertices: vertices.slice(i, i+9) });
+    triangles.push({ depth, vertices: vertices.slice(i, i+size) });
   }
   triangles.sort((a,b) => b.depth - a.depth);
   const out = new Float32Array(vertices.length);
-  triangles.forEach((t,i) => out.set(t.vertices, 9*i));
+  triangles.forEach((t,i) => out.set(t.vertices, size*i));
   return out;
 }
 

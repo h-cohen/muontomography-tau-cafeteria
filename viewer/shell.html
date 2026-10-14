@@ -40,7 +40,7 @@
   #app-title{font-weight:600;letter-spacing:.02em;}
   #run-name{min-height:1em;}
   /* label's display:block would otherwise beat the UA [hidden] rule. */
-  #beams-control[hidden]{display:none;}
+  #beams-control[hidden],#fov-control[hidden]{display:none;}
   .row{display:flex;gap:6px;flex-wrap:wrap;}
   .btn{
     display:inline-block;padding:5px 10px;border-radius:var(--radius);
@@ -60,6 +60,42 @@
     border:1px solid var(--line);border-radius:var(--radius);padding:3px 6px;
   }
   label{display:block;margin:4px 0;color:var(--text-dim);}
+
+  /* ---- overlay cards (fitted beams, fields of view) ---- */
+  .overlay-card{
+    --swatch:var(--accent);
+    margin:8px 0;padding:8px 10px 10px;border:1px solid var(--line);
+    border-left:3px solid var(--swatch);border-radius:var(--radius);
+    background:var(--panel-2);transition:border-color 120ms;
+  }
+  .overlay-head{display:flex;align-items:center;gap:8px;}
+  .overlay-head label{
+    flex:1 1 auto;display:flex;align-items:center;gap:8px;margin:0;
+    color:var(--text);font-weight:500;cursor:pointer;
+  }
+  .overlay-head input[type="checkbox"]{width:auto;margin:0;accent-color:var(--swatch);}
+  .overlay-body{transition:opacity 120ms;}
+  .overlay-card:not(.on) .overlay-body{opacity:.45;}
+  .overlay-row{display:flex;align-items:center;gap:8px;margin-top:8px;}
+  .overlay-row > label{flex:0 0 4.6em;margin:0;font-size:12px;}
+  .overlay-row input[type="range"]{flex:1 1 auto;width:auto;min-width:0;accent-color:var(--swatch);}
+  .overlay-row select{flex:1 1 auto;min-width:0;}
+  .overlay-note{margin-top:6px;font-size:11px;color:var(--text-dim);}
+  .swatch{
+    -webkit-appearance:none;appearance:none;flex:0 0 auto;width:22px;height:22px;
+    padding:0;border:2px solid var(--line);border-radius:50%;background:none;cursor:pointer;
+    transition:border-color 120ms,transform 120ms;
+  }
+  .swatch:hover{border-color:var(--text-dim);transform:scale(1.08);}
+  .swatch::-webkit-color-swatch-wrapper{padding:0;}
+  .swatch::-webkit-color-swatch{border:none;border-radius:50%;}
+  .swatch::-moz-color-swatch{border:none;border-radius:50%;}
+  #beam-legend::before,#fov-legend::before{
+    content:"";display:inline-block;width:8px;height:8px;margin-right:6px;
+    border-radius:2px;vertical-align:baseline;
+  }
+  #beam-legend::before{background:var(--beam-swatch,#f24dd9);}
+  #fov-legend::before{background:var(--fov-swatch,#7cc7ff);}
 
   .clip-row{display:flex;align-items:center;gap:6px;margin:4px 0;}
   .clip-row .axis-name{flex:0 0 auto;width:1em;color:var(--text-dim);}
@@ -251,11 +287,25 @@
         </div>
         <label><input id="toggle-adaptive" type="checkbox" style="width:auto" checked> Fast preview while interacting</label>
         <label><input id="toggle-detectors" type="checkbox" style="width:auto"> Detectors</label>
-        <div id="beams-control" hidden>
-          <label title="Box geometry fitted to angular opacity; voxel thickness is a separate reconstruction diagnostic."><input id="toggle-beams" type="checkbox" style="width:auto"> Fitted beams</label>
-          <label for="beam-model">Beam fit</label><select id="beam-model"></select>
-          <div class="row"><label for="beam-opacity">beam opacity</label><input id="beam-opacity" type="range" min="0" max="1" step="0.01" value="1" style="flex:1;min-width:0"><span id="beam-opacity-readout" class="mono">100%</span></div>
-          <div class="row"><label for="beam-color">beam color</label><input id="beam-color" type="color" value="#f24dd9" style="width:44px;height:28px;padding:2px"></div>
+        <div id="beams-control" class="overlay-card" hidden>
+          <div class="overlay-head">
+            <label title="Box geometry fitted to angular opacity; voxel thickness is a separate reconstruction diagnostic."><input id="toggle-beams" type="checkbox"> Fitted beams</label>
+            <input id="beam-color" class="swatch" type="color" value="#f24dd9" title="beam color" aria-label="beam color">
+          </div>
+          <div class="overlay-body">
+            <div class="overlay-row"><label for="beam-model">fit</label><select id="beam-model"></select></div>
+            <div class="overlay-row"><label for="beam-opacity">opacity</label><input id="beam-opacity" type="range" min="0" max="1" step="0.01" value="1"><span id="beam-opacity-readout" class="mono val">100%</span></div>
+          </div>
+        </div>
+        <div id="fov-control" class="overlay-card" hidden>
+          <div class="overlay-head">
+            <label title="Each position's geometric acceptance: tracks crossing both outer planes, |tan| &le; W/D per detector axis, drawn up to the top of the volume. Display-only."><input id="toggle-fov" type="checkbox"> Fields of view</label>
+            <input id="fov-color" class="swatch" type="color" value="#7cc7ff" title="field-of-view color" aria-label="field-of-view color">
+          </div>
+          <div class="overlay-body">
+            <div class="overlay-row"><label for="fov-opacity">opacity</label><input id="fov-opacity" type="range" min="0" max="1" step="0.01" value="1"><span id="fov-opacity-readout" class="mono val">100%</span></div>
+            <div class="overlay-note">Detector acceptance frusta, rotated by each fitted azimuth.</div>
+          </div>
         </div>
         <button id="export-png-btn">Export PNG</button>
         <button id="frame-all-btn">Frame all</button>
@@ -273,6 +323,7 @@
       <canvas id="legend-canvas" width="200" height="24"></canvas>
       <div id="legend-ticks" class="mono dim"></div>
       <div id="beam-legend" class="mono dim" hidden></div>
+      <div id="fov-legend" class="mono dim" hidden></div>
     </div>
     <div id="overlay-hover"><div id="hover-readout" class="mono" hidden></div></div>
     <div id="detector-labels"></div>

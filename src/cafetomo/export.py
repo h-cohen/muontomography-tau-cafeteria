@@ -167,6 +167,12 @@ def export_volume(
             {"id": e.id, "x": e.pose.x, "y": e.pose.y, "z": e.pose.z, "az_deg": e.pose.az_deg}
             for e in cfg.exposures
         ],
+        # The tracker block, so the viewer can draw each position's acceptance
+        # (|tan| <= W/D per detector axis) without a second copy of the config.
+        "detector_geometry": {
+            "active_width_m": cfg.detector.aperture_m,
+            "layer_gap_m": cfg.detector.layer_dz_cm / 100.0,
+        },
         "resolution": {
             "max_baseline_m": res["max_baseline_m"],
             "n_positions": res["n_positions"],

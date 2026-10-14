@@ -26,6 +26,9 @@ BEAMS = {
     "h_sigma": 0.15,
 }
 
+# The measured tracker block, as cafetomo.export writes it (metres).
+DETECTOR_GEOMETRY = {"active_width_m": 0.35375, "layer_gap_m": 0.389}
+
 
 @pytest.fixture(scope="session")
 def dist_path(tmp_path_factory) -> Path:
@@ -43,6 +46,7 @@ def run_fixture(tmp_path):
         origin_m=(0.0, 0.0, 1.0),
         depth_resolved=False,
         beams=None,
+        detector_geometry=None,
     ):
         run = tmp_path / "run"
         run.mkdir()
@@ -78,6 +82,8 @@ def run_fixture(tmp_path):
         }
         if beams is not None:
             meta["beams"] = beams
+        if detector_geometry is not None:
+            meta["detector_geometry"] = detector_geometry
         (run / "meta.json").write_text(json.dumps(meta))
         return run
 

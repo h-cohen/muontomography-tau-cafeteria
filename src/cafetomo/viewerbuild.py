@@ -32,6 +32,7 @@ _MODULE_ORDER = [
     "shortcuts.mjs",
     "markers.mjs",
     "beams.mjs",
+    "fov.mjs",
     "gates.mjs",
     "picker.mjs",
     "runload.mjs",

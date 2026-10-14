@@ -70,6 +70,16 @@ def test_meta_carries_the_detector_poses(tmp_path, cfg):
     assert dets[1]["x"] == pytest.approx(cfg.exposures[1].pose.x)
 
 
+def test_meta_carries_the_tracker_geometry_in_metres(tmp_path, cfg):
+    out = tmp_path / "view"
+    export_volume(_voxels_dir(tmp_path), cfg, out_dir=out)
+    geometry = _meta(out)["detector_geometry"]
+    assert geometry == {
+        "active_width_m": pytest.approx(cfg.detector.active_width_cm / 100),
+        "layer_gap_m": pytest.approx(cfg.detector.layer_dz_cm / 100),
+    }
+
+
 def test_meta_carries_the_resolution_verdict(tmp_path, cfg):
     """The viewer must be able to show what the campaign cannot resolve without
     re-deriving it, and it must agree with the closed-form report."""
