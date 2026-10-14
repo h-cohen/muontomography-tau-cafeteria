@@ -78,6 +78,8 @@ def test_volume_archive_survives_downstream_classified_failure(cfg, monkeypatch,
     )
     assert result["status"] == "fit_failure"
     assert result["artifacts"] == {"volume": "volume.npz", "solver_info": "solver-info.json"}
+    assert result["voxel_solver"]["fixed_iteration_budget"]
+    assert not result["voxel_solver"]["convergence_established"]
     np.testing.assert_allclose(VoxelSolution.load(tmp_path / "volume.npz").rho, volume.rho)
     assert (tmp_path / "solver-info.json").read_text().find('"best_iter": 2') > 0
 
@@ -145,6 +147,8 @@ def test_independent_noiseless_controls(cfg, tmp_path):
         assert r["vertical_pass"]
         assert r["rms_lambda_change"] < 0.002
         assert not r["fit"]["physical_thickness_measured"]
+        for artifact in r["artifacts"].values():
+            assert (tmp_path / artifact).exists()
 
 
 def test_transmission_average_not_average_path(cfg):

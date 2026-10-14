@@ -208,10 +208,20 @@ def _run_recovery_case(case, grid, live, analysis_cfg, *, seed, out_dir):
     fold = fit_training_fold(grid, live, cfg, observation_mask=None, cache_dir=out_dir / "cache")
     record["training"] = fold.metadata
     record["artifacts"] = archive_volume(fold.volume, out_dir)
+    record["voxel_solver"] = solver_summary(fold.volume)
     (out_dir / "outcome.json").write_text(json.dumps(record, indent=2, default=_json_default))
     maps = solve_opacity(grid, fold.cfg, live)
     sigma = opacity_sigma(grid, fold.cfg, live, n_replicas=cfg.opacity.n_sigma_replicas, seed=seed)
     data = build_fit_data(maps, fold.cfg, sigma)
+    np.savez_compressed(
+        out_dir / "training-weights.npz",
+        w=data.w,
+        sx=data.rows.sx,
+        sy=data.rows.sy,
+        pos_of_row=data.rows.pos_of_row,
+        sky_flat=data.rows.sky_flat,
+    )
+    record["artifacts"]["training_weights"] = "training-weights.npz"
     weight_hash = hashlib.sha256(np.ascontiguousarray(data.w).tobytes()).hexdigest()
     if weight_hash != fold.metadata["weight_hash"]:
         raise RuntimeError("recovery weights differ from training fold")
@@ -319,9 +329,19 @@ def direct_controls(cfg, *, out_dir, n_sub=16):
                 )
             lambdas.append(lam)
         data = FitData(lambdas[-1], np.full(rows.n_rows, 1 / 0.002**2), rows)
+        case_out = out_dir / case.case_id
+        case_out.mkdir(parents=True, exist_ok=True)
+        np.savez_compressed(
+            case_out / "control-fit-data.npz",
+            lam=data.lam,
+            w=data.w,
+            sx=data.rows.sx,
+            sy=data.rows.sy,
+            pos_of_row=data.rows.pos_of_row,
+            sky_flat=data.rows.sky_flat,
+        )
         fit = fit_beam_depth(data, truth_cfg, xs_init=TRUTH_CENTRES, z0_init=case.bottom_m)
         volume = solve_voxels(data, truth_cfg, cache_dir=out_dir / "cache", holdouts=False)["full"]
-        case_out = out_dir / case.case_id
         artifacts = archive_volume(volume, case_out)
         # Peak x per truth-local column; truth is used only for scoring.
         image = volume.rho.reshape(volume.grid.shape).sum(axis=(1, 2))
@@ -349,7 +369,11 @@ def direct_controls(cfg, *, out_dir, n_sub=16):
                 lateral_pass=bool(np.max(np.abs(errors)) <= volume.grid.spacing),
                 vertical_geometric_scale_m=float(scale),
                 fit=score_fit(case, fit),
-                artifacts={k: f"{case.case_id}/{v}" for k, v in artifacts.items()},
+                artifacts={
+                    **{k: f"{case.case_id}/{v}" for k, v in artifacts.items()},
+                    "fit_data": f"{case.case_id}/control-fit-data.npz",
+                },
+                voxel_solver=solver_summary(volume),
                 vertical_pass=bool(abs(fit.z0 - case.bottom_m) <= scale),
             )
         )
@@ -415,6 +439,13 @@ def archive_volume(volume, out_dir):
         json.dumps(volume.info, indent=2, default=_json_default)
     )
     return dict(volume="volume.npz", solver_info="solver-info.json")
+
+
+def solver_summary(volume):
+    return {
+        key: volume.info.get(key)
+        for key in ("algorithm", "n_iter_used", "best_iter", "best_chi2", "n_rows_used")
+    } | {"fixed_iteration_budget": True, "convergence_established": False}
 
 
 def voxel_localization(case, volume):
