@@ -189,7 +189,18 @@ def opacity_sigma(
     with warnings.catch_warnings():
         # bins seen in no replica have no spread to report
         warnings.filterwarnings("ignore", message="Degrees of freedom", category=RuntimeWarning)
-        return {pid: np.nanstd(np.vstack(v), axis=0) for pid, v in stacks.items()}
+        sigma = {}
+        for pid, values in stacks.items():
+            samples = np.vstack(values)
+            spread = np.nanstd(samples, axis=0)
+            # The mean of identical floats can round off: exact zero range
+            # must remain zero variance, never a tiny positive fit weight.
+            finite = np.isfinite(samples)
+            lower = np.min(np.where(finite, samples, np.inf), axis=0)
+            upper = np.max(np.where(finite, samples, -np.inf), axis=0)
+            spread[finite.any(axis=0) & (lower == upper)] = 0.0
+            sigma[pid] = spread
+        return sigma
 
 
 def save_sigma(path: str | Path, sigma: dict[str, np.ndarray]) -> None:

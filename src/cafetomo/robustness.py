@@ -570,6 +570,14 @@ def run_robustness(
             else:
                 raise ValueError("unknown weight method")
             variant_data = build_fit_data(maps, variant, sigma)
+            np.savez_compressed(
+                out / f"weights-{index:03d}.npz",
+                w=variant_data.w,
+                lam=variant_data.lam,
+                pos_of_row=variant_data.rows.pos_of_row,
+                sky_flat=variant_data.rows.sky_flat,
+                **{f"sigma__{pid}": values for pid, values in sigma.items()},
+            )
             if method == "poisson":
                 doubled = opacity_sigma(
                     grid, variant, live, n_replicas=2 * choice["n_sigma_replicas"], seed=seed

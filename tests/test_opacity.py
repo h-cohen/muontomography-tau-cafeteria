@@ -204,3 +204,48 @@ def test_save_sigma_creates_parent_directory(cfg, tmp_path):
     sig = poisson_sigma(g, cfg, LIVE)
     save_sigma(tmp_path / "new" / "sigma.npz", sig)
     np.testing.assert_array_equal(load_sigma(tmp_path / "new" / "sigma.npz")["pos0"], sig["pos0"])
+
+
+@pytest.mark.parametrize("kind", ["constant", "missing", "variable"])
+def test_bootstrap_finite_spread_exactly_preserves_degenerate_bins(cfg, monkeypatch, kind):
+    floor = -np.log(cfg.opacity.t_floor)
+    values = np.full(256, floor)
+    values[181:] = np.nan
+    if kind == "missing":
+        values[:] = np.nan
+    elif kind == "variable":
+        values[:90] += 0.25
+    maps = solve_opacity(_grid(cfg), cfg, LIVE)
+    samples = iter(values)
+
+    def sample(*args, **kwargs):
+        value = next(samples)
+        return OpacityMaps({pid: np.array([value]) for pid in cfg.position_ids}, maps.sky)
+
+    monkeypatch.setattr("cafetomo.opacity.solve_opacity", sample)
+    sigma = opacity_sigma(_grid(cfg), cfg, LIVE, n_replicas=256, seed=42)
+    for result in sigma.values():
+        if kind == "constant":
+            assert result[0] == 0.0
+        elif kind == "missing":
+            assert np.isnan(result[0])
+        else:
+            assert result[0] == pytest.approx(np.nanstd(values), rel=1e-14)
+
+
+def test_clipped_zero_count_poisson_bootstrap_has_no_admitted_rows(cfg):
+    grid = _grid(cfg, sky_rate=30.0)
+    grid = AnalysisGrid(
+        grid.edges,
+        {
+            pid: values if pid == "SKY" else np.zeros_like(values)
+            for pid, values in grid.counts.items()
+        },
+    )
+    sigma = opacity_sigma(grid, cfg, LIVE, n_replicas=256, seed=3758373248)
+    for values in sigma.values():
+        measured = np.isfinite(values)
+        assert measured.any()
+        np.testing.assert_array_equal(values[measured], 0.0)
+    with pytest.raises(ValueError, match="no constrained sky directions"):
+        build_fit_data(solve_opacity(grid, cfg, LIVE), cfg, sigma)
