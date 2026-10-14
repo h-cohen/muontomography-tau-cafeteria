@@ -501,3 +501,69 @@ def test_baseline_binding_is_portable_between_checkouts(tmp_path):
     relocated = tmp_path / "relocated"
     shutil.copytree(old, relocated)
     module.verify_baseline_inputs(summary, relocated)
+
+
+def test_selected_input_guard_checks_every_source_and_arguments_after_relocation(
+    tmp_path, monkeypatch
+):
+    import hashlib
+    import shutil
+
+    module = load("internal_paper")
+    old = tmp_path / "old"
+    old.mkdir()
+    monkeypatch.chdir(old)
+    paths = {
+        "archive": Path("runs/original"),
+        "correction": Path("runs/corrected"),
+        "main_volume": Path("runs/nominal/volume.npz"),
+        "main_coverage": Path("runs/nominal/views.npy"),
+        "overlay": Path("paper/figures/author.jpeg"),
+    }
+    sources = [("archive", "manifest.json")]
+    sources.extend(("archive", f"results/source-{i}.json") for i in range(9))
+    sources.extend(("explicit", f"runs/corrected/source-{i}.json") for i in range(6))
+    inventory = []
+    for location, name in sources:
+        path = paths["archive"] / name if location == "archive" else Path(name)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload = name.encode()
+        path.write_bytes(payload)
+        inventory.append(
+            dict(
+                path=name,
+                location=location,
+                size_bytes=len(payload),
+                sha256=hashlib.sha256(payload).hexdigest(),
+            )
+        )
+    baseline = Path("results")
+    baseline.mkdir()
+    (baseline / "reconstruction.json").write_text("{}")
+    summary = dict(
+        input_files=inventory, selection_arguments=module.selection_arguments(*paths.values())
+    )
+    summary["baseline_inputs"] = [
+        dict(path="reconstruction.json", sha256=hashlib.sha256(b"{}").hexdigest())
+    ]
+    module.verify_selected_inputs(summary, *paths.values(), baseline)
+    relocated = tmp_path / "relocated"
+    shutil.copytree(old, relocated)
+    monkeypatch.chdir(relocated)
+    module.verify_selected_inputs(summary, *paths.values(), baseline)
+    (relocated / "runs/corrected/source-5.json").write_text("changed")
+    with pytest.raises(ValueError, match="reviewed input changed"):
+        module.verify_selected_inputs(summary, *paths.values(), baseline)
+    (relocated / "runs/corrected/source-5.json").unlink()
+    with pytest.raises(ValueError, match="reviewed input missing"):
+        module.verify_selected_inputs(summary, *paths.values(), baseline)
+    with pytest.raises(ValueError, match="selection arguments differ"):
+        module.verify_selected_inputs(
+            summary,
+            paths["archive"],
+            paths["correction"],
+            paths["main_volume"],
+            paths["main_coverage"],
+            "paper/figures/other.jpeg",
+            baseline,
+        )

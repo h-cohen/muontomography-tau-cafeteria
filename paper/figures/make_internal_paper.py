@@ -75,7 +75,7 @@ def bind_baseline_inputs(summary, nominal_path, baseline_results):
     summary["baseline_inputs"] = [
         dict(
             path=path.name,
-            source_path=str(path.resolve()),
+            source_path=logical_path(path),
             sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
         )
         for path in sorted(baseline_results.glob("*.json"))
@@ -96,6 +96,63 @@ def verify_baseline_inputs(summary, baseline_results):
             "baseline macro inputs differ from the reviewed nominal selection; "
             "use explicit matching sources and a separately reviewed selection"
         )
+
+
+def logical_path(path):
+    """Use checkout-relative identities for sources inside the current checkout."""
+    resolved = Path(path).resolve()
+    try:
+        return resolved.relative_to(Path.cwd().resolve()).as_posix()
+    except ValueError:
+        return str(resolved)
+
+
+def selection_arguments(root, correction, main_volume, main_coverage, overlay):
+    return {
+        "archive": logical_path(root),
+        "correction": logical_path(correction),
+        "main_volume": logical_path(main_volume),
+        "main_coverage": logical_path(main_coverage),
+        "overlay": logical_path(overlay),
+    }
+
+
+def selected_input_files(archive):
+    return [
+        {**item, "path": logical_path(item["path"])}
+        if item["location"] == "explicit"
+        else item.copy()
+        for item in (archive.input_files[name] for name in sorted(archive.input_files))
+    ]
+
+
+def verify_selected_inputs(
+    summary, root, correction, main_volume, main_coverage, overlay, baseline_results
+):
+    """Validate every consumed byte and the chosen source roles before publication."""
+    expected_arguments = selection_arguments(root, correction, main_volume, main_coverage, overlay)
+    if summary.get("selection_arguments") != expected_arguments:
+        raise ValueError("reviewed selection arguments differ; promote a fresh selection")
+    expected = summary["input_files"]
+    if len(expected) != 16 or len({(item["location"], item["path"]) for item in expected}) != 16:
+        raise ValueError("reviewed selection must bind all 16 distinct input files")
+    for item in expected:
+        if item["location"] == "archive":
+            path = Path(root) / item["path"]
+        elif item["location"] == "explicit":
+            path = Path(item["path"])
+        else:
+            raise ValueError("unknown reviewed input location")
+        try:
+            payload = path.read_bytes()
+        except OSError as exc:
+            raise ValueError(f"reviewed input missing: {path}") from exc
+        if (
+            len(payload) != item["size_bytes"]
+            or hashlib.sha256(payload).hexdigest() != item["sha256"]
+        ):
+            raise ValueError(f"reviewed input changed: {path}")
+    verify_baseline_inputs(summary, baseline_results)
 
 
 def write_summary_macros(source, out):
@@ -298,15 +355,24 @@ def generate(
         title="Truth-associated recovery",
     )
     save(fig, out, "internal-prediction-recovery")
-    summary["input_files"] = [archive.input_files[name] for name in sorted(archive.input_files)]
+    summary["input_files"] = selected_input_files(archive)
+    summary["selection_arguments"] = selection_arguments(
+        root, correction, main_volume, main_coverage, overlay
+    )
     bind_baseline_inputs(summary, main_volume, baseline_results)
-    summary["original_archive"] = str(archive.root)
-    summary["corrected_comparison"] = str(correction)
+    summary["original_archive"] = logical_path(archive.root)
+    summary["corrected_comparison"] = logical_path(correction)
     summary_path = Path(summary_path)
     if summary_path.exists() and json.loads(summary_path.read_text()) != summary:
         raise ValueError("refusing to replace a different promoted diagnostic summary")
     summary_path.parent.mkdir(parents=True, exist_ok=True)
     summary_path.write_text(json.dumps(summary, indent=2) + "\n")
+    settings_path = out / "display-settings.json"
+    settings = json.loads(settings_path.read_text())
+    settings["source_archive"] = logical_path(archive.root)
+    settings["input_files"] = summary["input_files"]
+    settings["selection_arguments"] = summary["selection_arguments"]
+    settings_path.write_text(json.dumps(settings, indent=2) + "\n")
     write_summary_macros(summary_path, out / "internal-numbers.tex")
 
 
@@ -321,16 +387,30 @@ if __name__ == "__main__":
         "out",
         "summary",
     ):
-        parser.add_argument(f"--{name}", required=True)
+        parser.add_argument(f"--{name}", required=name != "out")
     parser.add_argument("--baseline-results", default="results")
+    parser.add_argument("--verify-selection", action="store_true")
     args = parser.parse_args()
-    generate(
-        args.archive,
-        args.correction,
-        args.main_volume,
-        args.main_coverage,
-        args.overlay,
-        args.out,
-        args.summary,
-        args.baseline_results,
-    )
+    if args.verify_selection:
+        verify_selected_inputs(
+            json.loads(Path(args.summary).read_text()),
+            args.archive,
+            args.correction,
+            args.main_volume,
+            args.main_coverage,
+            args.overlay,
+            args.baseline_results,
+        )
+    else:
+        if args.out is None:
+            parser.error("--out is required when generating a selection")
+        generate(
+            args.archive,
+            args.correction,
+            args.main_volume,
+            args.main_coverage,
+            args.overlay,
+            args.out,
+            args.summary,
+            args.baseline_results,
+        )

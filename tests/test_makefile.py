@@ -20,6 +20,7 @@ def built_pipeline(tmp_path):
         "src/cafetomo/beamdepth.py",
         "pyproject.toml",
         "uv.lock",
+        "viewer/shell.html",
     ]
     outputs = [
         "runs/fast/ingest/meta.json",
@@ -131,6 +132,41 @@ def test_arxiv_archive_places_bibliography_beside_main_tex(built_pipeline):
         assert archive.extractfile("main.bbl").read() == b"formatted bibliography"
         assert "generated/numbers.tex" in archive.getnames()
         assert "generated/figures/depth.pdf" in archive.getnames()
+
+
+def test_fast_all_only_schedules_viewer_and_explicit_paper_fails_helpfully(built_pipeline):
+    scheduled = _schedule(built_pipeline, "all")
+    assert "make paper" not in scheduled
+    assert "internal-paper" not in scheduled
+    result = subprocess.run(
+        ["make", "--no-print-directory", "FAST=1", "paper"],
+        cwd=built_pipeline,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode != 0
+    assert "FAST=1 only supports analysis/viewer smoke" in result.stderr
+    (built_pipeline / "runs/fast/generated/paper.pdf").write_text("precompiled")
+    result = subprocess.run(
+        ["make", "--no-print-directory", "FAST=1", "paper"],
+        cwd=built_pipeline,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode != 0
+    assert "FAST=1 only supports analysis/viewer smoke" in result.stderr
+
+
+def test_normal_paper_schedules_reviewed_input_preflight():
+    scheduled = subprocess.run(
+        ["make", "--no-print-directory", "-n", "paper"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    assert "--verify-selection" in scheduled
+    assert scheduled.index("--verify-selection") < scheduled.index("cp runs/figure-review/")
 
 
 def test_conditional_array_study_is_generated_before_paper_numbers(built_pipeline):

@@ -1,6 +1,6 @@
 # Reproduce every result, figure and the paper:  make all
-# Cheap smoke run (CI):                         make all FAST=1   (writes runs/fast/, never results/
-#                                               or paper/generated/)
+# Cheap analysis/viewer smoke run (CI):          make all FAST=1
+#                                               (writes only runs/fast/)
 CONFIG  := configs/cafeteria.yaml
 CLI     := uv run cafetomo $(if $(FAST),--fast,)
 RUNS    := $(if $(FAST),runs/fast,runs)
@@ -31,7 +31,9 @@ AUTHORFIG := $(wildcard paper/figures/voxels.jpeg paper/figures/room_voxels.pdf 
 .DELETE_ON_ERROR:
 
 all: viewer
+ifeq ($(strip $(FAST)),)
 	$(MAKE) paper
+endif
 
 $(RESULTS)/inputs.json: configs/paper-inputs.json
 	mkdir -p $(RESULTS)
@@ -106,7 +108,20 @@ numbers: $(GEN)/numbers.tex
 $(GEN)/numbers.tex: $(NUMERIC) $(CODE)
 	$(CLI) numbers --results $(RESULTS) --out $@
 
+ifneq ($(strip $(FAST)),)
+paper:
+	@echo "FAST=1 only supports analysis/viewer smoke; reviewed publication requires a full run" >&2; exit 1
+
+# FAST has no reviewed internal diagnostics or promoted scalars. A precompiled
+# FAST PDF may still be packaged by arxiv (the archive regression fixture).
+$(GEN)/paper.pdf:
+	@echo "FAST=1 only supports analysis/viewer smoke; reviewed publication requires a full run" >&2; exit 1
+
+arxiv: $(GEN)/paper.pdf
+else
 paper: internal-paper
+arxiv: paper
+endif
 
 test:
 	uv run ruff check . && uv run ruff format --check .
@@ -114,8 +129,9 @@ test:
 	uv run pytest -m "not slow"
 	node --test viewer/test/*.test.mjs
 
-arxiv: internal-paper
-	tar -czf $(GEN)/arxiv.tar.gz -C paper main.tex refs.bib sections generated/numbers.tex generated/figures \
+arxiv:
+	tar -czf $(GEN)/arxiv.tar.gz -C paper main.tex refs.bib sections \
+	  -C $(TEXROOT) generated/numbers.tex generated/figures \
 	  -C $(abspath $(GEN)) main.bbl
 
 clean:
@@ -135,24 +151,39 @@ internal-validate:
 IVPAPERARCHIVE ?= runs/internal-validation/pilot-2026-10-13-a
 IVCORRECTION ?= runs/internal-validation/weight-correction-2026-10-14
 IVNOMINAL ?= runs/response-aware-2026-10-07/voxels
-IVFIGOUT ?= runs/figure-review/selected-paper-publication-2026-10-14
+IVFIGOUT ?= runs/figure-review/selected-paper-publication-2026-10-14-fix1
+IVSUMMARY ?= results/internalvalidation.json
 TECTONIC ?= runs/tools/tectonic
 IVSELECTED := $(IVFIGOUT)/internal-main.pdf $(IVFIGOUT)/internal-overlay.pdf \
               $(IVFIGOUT)/internal-support-stability.pdf \
               $(IVFIGOUT)/internal-prediction-recovery.pdf $(IVFIGOUT)/internal-numbers.tex
-.PHONY: internal-selected internal-paper arxiv-internal
+.PHONY: internal-selected internal-preflight internal-paper arxiv-internal
 internal-selected: $(IVSELECTED)
+
+internal-preflight:
+	@if test -f $(IVSUMMARY); then \
+	  uv run python paper/figures/make_internal_paper.py --verify-selection \
+	    --archive $(IVPAPERARCHIVE) --correction $(IVCORRECTION) \
+	    --main-volume $(IVNOMINAL)/volume_full.npz --main-coverage $(IVNOMINAL)/views.npy \
+	    --overlay paper/figures/voxels.jpeg --summary $(IVSUMMARY) \
+	    --baseline-results $(RESULTS); \
+	fi
 
 $(IVSELECTED) &: paper/figures/make_internal_paper.py paper/figures/make_support.py \
                 paper/figures/internal_figure_utils.py paper/figures/style.py \
-                $(IVPAPERARCHIVE)/manifest.json $(IVCORRECTION)/comparison.json
+                $(IVPAPERARCHIVE)/manifest.json $(IVCORRECTION)/comparison.json \
+                | internal-preflight
 	uv run python paper/figures/make_internal_paper.py --archive $(IVPAPERARCHIVE) \
 	  --correction $(IVCORRECTION) --main-volume $(IVNOMINAL)/volume_full.npz \
 	  --main-coverage $(IVNOMINAL)/views.npy --overlay paper/figures/voxels.jpeg \
-	  --out $(IVFIGOUT) --summary results/internalvalidation.json --baseline-results $(RESULTS)
+	  --out $(IVFIGOUT) --summary $(IVSUMMARY) --baseline-results $(RESULTS)
 
 internal-paper: internal-selected
-	uv run python -c "import json,sys; from pathlib import Path; sys.path.insert(0, 'paper/figures'); from make_internal_paper import verify_baseline_inputs; verify_baseline_inputs(json.loads(Path('results/internalvalidation.json').read_text()), Path('$(RESULTS)'))"
+	uv run python paper/figures/make_internal_paper.py --verify-selection \
+	  --archive $(IVPAPERARCHIVE) --correction $(IVCORRECTION) \
+	  --main-volume $(IVNOMINAL)/volume_full.npz --main-coverage $(IVNOMINAL)/views.npy \
+	  --overlay paper/figures/voxels.jpeg --summary $(IVSUMMARY) \
+	  --baseline-results $(RESULTS)
 	mkdir -p $(GEN)/figures
 	uv run python paper/figures/make_height.py --config $(CONFIG) --pose $(POSE) \
 	  --results $(RESULTS) --runs $(dir $(IVNOMINAL)) --out $(GEN)/figures/height.pdf

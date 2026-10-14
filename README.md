@@ -20,8 +20,9 @@ Run commands from the repository root. Requirements:
 - Python >= 3.12, managed by [uv](https://docs.astral.sh/uv/).
 - GNU make >= 4.3.
 - Node >= 24 for viewer unit tests.
-- For `make paper`/`make all`: `latexmk`, `pdflatex`, BibTeX and the LaTeX packages
-  `siunitx`, `natbib`, `hyperref`, `booktabs`, `geometry`, `float` and `balance`.
+- For full `make paper`/`make arxiv`/`make all`: Tectonic at `runs/tools/tectonic`
+  (or set `TECTONIC` to its executable path) and the reviewed pilot,
+  correction, nominal volume, and baseline inputs described below.
 
 ```bash
 uv sync
@@ -130,17 +131,14 @@ do not alter the exported fits or their vertical z thickness.
 make all FAST=1
 ```
 
-Without TeX:
-
-```bash
-make validation uncertainty arraydepth viewer figures numbers FAST=1
-```
-
 FAST uses reduced solver/replica settings and writes into `runs/fast/`, including
-`runs/fast/results/`, `runs/fast/generated/` and `runs/fast/viewer.html`. It does
-not overwrite the full-run `results/` or `paper/generated/` and is not used for
-paper measurements. Add `FAST=1` to the analysis, viewer, figure, paper or archive
-commands above.
+`runs/fast/results/` and `runs/fast/viewer.html`. It can also render the baseline
+figures and numbers under `runs/fast/generated/`, but it does not generate the
+reviewed internal publication or its diagnostic scalars. `FAST=1 paper` fails
+with a scope reminder; `FAST=1 arxiv` can package an already compiled FAST PDF
+for the archive regression fixture. The normal FAST smoke target is
+analysis/viewer only. No FAST target writes full-run `results/` or
+`paper/generated/`.
 
 Open the smoke viewer:
 
@@ -154,27 +152,15 @@ Or use the same server above and open
 ## Paper and submission archive
 
 ```bash
-make figures numbers
-make paper
-make arxiv
+make paper TECTONIC=runs/tools/tectonic
+make arxiv TECTONIC=runs/tools/tectonic
 ```
 
-Every paper quantity is generated from `results/*.json`. The author-provided 3D room figure is retained as
-`paper/figures/voxels.jpeg` (copied from the supplied generated figure). Replace
-that source image and run `make paper` to update the two-column manuscript. The archive includes the figure when present, generated figures,
-number macros, manuscript sections and the formatted bibliography.
-
-If the local Tectonic executable is available under `runs/tools/`, it can compile
-already-generated paper inputs without `latexmk`:
-
-```bash
-runs/tools/tectonic --keep-logs --keep-intermediates --outdir paper/generated paper/main.tex
-cp paper/generated/main.pdf paper/generated/paper.pdf
-make arxiv -o paper/generated/paper.pdf
-```
-
-Generate `figures` and `numbers` first. The final command packages that existing
-PDF's source inputs without invoking the Make PDF recipe.
+The reviewed paper uses baseline numbers from `results/*.json` and separate
+internal diagnostics from `results/internalvalidation.json`. Its source archive
+contains the selected PDF panels, number macros, manuscript sections and the
+formatted bibliography. The author-provided `paper/figures/voxels.jpeg` is a
+selected, hashed input for the separately labelled conditional illustration.
 
 ## How beam depth is estimated
 
@@ -401,13 +387,20 @@ Normal `make paper` and `make arxiv` use this same reviewed publication path.
 They require the completed original/corrective archives and the archived baseline
 figures; a fresh checkout must restore or generate those reviewed inputs first.
 These publication targets never run baseline analysis again. The selected summary
-binds baseline JSON hashes and checks nominal reconstruction metadata, refusing
-changed macro inputs instead of silently mixing a new baseline with the fixed
-nominal image. `make all` completes the analysis/viewer before this guarded build. The default reviewed selection lives in
-`runs/figure-review/selected-paper-publication-2026-10-14/`. To create a new selection,
-set `IVFIGOUT` to a new directory; existing directories are refused by the
-renderer. `IVPAPERARCHIVE`, `IVCORRECTION`, and `IVNOMINAL` specify the explicit
-source bundles. Each selection records every consumed file and its SHA-256.
+binds all 16 consumed source hashes and their selected roles, baseline JSON
+hashes, and nominal reconstruction metadata. Every normal paper/archive build
+checks those identities before copying panels or compiling, including when its
+PDFs already exist. Changed or missing inputs require a new reviewed promotion.
+`make all` completes the analysis/viewer before this guarded build. The default reviewed selection lives in
+`runs/figure-review/selected-paper-publication-2026-10-14-fix1/`. To create a new selection,
+set `IVFIGOUT` to a new directory and `IVSUMMARY` to a new JSON path outside
+`results/`. Set `IVPAPERARCHIVE`, `IVCORRECTION`, and `IVNOMINAL` to the intended
+source bundles, then run `make internal-selected` with those variables. Review
+the new panels, source hashes and scalars before copying that JSON to
+`results/internalvalidation.json`; then build with the same `IVFIGOUT` and source
+arguments. Existing output directories are refused by the renderer. Selected
+paths are checkout-relative where possible, so identical relocated archives
+retain their identity; changed bytes still fail the guard.
 The generated paper is `paper/generated/paper.pdf`; its self-contained LaTeX
 source archive is `paper/generated/arxiv.tar.gz` (`arxiv-internal` is an alias).
 
