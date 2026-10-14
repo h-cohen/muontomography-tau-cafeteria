@@ -18,6 +18,8 @@ Independent fine ray--box transmission averaging generated \InternalThinReplicas
 
 Truth-associated centroid windows give small lateral errors but mean voxel $z$ errors of $\InternalThinZBias{}$ and $\InternalThickZBias{}$ metres for the thin and thick scenes, respectively (Fig.~\ref{fig:checks}). These windows are scoring aids using known truth positions, not blind detection. Their negative $z$ bias is distinct from the conditional box-bottom bias. Consequently, repeated lateral structure has stronger internal support than vertical localization or physical depth; neither the voxel image nor the box overlay supplies external ground truth.
 
+The original synthetic pilot did not retain its voxel fields or solver histories. A separately registered deterministic trace replay archives all ten noisy fields and two direct controls; every original derived outcome agrees within its declared tolerance (supplementary archive described in the README). The voxel solver selected the best iterate within a fixed 150-iteration budget. This history does not establish numerical convergence.
+
 \begin{figure*}[t]
 \centering
 \includegraphics[width=0.96\textwidth]{internal-support-stability.pdf}

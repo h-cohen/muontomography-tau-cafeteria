@@ -349,7 +349,8 @@ one-factor reconstruction sensitivities use the first count training partition.
 All new artifacts live under the supplied output root. Completed JSON summaries
 appear in `results/` only after all stages succeed; `manifest.json` records
 incomplete runs and failures. Scientific completed-training cache keys include
-counts, masks, exposure, configuration and package source, with payload checksums.
+counts, masks, exposure, configuration, package source, and count-source order
+(which controls Poisson draw order), with payload checksums.
 The local cache is trusted generated data, not an interchange format. Use a new
 output root for each attempt and reuse the scientific cache to avoid repeated
 completed training fits. Full mode requires a written `production_budget` in the
@@ -414,3 +415,21 @@ bundle supplies external geometry, calibrated physical depth, or posterior
 confidence. Count and angular summaries remain separate descriptive checks
 using repeated data; the pilot's negative vertical and detection findings are
 reported in the manuscript.
+
+The original pilot did not retain its ten synthetic voxel fields or solver
+histories. The [registered recovery trace](runs/internal-validation/recovery-trace-2026-10-14/registration.json)
+replays the same ten noisy cases and two known-geometry controls as a separate
+supplement. Its [comparison](runs/internal-validation/recovery-trace-2026-10-14/comparison-adjudicated.json)
+checks every original outcome field except elapsed time: all 12 agree within
+the registered tolerances. The raw comparison retains 32 matching NaN pairs.
+Each noisy case has simulated counts, input metadata, a fitted volume, row
+weights, and solver diagnostics; each direct control has its fit inputs and
+volume. These are fixed-budget 150-iteration reconstructions;
+the solver history does not establish convergence. The original findings and
+29 promoted paper scalars are unchanged.
+
+The [support diagnostic supplement](runs/internal-validation/recovery-trace-2026-10-14/support-supplement/registration.json)
+records polynomial coefficients, powers, excluded rows, and eligible rows for
+all eight folds and six settings. Its corrected comparison reproduces all 48
+original masks exactly. The first rebuild, which omitted angular observation
+masks, is retained in `attempt-1/` with its correction note and amendment record.
