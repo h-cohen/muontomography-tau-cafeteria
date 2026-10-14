@@ -120,7 +120,7 @@ def bundle(tmp_path):
         root / "stability" / "choices" / "manifest.json",
         dict(
             reference_grid=grid,
-            variants=[dict(group="algorithm", centroid_change_xyz_m=[0.1, 0.0, 0.2], choice={})],
+            variants=[dict(centroid_change_xyz_m=[0.1, 0.0, 0.2], choice=dict(group="algorithm"))],
         ),
     )
     js(root / "results" / "stability.json", dict(count_replicas=2, scope="count-0"))

@@ -34,7 +34,7 @@ def generate(root, out):
             count["replicas"][0]["grid"],
         )
     ]
-    groups = sorted({r["group"] for r in choices["variants"]})
+    groups = sorted({r["choice"]["group"] for r in choices["variants"]})
     for group in groups:
         entries.append(
             (
