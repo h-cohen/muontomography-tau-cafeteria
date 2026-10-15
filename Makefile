@@ -25,7 +25,7 @@ TEXROOT := $(abspath $(dir $(GEN)))
 POSE    := $(RESULTS)/pose.json
 FIGS    := setup opacity height depth
 FIGPDF  := $(FIGS:%=$(GEN)/figures/%.pdf)
-AUTHORFIG := $(wildcard paper/figures/voxels.jpeg paper/figures/room_voxels.pdf paper/figures/room_voxels.png)
+AUTHORFIG := $(wildcard paper/figures/voxels.png paper/figures/room_voxels.pdf paper/figures/room_voxels.png)
 
 .PHONY: all ingest selfcal opacity reconstruct analysis depthcheck arraydepth validation uncertainty export figures numbers paper viewer test clean arxiv
 .DELETE_ON_ERROR:
@@ -151,7 +151,7 @@ internal-validate:
 IVPAPERARCHIVE ?= runs/internal-validation/pilot-2026-10-13-a
 IVCORRECTION ?= runs/internal-validation/weight-correction-2026-10-14
 IVNOMINAL ?= runs/response-aware-2026-10-07/voxels
-IVFIGOUT ?= runs/figure-review/selected-paper-publication-2026-10-14-fix1
+IVFIGOUT ?= runs/figure-review/selected-paper-publication-2026-10-14-fix2
 IVSUMMARY ?= results/internalvalidation.json
 TECTONIC ?= runs/tools/tectonic
 IVSELECTED := $(IVFIGOUT)/internal-main.pdf $(IVFIGOUT)/internal-overlay.pdf \
@@ -165,7 +165,7 @@ internal-preflight:
 	  uv run python paper/figures/make_internal_paper.py --verify-selection \
 	    --archive $(IVPAPERARCHIVE) --correction $(IVCORRECTION) \
 	    --main-volume $(IVNOMINAL)/volume_full.npz --main-coverage $(IVNOMINAL)/views.npy \
-	    --overlay paper/figures/voxels.jpeg --summary $(IVSUMMARY) \
+	    --overlay paper/figures/voxels.png --summary $(IVSUMMARY) \
 	    --baseline-results $(RESULTS); \
 	fi
 
@@ -175,14 +175,14 @@ $(IVSELECTED) &: paper/figures/make_internal_paper.py paper/figures/make_support
                 | internal-preflight
 	uv run python paper/figures/make_internal_paper.py --archive $(IVPAPERARCHIVE) \
 	  --correction $(IVCORRECTION) --main-volume $(IVNOMINAL)/volume_full.npz \
-	  --main-coverage $(IVNOMINAL)/views.npy --overlay paper/figures/voxels.jpeg \
+	  --main-coverage $(IVNOMINAL)/views.npy --overlay paper/figures/voxels.png \
 	  --out $(IVFIGOUT) --summary $(IVSUMMARY) --baseline-results $(RESULTS)
 
 internal-paper: internal-selected
 	uv run python paper/figures/make_internal_paper.py --verify-selection \
 	  --archive $(IVPAPERARCHIVE) --correction $(IVCORRECTION) \
 	  --main-volume $(IVNOMINAL)/volume_full.npz --main-coverage $(IVNOMINAL)/views.npy \
-	  --overlay paper/figures/voxels.jpeg --summary $(IVSUMMARY) \
+	  --overlay paper/figures/voxels.png --summary $(IVSUMMARY) \
 	  --baseline-results $(RESULTS)
 	mkdir -p $(GEN)/figures
 	uv run python paper/figures/make_height.py --config $(CONFIG) --pose $(POSE) \

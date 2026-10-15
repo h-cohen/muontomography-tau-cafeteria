@@ -265,7 +265,7 @@ make arxiv TECTONIC=runs/tools/tectonic
 The reviewed paper uses baseline numbers from `results/*.json` and separate
 internal diagnostics from `results/internalvalidation.json`. Its source archive
 contains the selected PDF panels, number macros, manuscript sections and the
-formatted bibliography. The author-provided `paper/figures/voxels.jpeg` is a
+formatted bibliography. The author-provided `paper/figures/voxels.png` is a
 selected, hashed input for the separately labelled conditional illustration.
 
 ## How beam depth is estimated
@@ -490,8 +490,9 @@ are promoted only to `results/internalvalidation.json`; baseline result JSON
 files retain their original values. The nominal main image is explicitly
 `runs/response-aware-2026-10-07/voxels/volume_full.npz`, with both-position
 coverage from its `views.npy`. Training-fold support and persistence have their
-own fitted grids and scope. The original `paper/figures/voxels.jpeg` remains an
-unchanged, separately labelled conditional box illustration.
+own fitted grids and scope. The author-supplied viewer render
+`paper/figures/voxels.png` is a separately labelled conditional box illustration
+(voxel field, conditional boxes, detector positions and acceptance frusta).
 
 ```bash
 make internal-selected
@@ -508,7 +509,7 @@ hashes, and nominal reconstruction metadata. Every normal paper/archive build
 checks those identities before copying panels or compiling, including when its
 PDFs already exist. Changed or missing inputs require a new reviewed promotion.
 `make all` completes the analysis/viewer before this guarded build. The default reviewed selection lives in
-`runs/figure-review/selected-paper-publication-2026-10-14-fix1/`. To create a new selection,
+`runs/figure-review/selected-paper-publication-2026-10-14-fix2/`. To create a new selection,
 set `IVFIGOUT` to a new directory and `IVSUMMARY` to a new JSON path outside
 `results/`. Set `IVPAPERARCHIVE`, `IVCORRECTION`, and `IVNOMINAL` to the intended
 source bundles, then run `make internal-selected` with those variables. Review

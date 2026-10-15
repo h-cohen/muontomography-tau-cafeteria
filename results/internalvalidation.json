@@ -31,9 +31,9 @@
   "original_weight_objective": 5.044662591463292e+22,
   "input_files": [
     {
-      "path": "paper/figures/voxels.jpeg",
-      "sha256": "bbc16df3132450d8cc7370c61499cb99b2c0afdc8151ed29d0b24e8145617d25",
-      "size_bytes": 118631,
+      "path": "paper/figures/voxels.png",
+      "sha256": "9e8461a939d0839b62eafb8b3ee07caacb00da6c8be29a9ac64a1cf89f14fde7",
+      "size_bytes": 1162677,
       "location": "explicit"
     },
     {
@@ -132,7 +132,7 @@
     "correction": "runs/internal-validation/weight-correction-2026-10-14",
     "main_volume": "runs/response-aware-2026-10-07/voxels/volume_full.npz",
     "main_coverage": "runs/response-aware-2026-10-07/voxels/views.npy",
-    "overlay": "paper/figures/voxels.jpeg"
+    "overlay": "paper/figures/voxels.png"
   },
   "baseline_inputs": [
     {
