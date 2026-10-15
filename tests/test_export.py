@@ -224,3 +224,21 @@ def test_conditional_array_is_available_as_explicit_default_viewer_model(tmp_pat
     assert beams["uncertainty_scope"] == "count spread; fixed array and pose"
     assert beams["boxes"][0]["ztop"] - beams["boxes"][0]["zbottom"] == pytest.approx(1.45)
     assert meta["beam_models"]["matched"]["h"] == BEAMDEPTH["h"]
+
+
+def test_viewer_clip_box_is_written_when_configured_and_absent_otherwise(tmp_path, cfg):
+    voxels = _voxels_dir(tmp_path)
+    bare = replace(cfg, volume=replace(cfg.volume, viewer_clip_m=None))
+    export_volume(voxels, bare, out_dir=tmp_path / "bare")
+    assert "viewer_clip_m" not in _meta(tmp_path / "bare")
+    box = ((-1.0, 2.0), (-0.5, 1.5), (5.5, 6.5))
+    clipped = replace(cfg, volume=replace(cfg.volume, viewer_clip_m=box))
+    export_volume(voxels, clipped, out_dir=tmp_path / "clip")
+    assert _meta(tmp_path / "clip")["viewer_clip_m"] == [[-1.0, 2.0], [-0.5, 1.5], [5.5, 6.5]]
+
+
+def test_a_malformed_viewer_clip_box_fails_loudly(cfg):
+    with pytest.raises(ValueError, match="viewer_clip_m"):
+        replace(cfg.volume, viewer_clip_m=((0.0, 1.0), (0.0, 1.0)))
+    with pytest.raises(ValueError, match="viewer_clip_m"):
+        replace(cfg.volume, viewer_clip_m=((1.0, 0.0), (0.0, 1.0), (0.0, 1.0)))

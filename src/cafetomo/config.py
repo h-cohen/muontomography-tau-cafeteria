@@ -74,7 +74,15 @@ class Volume:
     spacing_m: float = 0.2
     xy_m: tuple | None = None
     viewer_crop_xy_m: tuple | None = None
+    # Display-only initial viewer clip box, ((x0, x1), (y0, y1), (z0, z1)) in
+    # world metres. Unlike viewer_crop_xy_m, no analysis reads it.
+    viewer_clip_m: tuple | None = None
     n_aperture_sub: int = 4
+
+    def __post_init__(self):
+        box = self.viewer_clip_m
+        if box is not None and (len(box) != 3 or any(len(a) != 2 or not a[0] < a[1] for a in box)):
+            raise ValueError("volume.viewer_clip_m needs three increasing (lo, hi) pairs")
 
 
 @dataclass(frozen=True)

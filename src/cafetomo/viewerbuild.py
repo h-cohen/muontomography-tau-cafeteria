@@ -34,6 +34,7 @@ _MODULE_ORDER = [
     "beams.mjs",
     "fov.mjs",
     "gates.mjs",
+    "smooth.mjs",
     "picker.mjs",
     "runload.mjs",
     "model.mjs",

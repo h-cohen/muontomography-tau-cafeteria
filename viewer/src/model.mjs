@@ -50,6 +50,11 @@ export function createState() {
     cubeBlock: 1,
     cubeGrid: null,
     cubeGridKey: '',
+    // Display smoothing of per-voxel cubes (smooth.mjs): 'off', '2', '4', '8' or
+    // 'iso'. Display-only; the solved grid is never resampled.
+    smoothing: 'off',
+    nbhdMaxTex: null,
+    nbhdMaxKey: '',
     loadSeq: 0,
     smoothSampling: true,
     shading: true,
@@ -90,6 +95,7 @@ export const EFFECTS = {
   coverageGateEnabled: ['window', 'render'], minRays: ['window', 'render'],
   snrGateEnabled: ['window', 'render'], minSnr: ['window', 'render'],
   renderMode: RENDER_ONLY, cubeThreshold: RENDER_ONLY, cubeBlock: RENDER_ONLY, opacity: RENDER_ONLY,
+  smoothing: RENDER_ONLY,
   smoothSampling: ['filter', 'render'],
   shading: RENDER_ONLY, adaptiveQuality: RENDER_ONLY,
   showDetectors: RENDER_ONLY, showBeams: RENDER_ONLY,

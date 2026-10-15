@@ -13,6 +13,7 @@ def test_loads_campaign(cfg):
     assert cfg.detector.active_width_cm == 35.375
     assert cfg.sky_reference.id == "SKY"
     assert cfg.volume.viewer_crop_xy_m == ((-5.0, 7.0), (-5.0, 5.0))
+    assert cfg.volume.viewer_clip_m == ((-2.29, 4.19), (-2.84, 3.2), (5.32, 8.2))
     assert cfg.autofocus.spacing_m == 0.1
 
 

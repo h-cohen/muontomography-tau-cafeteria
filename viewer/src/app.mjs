@@ -11,7 +11,8 @@ import { SHORTCUTS, keyToAction } from './shortcuts.mjs';
 import { markerVertices, dedupeDetectors, projectToScreen } from './markers.mjs';
 import { beamBoxVertices, beamDisplayGeometry, beamFaceVertices, sortedBeamFaces, beamLegendText } from './beams.mjs';
 import { fovGeometry, fovLegendText, FOV_STRIDE, fovFieldBounds, fovIntersectionRings, fovGain } from './fov.mjs';
-import { voxelGates, spatialGates } from './gates.mjs';
+import { voxelGates, spatialGates, solvedVoxelGate } from './gates.mjs';
+import { effectiveSmoothing, neighbourhoodMax, smoothingLegendText } from './smooth.mjs';
 import { pickVoxel } from './picker.mjs';
 import { readRun, embeddedFiles } from './runload.mjs';
 import { createState, effectsFor } from './model.mjs';
@@ -64,6 +65,8 @@ uniform vec3 uCubeSize;        // cube-grid shape
 uniform float uCubeVoxel;      // cube-grid spacing (m) = volume spacing * block size
 uniform bool uCubeBaked;       // true: sigma/coverage/SNR gates already applied in the merge
 uniform float uOpacity;        // display-only opacity multiplier, 0..1 (1 = unchanged)
+uniform int uSmooth;           // cube display smoothing: 0 off, 2 / 4 / 8 sub-cubes, 1 isosurface
+uniform sampler3D uNbhdMax;    // smooth.mjs neighbourhoodMax of the active layer
 
 vec3 unproject(vec2 ndc, float z) {
   vec4 clip = vec4(ndc, z, 1.0);
@@ -167,6 +170,189 @@ vec4 cubeMarch(vec3 o, vec3 dir, vec3 safeDir) {
   return accum;
 }
 
+// ---- Display smoothing (cube mode, cube size 1): GLSL twins of smooth.mjs ----
+// Density at voxel coordinate v (voxel k spans [k, k+1)): always the manual
+// 8-tap trilinear, whatever the smooth-sampling filter, so it matches
+// smooth.mjs trilinear exactly.
+float trilinearVoxel(vec3 v) {
+  vec3 p = v - 0.5;
+  vec3 f = fract(p);
+  ivec3 mx = ivec3(uVolSize) - 1;
+  ivec3 a = clamp(ivec3(floor(p)), ivec3(0), mx);
+  ivec3 b = clamp(ivec3(floor(p)) + 1, ivec3(0), mx);
+  float c000 = texelFetch(uVolume, ivec3(a.x, a.y, a.z), 0).r;
+  float c100 = texelFetch(uVolume, ivec3(b.x, a.y, a.z), 0).r;
+  float c010 = texelFetch(uVolume, ivec3(a.x, b.y, a.z), 0).r;
+  float c110 = texelFetch(uVolume, ivec3(b.x, b.y, a.z), 0).r;
+  float c001 = texelFetch(uVolume, ivec3(a.x, a.y, b.z), 0).r;
+  float c101 = texelFetch(uVolume, ivec3(b.x, a.y, b.z), 0).r;
+  float c011 = texelFetch(uVolume, ivec3(a.x, b.y, b.z), 0).r;
+  float c111 = texelFetch(uVolume, ivec3(b.x, b.y, b.z), 0).r;
+  return mix(mix(mix(c000, c100, f.x), mix(c010, c110, f.x), f.y),
+             mix(mix(c001, c101, f.x), mix(c011, c111, f.x), f.y), f.z);
+}
+
+// gates.mjs solvedVoxelGate: the parent solved voxel judged at its centre.
+bool parentGated(ivec3 idx) {
+  return voxelGated((vec3(idx) + 0.5) / uVolSize);
+}
+
+// A parent with no possible hit: gated, or no trilinear sample inside it can
+// reach the threshold (its neighbourhood max is below it).
+bool parentSkipped(ivec3 idx) {
+  return parentGated(idx) || texelFetch(uNbhdMax, idx, 0).r < uCubeThreshold;
+}
+
+vec3 cubeColour(float v) {
+  float t = clamp((v - uWindow.x) / max(uWindow.y - uWindow.x, 1e-6), 0.0, 1.0);
+  return texture(uTransferLUT, vec2(t, 0.5)).rgb;
+}
+
+// 2x / 4x / 8x: the parent DDA of cubeMarch, and inside every candidate parent a
+// DDA over its f^3 sub-cells; a sub-cell whose trilinear centre density is
+// >= uCubeThreshold is drawn as a cube of the sub-cell size with cubeMarch's
+// face shading, rim and opacity accumulation.
+vec4 smoothCubeMarch(vec3 o, vec3 dir, vec3 safeDir, int f) {
+  float vs = uWorldExtent.x / uVolSize.x;
+  float fs = vs / float(f);
+  ivec3 n = ivec3(uVolSize);
+  vec3 invDir = 1.0 / safeDir;
+  vec3 t0s = (uWorldMin - o) * invDir;
+  vec3 t1s = (uWorldMin + uWorldExtent - o) * invDir;
+  vec3 tsm = min(t0s, t1s), tbg = max(t0s, t1s);
+  float tEnter = max(max(max(tsm.x, tsm.y), tsm.z), 0.0);
+  float tExit = min(min(tbg.x, tbg.y), tbg.z);
+  if (tExit <= tEnter) return vec4(0.0);
+  int axis = -1;
+  if (tEnter > 0.0) axis = (tsm.x >= tsm.y && tsm.x >= tsm.z) ? 0 : (tsm.y >= tsm.z ? 1 : 2);
+  vec3 p = o + dir * tEnter;
+  ivec3 idx = clamp(ivec3(floor((p - uWorldMin) / vs)), ivec3(0), n - 1);
+  ivec3 stp = ivec3(sign(safeDir));
+  vec3 tDelta = abs(vec3(vs) / safeDir);
+  vec3 tMax = (uWorldMin + (vec3(idx) + vec3(greaterThan(safeDir, vec3(0.0)))) * vs - o) / safeDir;
+  vec3 ftDelta = abs(vec3(fs) / safeDir);
+  float tCur = tEnter;
+  vec4 accum = vec4(0.0);
+  for (int g = 0; g < 2048; g++) {
+    if (!parentSkipped(idx)) {
+      ivec3 base = idx * f;
+      vec3 q = o + dir * tCur;
+      ivec3 fidx = clamp(ivec3(floor((q - uWorldMin) / fs)), base, base + f - 1);
+      vec3 ftMax = (uWorldMin + (vec3(fidx) + vec3(greaterThan(safeDir, vec3(0.0)))) * fs - o) / safeDir;
+      int faxis = axis;
+      float ftCur = tCur;
+      for (int h = 0; h < 32; h++) {   // a ray crosses at most 3f - 2 sub-cells of a parent
+        float v = trilinearVoxel((vec3(fidx) + 0.5) / float(f));
+        if (v >= uCubeThreshold) {
+          float shade = faxis == 0 ? 0.78 : (faxis == 1 ? 0.62 : 1.0);
+          if (faxis >= 0) {
+            vec3 l = fract((o + dir * ftCur - uWorldMin) / fs);
+            vec3 e = min(l, 1.0 - l);
+            e[faxis] = 1.0;
+            if (min(min(e.x, e.y), e.z) < 0.03) shade *= 0.55;
+          }
+          float a = uOpacity;
+          accum += (1.0 - accum.a) * vec4(cubeColour(v) * shade * a, a);
+          if (accum.a > 0.98 || a <= 0.0) return accum;
+        }
+        int b = 0;
+        if (ftMax.y < ftMax[b]) b = 1;
+        if (ftMax.z < ftMax[b]) b = 2;
+        if (ftMax[b] > tExit) break;
+        fidx[b] += stp[b];
+        if (fidx[b] < base[b] || fidx[b] >= base[b] + f) break;
+        ftCur = ftMax[b];
+        ftMax[b] += ftDelta[b];
+        faxis = b;
+      }
+    }
+    int a = 0;
+    if (tMax.y < tMax[a]) a = 1;
+    if (tMax.z < tMax[a]) a = 2;
+    if (tMax[a] > tExit) break;
+    idx[a] += stp[a];
+    if (idx[a] < 0 || idx[a] >= n[a]) break;
+    tCur = tMax[a];
+    tMax[a] += tDelta[a];
+    axis = a;
+  }
+  return accum;
+}
+
+// smooth.mjs isoMarch predicate: parent kept and density >= threshold.
+bool isoInside(vec3 o, vec3 dir, float t) {
+  vec3 v = (o + dir * t - uWorldMin) / (uWorldExtent.x / uVolSize.x);
+  ivec3 idx = clamp(ivec3(floor(v)), ivec3(0), ivec3(uVolSize) - 1);
+  return !parentGated(idx) && trilinearVoxel(v) >= uCubeThreshold;
+}
+
+// Isosurface: samples every quarter voxel from the box entry (the sample
+// positions of smooth.mjs isoMarch), jumping over skipped parents; each
+// outside -> inside transition is bisected on the predicate and shaded by
+// the field gradient, Lambert-style as the fog, coloured by the interpolated
+// density half a voxel inside the surface (the level itself would be one
+// flat colour). Opacity < 1 shows the surfaces behind.
+vec4 isoMarch(vec3 o, vec3 dir, vec3 safeDir) {
+  float vs = uWorldExtent.x / uVolSize.x;
+  vec3 invDir = 1.0 / safeDir;
+  vec3 t0s = (uWorldMin - o) * invDir;
+  vec3 t1s = (uWorldMin + uWorldExtent - o) * invDir;
+  vec3 tsm = min(t0s, t1s), tbg = max(t0s, t1s);
+  float tEnter = max(max(max(tsm.x, tsm.y), tsm.z), 0.0);
+  float tExit = min(min(tbg.x, tbg.y), tbg.z);
+  if (tExit <= tEnter) return vec4(0.0);
+  float dt = vs / 4.0;
+  ivec3 n = ivec3(uVolSize);
+  vec3 up = vec3(greaterThan(safeDir, vec3(0.0)));
+  float prevT = tEnter;
+  // Loop-carried as a float, not a bool: Mesa (Intel, via ANGLE) miscompiles
+  // a bool carried across this loop and never sees the outside -> inside step.
+  float prevInside = 0.0;
+  vec4 accum = vec4(0.0);
+  int i = 0;
+  for (int g = 0; g < 4096; g++) {
+    float t = tEnter + (float(i) + 0.5) * dt;
+    if (t > tExit) break;
+    vec3 v = (o + dir * t - uWorldMin) / vs;
+    ivec3 idx = clamp(ivec3(floor(v)), ivec3(0), n - 1);
+    if (parentSkipped(idx)) {
+      // Every sample in this parent is outside: resume at the first sample
+      // past its far faces, with the one before it as the outside bracket.
+      vec3 tf = (uWorldMin + (vec3(idx) + up) * vs - o) * invDir;
+      float tOut = min(min(tf.x, tf.y), tf.z);
+      int j = max(i + 1, int(ceil((tOut - tEnter) / dt - 0.5)));
+      prevT = tEnter + (float(j - 1) + 0.5) * dt;
+      prevInside = 0.0;
+      i = j;
+    } else {
+    bool inside = trilinearVoxel(v) >= uCubeThreshold;
+    if (inside && prevInside < 0.5) {
+      float lo = prevT, hi = t;
+      for (int b = 0; b < 10; b++) {
+        float mid = 0.5 * (lo + hi);
+        if (isoInside(o, dir, mid)) hi = mid; else lo = mid;
+      }
+      vec3 hv = (o + dir * hi - uWorldMin) / vs;
+      vec3 grad = vec3(
+        trilinearVoxel(hv + vec3(1.0, 0.0, 0.0)) - trilinearVoxel(hv - vec3(1.0, 0.0, 0.0)),
+        trilinearVoxel(hv + vec3(0.0, 1.0, 0.0)) - trilinearVoxel(hv - vec3(0.0, 1.0, 0.0)),
+        trilinearVoxel(hv + vec3(0.0, 0.0, 1.0)) - trilinearVoxel(hv - vec3(0.0, 0.0, 1.0)));
+      float gm = length(grad);
+      float lambert = gm > 1e-9 ? abs(dot(grad / gm, dir)) : 1.0;
+      float inner = gm > 1e-9 ? trilinearVoxel(hv + 0.5 * grad / gm) : uCubeThreshold;
+      float a = uOpacity;
+      vec3 rgb = cubeColour(max(inner, uCubeThreshold)) * (0.35 + 0.65 * lambert);
+      accum += (1.0 - accum.a) * vec4(rgb * a, a);
+      if (accum.a > 0.98 || a <= 0.0) return accum;
+    }
+    prevInside = inside ? 1.0 : 0.0;
+    prevT = t;
+    i++;
+    }
+  }
+  return accum;
+}
+
 void main() {
   vec2 ndc = vUv * 2.0 - 1.0;
   vec3 nearP = unproject(ndc, -1.0);
@@ -184,7 +370,12 @@ void main() {
   // the result (measure-zero exact-axis-aligned rays only).
   vec3 sgn = vec3(greaterThanEqual(dir, vec3(0.0))) * 2.0 - 1.0;
   vec3 safeDir = mix(dir, sgn * 1e-8, lessThan(abs(dir), vec3(1e-8)));
-  if (uRenderMode == 1) { outColor = cubeMarch(nearP, dir, safeDir); return; }
+  if (uRenderMode == 1) {
+    if (uSmooth == 1) outColor = isoMarch(nearP, dir, safeDir);
+    else if (uSmooth >= 2) outColor = smoothCubeMarch(nearP, dir, safeDir, uSmooth);
+    else outColor = cubeMarch(nearP, dir, safeDir);
+    return;
+  }
   vec3 invDir = 1.0 / safeDir;
   vec3 t0s = (uWorldMin - nearP) * invDir;
   vec3 t1s = (uWorldMin + uWorldExtent - nearP) * invDir;
@@ -515,7 +706,7 @@ export function initViewer(root) {
     'uMinStepVoxels',
     'uRaysTex', 'uCoverageGateEnabled', 'uMinRays',
     'uSnrTex', 'uSnrGateEnabled', 'uMinSnr', 'uRenderMode', 'uCubeThreshold',
-    'uCubeTex', 'uCubeSize', 'uCubeVoxel', 'uCubeBaked', 'uOpacity',
+    'uCubeTex', 'uCubeSize', 'uCubeVoxel', 'uCubeBaked', 'uOpacity', 'uSmooth', 'uNbhdMax',
   ]) {
     uniforms[name] = gl.getUniformLocation(program, name);
   }
@@ -724,6 +915,12 @@ export function initViewer(root) {
     gl.activeTexture(gl.TEXTURE5);
     gl.bindTexture(gl.TEXTURE_3D, cg && cg.tex ? cg.tex : state.volumeTex);
     gl.uniform1i(uniforms.uCubeTex, 5);
+    // Display smoothing (preview drops it to Off; see smooth.mjs).
+    const smoothing = effectiveSmoothing(state);
+    gl.uniform1i(uniforms.uSmooth, smoothing === 'iso' ? 1 : (smoothing === 'off' ? 0 : Number(smoothing)));
+    gl.activeTexture(gl.TEXTURE6);
+    gl.bindTexture(gl.TEXTURE_3D, smoothing === 'off' ? dummyVolume : ensureNbhdMax());
+    gl.uniform1i(uniforms.uNbhdMax, 6);
 
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     if (state.showDetectors && state.meta && state.markerVertexCount > 0) {
@@ -737,6 +934,7 @@ export function initViewer(root) {
     }
     drawGizmo();
     updateDetectorLabels();
+    syncSmoothingControl();
   }
   state.render = render;
 
@@ -1143,6 +1341,15 @@ export function initViewer(root) {
           opt.textContent = `${b}\u00d7 (${(b * meta.spacing_m).toFixed(2)} m)`;
         }
       }
+      const smoothSel = root.querySelector('#smoothing');
+      if (smoothSel) {
+        const solved = Number(meta.spacing_m.toPrecision(3));
+        smoothSel.title = `Display-only interpolation of the solved ${solved} m voxels; adds no information.`;
+        for (const opt of smoothSel.options) {
+          const f = parseInt(opt.value, 10);
+          if (f > 1) opt.textContent = `${f}\u00d7 (${Number((meta.spacing_m / f).toPrecision(3))} m)`;
+        }
+      }
     }
     {
       state.cubeThreshold = run.cubeThreshold;
@@ -1247,9 +1454,60 @@ export function initViewer(root) {
   }
   fileInput.addEventListener('change', (ev) => loadRunReportingErrors(Array.from(ev.target.files)));
 
-  root.querySelector('#export-png-btn').addEventListener('click', () => {
+  // The exported PNG carries what the on-screen legend says (the legend is
+  // HTML, outside the GL canvas): colour bar, ticks and every visible legend
+  // line, so a smoothed or overlaid view keeps its labels when shared.
+  function composeExport() {
     render();
-    canvas.toBlob((blob) => {
+    const legendEls = [
+      ['#legend-ticks', null], ['#beam-legend', state.beamColor],
+      ['#fov-legend', state.fovColor], ['#display-legend', null],
+    ].map(([sel, swatch]) => [root.querySelector(sel), swatch])
+      .filter(([el]) => el && !el.hidden && el.textContent);
+    const lines = legendEls.map(([el, swatch]) => ({ text: el.textContent, swatch }));
+    const out = document.createElement('canvas');
+    out.width = canvas.width;
+    out.height = canvas.height;
+    const ctx = out.getContext('2d');
+    ctx.drawImage(canvas, 0, 0);
+    const dpr = canvas.width / Math.max(1, canvas.getBoundingClientRect().width);
+    const css = getComputedStyle(root.querySelector('#overlay-legend'));
+    const bar = root.querySelector('#legend-canvas');
+    const pad = 6 * dpr, lineH = 15 * dpr, sw = 8 * dpr;
+    const barW = 200 * dpr, barH = 12 * dpr;
+    ctx.font = `${11 * dpr}px ui-monospace, Menlo, Consolas, monospace`;
+    const textW = Math.max(0, ...lines.map((l) => ctx.measureText(l.text).width + (l.swatch ? sw + 6 * dpr : 0)));
+    const w = Math.max(barW, textW) + 2 * pad, h = 2 * pad + barH + 4 * dpr + lines.length * lineH;
+    const x = out.width - 12 * dpr - w, y = out.height - 12 * dpr - h;
+    ctx.fillStyle = css.getPropertyValue('--panel').trim() || '#14181d';
+    ctx.strokeStyle = css.getPropertyValue('--line').trim() || '#232a31';
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, 8 * dpr);
+    ctx.fill();
+    ctx.stroke();
+    if (bar) ctx.drawImage(bar, x + pad, y + pad, barW, barH);
+    ctx.textBaseline = 'middle';
+    lines.forEach((l, i) => {
+      const ly = y + pad + barH + 4 * dpr + (i + 0.5) * lineH;
+      let lx = x + pad;
+      if (l.swatch) {
+        ctx.fillStyle = l.swatch;
+        ctx.fillRect(lx, ly - sw / 2, sw, sw);
+        lx += sw + 6 * dpr;
+      }
+      ctx.fillStyle = css.getPropertyValue('--text-dim').trim() || '#9fb0bd';
+      ctx.fillText(l.text, lx, ly);
+    });
+    return { canvas: out, lines: lines.map((l) => l.text) };
+  }
+  // Test hook: the composed export as a data URL and its legend lines.
+  state.exportImage = () => {
+    const { canvas: c, lines } = composeExport();
+    return { dataURL: c.toDataURL(), lines };
+  };
+
+  root.querySelector('#export-png-btn').addEventListener('click', () => {
+    composeExport().canvas.toBlob((blob) => {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -1465,14 +1723,17 @@ export function initViewer(root) {
   // meta.viewer_crop_xy_m ([[x0,x1],[y0,y1]] metres) sets the initial clip box
   // in x/y. Display-only: the exporter writes it from the site config, the
   // solve box is unchanged. Without it the clip box is left as it is.
+  // Initial clip box from the run: `viewer_clip_m` (x, y, z; display-only)
+  // when present, else the older `viewer_crop_xy_m` (x, y only).
   function applyViewerCrop(meta) {
-    const crop = meta.viewer_crop_xy_m;
-    if (!Array.isArray(crop) || crop.length !== 2) return;
-    for (const [idx, axis] of [[0, 'x'], [1, 'y']]) {
+    const box = Array.isArray(meta.viewer_clip_m) && meta.viewer_clip_m.length === 3
+      ? meta.viewer_clip_m : meta.viewer_crop_xy_m;
+    if (!Array.isArray(box) || box.length < 2) return;
+    for (const [idx, axis] of [[0, 'x'], [1, 'y'], [2, 'z']].slice(0, box.length)) {
       const o = meta.origin_m[idx];
       const ext = meta.shape[idx] * meta.spacing_m;
-      const lo = Math.min(1, Math.max(0, (crop[idx][0] - o) / ext));
-      const hi = Math.min(1, Math.max(0, (crop[idx][1] - o) / ext));
+      const lo = Math.min(1, Math.max(0, (box[idx][0] - o) / ext));
+      const hi = Math.min(1, Math.max(0, (box[idx][1] - o) / ext));
       state.clipMin[idx] = lo;
       state.clipMax[idx] = hi;
       for (const [id, v] of [[`#clip-${axis}-min`, lo], [`#clip-${axis}-max`, hi]]) {
@@ -1572,6 +1833,43 @@ export function initViewer(root) {
   }
   state.ensureCubeGrid = ensureCubeGrid;
 
+  // Upper bound of every trilinear sample inside each voxel, for the shader's
+  // parent skip; rebuilt only when the active layer or run changes.
+  function ensureNbhdMax() {
+    const key = [state.activeLayer, state.loadSeq].join('|');
+    if (key === state.nbhdMaxKey && state.nbhdMaxTex) return state.nbhdMaxTex;
+    if (state.nbhdMaxTex) gl.deleteTexture(state.nbhdMaxTex);
+    const data = state.layerData.get(state.activeLayer);
+    state.nbhdMaxTex = makeVolumeTexture(gl, state.meta.shape, neighbourhoodMax(data, state.meta.shape));
+    state.nbhdMaxKey = key;
+    return state.nbhdMaxTex;
+  }
+
+  // The smoothing the user asked for, at full quality (hover picking and the
+  // legend ignore the fast preview's temporary drop to Off).
+  function requestedSmoothing() {
+    return effectiveSmoothing({ ...state, interacting: false });
+  }
+
+  // Smoothing needs per-voxel cubes: the select is disabled in fog and at
+  // cube size > 1, and the legend labels a smoothed view as display-only.
+  function syncSmoothingControl() {
+    const sel = root.querySelector('#smoothing');
+    const legendEl = root.querySelector('#display-legend');
+    if (!sel || !legendEl) return;
+    const usable = state.renderMode === 'cubes' && (state.cubeBlock | 0) <= 1;
+    if (sel.disabled === usable) sel.disabled = !usable;
+    const unit = state.activeLayer === 'volume' ? '1/m' : '';
+    const text = state.meta
+      ? smoothingLegendText(requestedSmoothing(), state.meta.spacing_m, state.cubeThreshold, unit) : '';
+    if (legendEl.textContent !== text) legendEl.textContent = text;
+    legendEl.hidden = !text;
+  }
+
+  root.querySelector('#smoothing').addEventListener('change', (ev) => {
+    commit({ smoothing: ev.target.value });
+  });
+
   root.querySelector('#cube-size').addEventListener('change', (ev) => {
     commit({ cubeBlock: Math.max(1, parseInt(ev.target.value, 10) || 1) });
   });
@@ -1620,6 +1918,8 @@ export function initViewer(root) {
       spatial: stateSpatialGates(),
       cubeGrid: state.renderMode === 'cubes' ? ensureCubeGrid() : null,
       cubeThreshold: state.cubeThreshold,
+      smoothing: requestedSmoothing(),
+      solvedGate: solvedVoxelGate(state, stateVoxelGates(), state.meta),
     });
   }
 

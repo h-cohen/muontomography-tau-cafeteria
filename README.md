@@ -152,13 +152,45 @@ xdg-open runs/viewer.html
 Choose a new `--out` directory rather than writing into the archived
 `runs/response-aware-2026-10-07/export/`.
 
+The viewer opens with the clip box set by `volume.viewer_clip_m` in
+`configs/cafeteria.yaml` (x, y, z in world metres; display-only, read by no
+analysis): the ceiling region over both positions, clip fractions
+x 0.32–0.68, y 0.31–0.67, z 0.54–0.90 on the baseline grid. Re-export to apply a
+change. Without it, the x/y `viewer_crop_xy_m` box is used. Note that
+`viewer_crop_xy_m` also sets the beam parallax-scan range, so it is not a pure
+display setting.
+
 The viewer displays the reconstructed room and toggleable fitted-beam bodies and outlines.
 Overlays sit in cards under **Camera & view**. Use **Fitted beams** to show/hide
 the overlay, its **opacity** slider to fade it (0% hides both faces and edges),
 and its round color swatch to choose its color (defaults: gray, 50%). These controls are
 independent of voxel opacity, thresholds and the fitted dimensions. The PNG
-export includes the currently displayed overlays; uncheck **Fitted beams** or
-set the beam opacity to 0% for a voxel-only room image.
+export includes the currently displayed overlays and the legend panel (colour
+bar and every visible legend line); uncheck **Fitted beams** or set the beam
+opacity to 0% for a voxel-only room image.
+
+**smoothing** (Transfer section, **Voxel cubes** at cube size 1× only) is a
+display-only interpolation of the solved voxels; it adds no information and
+never changes the reconstruction (the 0.2 m grid is a grid, not a resolution:
+the banner reports a vertical depth resolution of about 0.27 m).
+
+- **Off** (default) draws each solved voxel as a block, exactly as before.
+- **2×**, **4×** and **8×** sample the trilinearly interpolated density on a
+  0.1 m, 0.05 m or 0.025 m sub-grid and draw the samples at or above
+  **cube threshold** as cubes of that size, with the same face shading, rim and
+  opacity as Off.
+- **Isosurface** draws the smooth surface of the interpolated field at
+  **cube threshold**, shaded by its gradient like the fog and coloured by the
+  interpolated density just inside it.
+
+Every sub-sample or surface point belongs to one solved parent voxel and is
+hidden exactly when that voxel is: the sigma, coverage and SNR gates, the clip
+box, the clip plane and the slice decide per solved voxel, and gate fields are
+never interpolated. At cube size > 1 the control is disabled, because merged
+cubes bake their gates into block means and would have no single solved
+parent. Fast preview while interacting drops to Off and the idle render restores
+the chosen mode. Hover still reports the solved voxel and its solved value. The
+legend (and the PNG) adds a line such as `display: trilinear 4× (solved 0.2 m)`.
 
 **Fields of view** (off by default) draws each detector position's geometric
 acceptance as a translucent square frustum rising to the top of the volume.

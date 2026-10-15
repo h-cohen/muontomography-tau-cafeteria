@@ -215,6 +215,8 @@
           <input id="cube-threshold" type="number" step="0.001" style="width:6em"> <span>1/m</span></div>
         <div class="row" title="Voxel cubes: merge b x b x b solved voxels into one display cube (mean of the voxels that pass the uncertainty gates). Display-only; finer than the solved voxels needs a new reconstruction."><label for="cube-size">cube size</label>
           <select id="cube-size"><option value="1" selected>1x</option><option value="2">2x</option><option value="3">3x</option><option value="4">4x</option></select></div>
+        <div class="row" title="Display-only interpolation of the solved 0.2 m voxels; adds no information. Voxel cubes at cube size 1x only."><label for="smoothing">smoothing</label>
+          <select id="smoothing" title="Display-only interpolation of the solved 0.2 m voxels; adds no information." disabled><option value="off" selected>Off</option><option value="2">2×</option><option value="4">4×</option><option value="8">8×</option><option value="iso">Isosurface</option></select></div>
         <div class="row" title="Display-only: scales how opaque the voxels draw. Fog: every sample's alpha; cubes: translucent blocks, so cubes behind show through."><label for="opacity">opacity</label>
           <input id="opacity" type="range" min="0" max="1" step="0.01" value="1" style="flex:1 1 auto;width:auto;min-width:0"> <span id="opacity-readout" class="mono">100%</span></div>
         <label><input id="toggle-smooth" type="checkbox" style="width:auto" checked> Smooth sampling</label>
@@ -327,6 +329,7 @@
       <canvas id="legend-canvas" width="200" height="24"></canvas>
       <div id="legend-ticks" class="mono dim"></div>
       <div id="beam-legend" class="mono dim" hidden></div>
+      <div id="display-legend" class="mono dim" hidden></div>
       <div id="fov-legend" class="mono dim" hidden></div>
     </div>
     <div id="overlay-hover"><div id="hover-readout" class="mono" hidden></div></div>

@@ -35,6 +35,22 @@ export function voxelGates(settings, layers) {
   };
 }
 
+// The gate of one SOLVED voxel (i, j, k), as cube mode judges it: clip box,
+// clip plane and slice at the voxel centre, then sigma / coverage / SNR on
+// the voxel itself. Display smoothing (smooth.mjs) asks this for the parent
+// of every sub-sample or surface point, so interpolation never reaches past
+// a hidden voxel and gate fields are never interpolated. GLSL twin:
+// parentGated in app.mjs (voxelGated at the voxel centre).
+export function solvedVoxelGate(settings, voxel, meta) {
+  const spatial = spatialGates(settings);
+  const [nx, ny, nz] = meta.shape;
+  return (i, j, k) => {
+    if (i < 0 || i >= nx || j < 0 || j >= ny || k < 0 || k >= nz) return false;
+    const tex = [(i + 0.5) / nx, (j + 0.5) / ny, (k + 0.5) / nz];
+    return spatial.keep(tex) && voxel.keep(i * ny * nz + j * nz + k);
+  };
+}
+
 // Geometric gates at a sample: clip box, then clip plane, the shader's
 // order. `tex` is the [0,1]^3 volume coordinate.
 export function spatialGates(settings) {

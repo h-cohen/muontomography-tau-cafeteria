@@ -183,6 +183,8 @@ def export_volume(
     }
     if cfg.volume.viewer_crop_xy_m is not None:
         meta["viewer_crop_xy_m"] = [list(p) for p in cfg.volume.viewer_crop_xy_m]
+    if cfg.volume.viewer_clip_m is not None:
+        meta["viewer_clip_m"] = [list(p) for p in cfg.volume.viewer_clip_m]
     if results_dir is not None:
         beams = _beams_meta(Path(results_dir), cfg)
         if beams is not None:

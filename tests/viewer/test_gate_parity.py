@@ -1,6 +1,10 @@
-"""Shader gates agree with gates.mjs, gate by gate, in fog and cube mode.
+"""Shader gates agree with gates.mjs, gate by gate, in fog, cube and every
+display-smoothing mode (2x / 4x sub-cubes, isosurface).
 
-Three bright columns: sigma hides column A, coverage hides B, SNR hides C.
+Three bright columns: sigma hides column A, coverage hides B, SNR hides C,
+and the clip box and clip plane each hide C. Smoothed modes decide per
+PARENT solved voxel (gates.mjs solvedVoxelGate), so a hidden column must
+vanish there too, interpolation notwithstanding.
 With one gate on, `pick` (CPU, gates.mjs) and the lit pixels (GPU, GLSL
 copies) must agree, and the gated column must be gone from both.
 
@@ -57,8 +61,10 @@ def _load(page, dist_path, run):
 
 
 def _set_only(page, gate):
-    """Enable exactly one of sigma / coverage / snr via state (or none, for
-    the all-off baseline pass when gate is None), then idle-render."""
+    """Enable exactly one of sigma / coverage / snr / clip box / clip plane
+    via state (or none, for the all-off baseline pass when gate is None),
+    then idle-render. The clip box keeps x <= 0.6 and the plane x <= 0.7 of
+    the volume: both cut column C (centre 0.83) and keep A and B."""
     page.evaluate(
         """(gate) => {
         const s = window.__viewerState;
@@ -68,6 +74,10 @@ def _set_only(page, gate):
         s.minRays = 2;
         s.snrGateEnabled = gate === 'snr';
         s.minSnr = 3;
+        s.clipMax = gate === 'clip' ? [0.6, 1, 1] : [1, 1, 1];
+        s.clipPlaneEnabled = gate === 'plane';
+        s.clipPlaneNormal = [-1, 0, 0];
+        s.clipPlaneD = -0.2;
         s.window = [0.5, 1.0];
         s.idleNow();
     }""",
@@ -111,12 +121,18 @@ def _footprints(baseline):
     return footprint
 
 
-@pytest.mark.parametrize("mode", ["fog", "cubes"])
-@pytest.mark.parametrize("gate, hidden", [("sigma", "A"), ("coverage", "B"), ("snr", "C")])
+MODES = ["fog", "cubes", "cubes-2", "cubes-4", "cubes-8", "cubes-iso"]
+GATES = [("sigma", "A"), ("coverage", "B"), ("snr", "C"), ("clip", "C"), ("plane", "C")]
+
+
+@pytest.mark.parametrize("mode", MODES)
+@pytest.mark.parametrize("gate, hidden", GATES)
 def test_shader_gate_matches_cpu_gate(page, dist_path, run_fixture, mode, gate, hidden):
     _load(page, dist_path, _run(run_fixture))
-    if mode == "cubes":
+    if mode.startswith("cubes"):
         page.locator("#render-mode").select_option("cubes")
+    if mode.startswith("cubes-"):
+        page.locator("#smoothing").select_option(mode.split("-")[1])
 
     # All-gates-off baseline: which probe points land on each column.
     _set_only(page, None)

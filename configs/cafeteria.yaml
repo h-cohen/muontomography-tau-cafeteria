@@ -47,6 +47,10 @@ volume:
   # Display-only clip box: the region both positions see. Cropping the SOLVE
   # box instead dumps oblique rays' opacity on its side walls.
   viewer_crop_xy_m: [[-5.0, 7.0], [-5.0, 5.0]]
+  # Display-only initial viewer clip box (x, y, z; world metres): the ceiling
+  # region over both positions. On the baseline grid it is clip fractions
+  # x 0.32-0.68, y 0.31-0.67, z 0.54-0.90. No analysis reads it.
+  viewer_clip_m: [[-2.29, 4.19], [-2.84, 3.20], [5.32, 8.20]]
 
 reconstruction:
   algorithm: tv

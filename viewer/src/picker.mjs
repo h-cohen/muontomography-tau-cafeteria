@@ -1,15 +1,19 @@
 import { rayBox, voxelMarch, voxelIndex, worldToVoxel } from './grid.mjs';
+import { smoothCubeMarch, isoMarch } from './smooth.mjs';
 
 // Hover picking, CPU twin of the renderer (FRAGMENT_SRC in app.mjs): the same
 // camera unprojection, box march and gates, so the voxel under the cursor is
 // the voxel that was drawn. Pure: all inputs come in `scene`.
 //   scene = { meta, data, window, renderMode, raySteps, minStepVoxels,
 //             voxel, spatial,            // gates.mjs gate sets
-//             cubeGrid, cubeThreshold }  // cube mode
+//             cubeGrid, cubeThreshold,   // cube mode
+//             smoothing, solvedGate }    // display smoothing (smooth.mjs)
 // Fog: steps tEnter + (i + 0.5) * stepLen, stepLen = max(minStepVoxels *
 // voxel, span / raySteps) (always the FULL step count, never the preview),
 // first sample above window[0]. Cubes: voxel-to-voxel DDA (voxelMarch), gates
-// at voxel centres, first voxel >= cubeThreshold.
+// at voxel centres, first voxel >= cubeThreshold. Smoothed cubes: the
+// smooth.mjs reference march; the readout is still the SOLVED parent voxel
+// and its solved value, never an interpolated one.
 export function pickVoxel(ndc, invViewProj, scene) {
   const { meta, data } = scene;
   if (!meta || !data || !invViewProj) return null;
@@ -27,7 +31,20 @@ export function pickVoxel(ndc, invViewProj, scene) {
   const d = [farP[0] - nearP[0], farP[1] - nearP[1], farP[2] - nearP[2]];
   const len = Math.hypot(d[0], d[1], d[2]);
   const dir = [d[0] / len, d[1] / len, d[2] / len];
-  return scene.renderMode === 'cubes' ? pickCubeAlong(nearP, dir, scene) : pickFogAlong(nearP, dir, scene);
+  if (scene.renderMode !== 'cubes') return pickFogAlong(nearP, dir, scene);
+  if (scene.smoothing && scene.smoothing !== 'off') return pickSmoothAlong(nearP, dir, scene);
+  return pickCubeAlong(nearP, dir, scene);
+}
+
+function pickSmoothAlong(nearP, dir, scene) {
+  const { meta, data, smoothing, solvedGate, cubeThreshold } = scene;
+  const hit = smoothing === 'iso'
+    ? isoMarch(nearP, dir, meta, data, cubeThreshold, solvedGate)
+    : smoothCubeMarch(nearP, dir, meta, data, Number(smoothing), cubeThreshold, solvedGate);
+  if (!hit) return null;
+  const [i, j, k] = hit.parent;
+  const [, ny, nz] = meta.shape;
+  return { i, j, k, value: data[i * ny * nz + j * nz + k] };
 }
 
 function pickFogAlong(nearP, dir, scene) {

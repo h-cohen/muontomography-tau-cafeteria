@@ -58,3 +58,20 @@ def test_no_crop_keeps_the_full_box(page, dist_path, run_fixture):
     _load(page, dist_path, run)
     assert page.evaluate("() => window.__viewerState.clipMin") == [0, 0, 0]
     assert page.evaluate("() => window.__viewerState.clipMax") == [1, 1, 1]
+
+
+def test_clip_box_sets_all_three_axes_over_the_xy_crop(page, dist_path, run_fixture):
+    """`viewer_clip_m` is the display default for x, y AND z; where both are
+    present it wins over `viewer_crop_xy_m` (which the analysis also reads).
+    Fixture z spans 1..3 m, so z 1.5..2.5 is fractions 0.25..0.75."""
+    run = run_fixture(shape=(6, 5, 4), origin_m=(0.0, 0.0, 1.0), spacing_m=0.5)
+    meta = json.loads((run / "meta.json").read_text())
+    meta["viewer_crop_xy_m"] = [[0.75, 2.25], [0.5, 2.0]]
+    meta["viewer_clip_m"] = [[0.3, 2.7], [0.25, 2.25], [1.5, 2.5]]
+    (run / "meta.json").write_text(json.dumps(meta))
+    _load(page, dist_path, run)
+    lo = page.evaluate("() => window.__viewerState.clipMin")
+    hi = page.evaluate("() => window.__viewerState.clipMax")
+    assert lo == pytest.approx([0.1, 0.1, 0.25]) and hi == pytest.approx([0.9, 0.9, 0.75])
+    assert page.locator("#clip-z-min-val").text_content() == "0.25"
+    assert page.locator("#clip-z-max-val").text_content() == "0.75"
