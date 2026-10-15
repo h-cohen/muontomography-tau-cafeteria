@@ -1,9 +1,9 @@
 \section{Uncertainties}\label{sec:uncertainties}
 Statistical uncertainties come from \UncertaintyReplicas{} Poisson resamplings of all three data sets, with nominal rows, weights, pose and voxel grid fixed. We quote the standard deviation of the resampled results; central values are the fits to the actual data.
 
-Systematic effects were estimated by refitting with one input changed at a time: the flux normalization by $\InputsFluxScaleFraction$, multiple scattering from the Highland formula \citep{pdg2024} for muons above $\InputsMcsMomentumCut\,\mathrm{GeV}/c$, each pose coordinate and the azimuth by their uncertainties, and the background model. Table~\ref{tab:uncertainty} gives the result for the triangulated height. The evaluated flux, scattering and background shifts fall below the reported height precision. The scattering displacement $\UncertaintyMcsDisplacement\,\mathrm{m}$ is conditional on the thin matched-beam fit, not the continued-array depth. These small shifts do not establish insensitivity to general response or background errors. The uncertainty is dominated by statistics and pose. The autofocus total, $\UncertaintyAutofocusZTotal\,\mathrm{m}$, is obtained in the same way.
+Systematic effects were estimated by refitting with one input changed at a time: the flux normalization by $\InputsFluxScaleFraction$, multiple scattering from the Highland formula \citep{pdg2024} for muons above $\InputsMcsMomentumCut\,\mathrm{GeV}/c$, each pose coordinate and the azimuth by their uncertainties, and the background model. Table~\ref{tab:uncertainty} gives the result for the triangulated height. The scattering shift falls below the reported height precision. The flux and background variants leave the heights unchanged by construction: a common flux scale shifts all opacities uniformly, and the background variant alters only the box-fit background. The scattering displacement $\UncertaintyMcsDisplacement\,\mathrm{m}$ is conditional on the thin matched-beam fit, not the continued-array depth. These small shifts do not establish insensitivity to general response or background errors. The uncertainty is dominated by statistics and pose. The autofocus total, $\UncertaintyAutofocusZTotal\,\mathrm{m}$, is obtained in the same way.
 
-The budget excludes absolute-scale and height-origin calibration, joint pose covariance, uncalibrated detector-response effects and structural model bias. The continued-array depth spread holds relative centres and pose fixed and is counting variation only.
+The budget excludes absolute-scale and height-origin calibration, joint pose covariance, the vertical offset of pos1 (fixed to the floor level of pos0), uncalibrated detector-response effects and structural model bias. The continued-array depth spread holds relative centres and pose fixed and is counting variation only.
 
 \begin{table}[H]
 \centering
@@ -18,6 +18,6 @@ Flux, scattering, background & negligible$^{a}$ \\
 \midrule
 Evaluated total (quadrature) & \UncertaintyBeamsZxTotal \\
 \bottomrule
-\multicolumn{2}{l}{\footnotesize $^{a}$Below the quoted precision.}
+\multicolumn{2}{l}{\footnotesize $^{a}$Scattering below precision; flux, background null.}
 \end{tabular}
 \end{table}

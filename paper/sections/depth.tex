@@ -5,4 +5,4 @@ The continued-array fit fixes relative beam centres and detector pose, but fits 
 
 The spreads come from \ArraydepthNReplicas{} count replicas at fixed array and pose. The on-site thickness is $\InputsMeasuredBeamDepth\,\mathrm{m}$; bottom-height comparison with $\InputsMeasuredBeamBottom\,\mathrm{m}$ additionally requires height registration.
 
-This is a conditional estimate: centre, array and background assumptions shift thickness more than its count spread, and a flexible matched-beam fit reaches a thin-depth bound. Noiseless numerical recovery and aperture refinement check the calculation, not real-ceiling accuracy. The weighted residual statistic $\chi^2/\nu=\ArraydepthChisqPerDof$ is a model/weight diagnostic rather than a calibrated goodness-of-fit test.
+This is a conditional estimate: its spread excludes centre, array, background and pose assumptions, and a flexible matched-beam fit instead reaches a thin-depth bound. The weighted residual statistic $\chi^2/\nu=\ArraydepthChisqPerDof$ is a model/weight diagnostic rather than a calibrated goodness-of-fit test.

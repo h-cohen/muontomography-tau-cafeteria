@@ -1,14 +1,14 @@
 \section{Ceiling height}\label{sec:beams}
 These supporting diagnostics locate an effective ceiling plane. Here height is its vertical position relative to the detector reference, not beam thickness $h=z_{\rm top}-z_{\rm bottom}$.
 
-\emph{Autofocus and triangulation.} A thin-layer cross-position prediction scan gives $\AutofocusZ\pm\UncertaintyAutofocusZTotal\,\mathrm{m}$, averaged over two half-voxel-shifted grids. Independently matched angular shadows obey $s_{x,p,k}=(X_k-x_p)/(z-z_p)$; their common transverse height is $z_x=\BeamsZX\pm\UncertaintyBeamsZxTotal\,\mathrm{m}$, with pitch $\BeamsPitch\,\mathrm{m}$.
+\emph{Autofocus and triangulation.} A thin-layer cross-position prediction scan gives $\AutofocusZ\pm\UncertaintyAutofocusZTotal\,\mathrm{m}$, averaged over two half-voxel-shifted grids. Independently matched angular shadows obey $s_{x,p,k}=(X_k-x_p)/(z-z_p)$; their common transverse height is $z_x=\BeamsZX\pm\UncertaintyBeamsZxTotal\,\mathrm{m}$. A joint fit of transverse and longitudinal shadows gives $z=\BeamsZ\pm\UncertaintyBeamsZTotal\,\mathrm{m}$, at which the angular shadow period corresponds to a beam pitch of $\BeamsPitch\,\mathrm{m}$.
 
 The estimates agree within their evaluated budgets but share the data and fitted pose, so they are not independent scale checks. They localize effective shadow features rather than the bottom face. Comparison with the on-site bottom $\InputsMeasuredBeamBottom\,\mathrm{m}$ also requires height registration; agreement with the building is not established by the quoted errors alone.
 
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{height.pdf}
-\caption{Supporting ceiling-height diagnostics. (a) Autofocus: cross-position prediction error versus layer height. (b) Triangulation of the transverse beam shadows. Shaded bands show the statistical spread from resampled counts.}\label{fig:height}
+\caption{Supporting ceiling-height diagnostics. (a) Autofocus: cross-position prediction error versus layer height. (b) Transverse parallax correlation versus trial height; the dashed line marks the triangulated $z_x$. Shaded bands show the count-bootstrap spread, centred on the bootstrap mean in (a) and on $z_x$ in (b).}\label{fig:height}
 \end{figure}
 
-As a check of the image, we took the voxel layer at the triangulated height and located the beams in it. Where both positions see the ceiling, they match the beam positions found directly in the opacity maps with a mean offset of $\BeamsGateMeanAbsOffset\,\mathrm{m}$. This is a shared-data lateral check, not independent depth or scale.
+As a check of the image, we took the voxel layer nearest the joint height $z$ and located the beams in it. Where both positions see the ceiling, they match the beam positions found directly in the opacity maps with a mean offset of $\BeamsGateMeanAbsOffset\,\mathrm{m}$. This is a shared-data lateral check, not independent depth or scale.
