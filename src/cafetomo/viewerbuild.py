@@ -89,6 +89,10 @@ def build(
     # it, even in a comment, would end the script there and break the page.
     if re.search(r"</script", bundle, re.I):
         raise ValueError("viewer sources contain '</script': it would end the inline bundle")
+    # A classic <script> rejects import syntax, so an import the stripper
+    # missed (e.g. one wrapped over several lines) would blank the page.
+    if re.search(r"^\s*import\b", bundle, re.M):
+        raise ValueError("viewer sources need single-line imports: one survived bundling")
     page = shell.replace("/* __VIEWER_BUNDLE__ */", bundle)
 
     if embed_dir is not None:

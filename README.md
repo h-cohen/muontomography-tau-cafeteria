@@ -155,7 +155,7 @@ Choose a new `--out` directory rather than writing into the archived
 The viewer displays the reconstructed room and toggleable fitted-beam bodies and outlines.
 Overlays sit in cards under **Camera & view**. Use **Fitted beams** to show/hide
 the overlay, its **opacity** slider to fade it (0% hides both faces and edges),
-and its round color swatch to choose its color. These controls are
+and its round color swatch to choose its color (defaults: gray, 50%). These controls are
 independent of voxel opacity, thresholds and the fitted dimensions. The PNG
 export includes the currently displayed overlays; uncheck **Fitted beams** or
 set the beam opacity to 0% for a voxel-only room image.
@@ -165,8 +165,20 @@ acceptance as a translucent square frustum rising to the top of the volume.
 A track is accepted when it crosses both outer planes of the active square
 (width W, layer gap D), so the frustum starts as the W×W detector square and
 widens by W/D per metre of height (|tan θ| ≤ W/D per detector axis, ≈ 0.91);
-each frustum is rotated by its fitted azimuth. Use **opacity** to fade walls and
-edges together (0% hides them) and the color swatch to recolor them. The
+each frustum is rotated by its fitted azimuth. **show** selects **Separate views**
+(every frustum) or **Intersection only** (the region all positions see,
+outlined by horizontal contour rings up to the shared ceiling footprint; offered
+only when the views overlap). **Shade by acceptance** (on by default) fills the
+region with a glow whose brightness follows the tracker's relative acceptance
+per solid angle for the direction from each detector centre, the same formula
+as `Detector.acceptance`: (1 − |tx|/T)(1 − |ty|/T)(1 + tx² + ty²)^−1.5 with
+T = W/D, normalised to 1 at the zenith. It is brightest straight above each
+detector and falls to zero at the acceptance edge. Separate views add their
+weights; the intersection takes their geometric mean, which vanishes wherever any
+view is blind. Unchecked, separate views draw flat translucent walls and the
+intersection a uniform fill. **opacity** defaults to 60%, which draws the
+overlay as designed; lower values fade it (0% hides it) and 100% saturates it to
+a solid fill. The color swatch recolors it. The
 frusta come from `detector_geometry` in `meta.json`; exports made before that
 field existed hide the control. Like the beams, this is display-only context.
 

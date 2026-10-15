@@ -55,3 +55,14 @@ def test_a_closing_script_tag_in_the_sources_fails_loudly(tmp_path):
     (viewer / "src" / "npy.mjs").write_text("// see </script> here\n")
     with pytest.raises(ValueError, match="</script"):
         build(viewer, out_path=tmp_path / "index.html")
+
+
+def test_an_import_the_bundler_cannot_strip_fails_loudly(tmp_path):
+    viewer = tmp_path / "viewer"
+    (viewer / "src").mkdir(parents=True)
+    (viewer / "shell.html").write_text((VIEWER_DIR / "shell.html").read_text())
+    for src in (VIEWER_DIR / "src").iterdir():
+        (viewer / "src" / src.name).write_text(src.read_text())
+    (viewer / "src" / "npy.mjs").write_text("import {\n  a,\n} from './mat4.mjs';\n")
+    with pytest.raises(ValueError, match="single-line"):
+        build(viewer, out_path=tmp_path / "index.html")

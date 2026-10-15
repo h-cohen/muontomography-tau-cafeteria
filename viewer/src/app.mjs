@@ -10,7 +10,7 @@ import { captureView, loadViews, saveViews } from './views.mjs';
 import { SHORTCUTS, keyToAction } from './shortcuts.mjs';
 import { markerVertices, dedupeDetectors, projectToScreen } from './markers.mjs';
 import { beamBoxVertices, beamDisplayGeometry, beamFaceVertices, sortedBeamFaces, beamLegendText } from './beams.mjs';
-import { fovGeometry, fovLegendText, FOV_STRIDE } from './fov.mjs';
+import { fovGeometry, fovLegendText, FOV_STRIDE, fovFieldBounds, fovIntersectionRings, fovGain } from './fov.mjs';
 import { voxelGates, spatialGates } from './gates.mjs';
 import { pickVoxel } from './picker.mjs';
 import { readRun, embeddedFiles } from './runload.mjs';
@@ -283,11 +283,84 @@ void main() {
 const FOV_FRAGMENT_SRC = `#version 300 es
 precision highp float;
 uniform vec3 uFovColor;
-uniform float uFovOpacity;
+uniform float uFovGain;   // fov.mjs fovGain(opacity)
 in float vWeight;
 out vec4 outColor;
 void main() {
-  outColor = vec4(uFovColor, clamp(vWeight * uFovOpacity, 0.0, 1.0));
+  outColor = vec4(uFovColor, 1.0 - pow(1.0 - clamp(vWeight, 0.0, 0.999), uFovGain));
+}`;
+
+// Acceptance field: a second fullscreen raymarch, analytic (no texture), over
+// the box enclosing every frustum. Each position contributes the GLSL twin of
+// fov.mjs acceptanceWeight for the direction from its centre (or 1 inside its
+// frustum when unweighted); separate views add, the intersection takes the
+// geometric mean, which vanishes wherever any one view is blind.
+const FOV_MAX_DETECTORS = 8;
+const FOV_FIELD_FRAGMENT_SRC = `#version 300 es
+precision highp float;
+in vec2 vUv;
+out vec4 outColor;
+uniform mat4 uFieldInvViewProj;
+uniform vec4 uFieldDet[${FOV_MAX_DETECTORS}];   // x, y, z, azimuth (rad)
+uniform int uFieldNDet;
+uniform float uFieldHalf;
+uniform float uFieldTan;
+uniform vec3 uFieldMin;
+uniform vec3 uFieldMax;
+uniform bool uFieldIntersect;
+uniform bool uFieldWeighted;
+uniform vec3 uFieldColor;
+uniform float uFieldGain;   // fov.mjs fovGain(opacity)
+uniform float uFieldDensity;   // extinction per metre at unit weight
+
+float viewWeight(vec3 p, vec4 d) {
+  float h = p.z - d.z;
+  if (h <= 0.0) return 0.0;
+  vec2 r = p.xy - d.xy;
+  float c = cos(d.w), s = sin(d.w);
+  vec2 loc = vec2(c * r.x + s * r.y, -s * r.x + c * r.y);
+  if (any(greaterThan(abs(loc), vec2(uFieldHalf + h * uFieldTan)))) return 0.0;
+  if (!uFieldWeighted) return 1.0;
+  vec2 t = loc / h;
+  vec2 span = max(vec2(0.0), 1.0 - abs(t) / uFieldTan);
+  return span.x * span.y * pow(1.0 + dot(t, t), -1.5);
+}
+
+float field(vec3 p) {
+  float sum = 0.0, prod = 1.0;
+  for (int i = 0; i < ${FOV_MAX_DETECTORS}; i++) {
+    if (i >= uFieldNDet) break;
+    float w = viewWeight(p, uFieldDet[i]);
+    sum += w;
+    prod *= w;
+  }
+  return uFieldIntersect ? pow(prod, 1.0 / float(uFieldNDet)) : sum;
+}
+
+void main() {
+  vec2 ndc = vUv * 2.0 - 1.0;
+  vec4 a = uFieldInvViewProj * vec4(ndc, -1.0, 1.0);
+  vec4 b = uFieldInvViewProj * vec4(ndc, 1.0, 1.0);
+  vec3 o = a.xyz / a.w;
+  vec3 dir = normalize(b.xyz / b.w - o);
+  vec3 sgn = vec3(greaterThanEqual(dir, vec3(0.0))) * 2.0 - 1.0;
+  vec3 inv = 1.0 / mix(dir, sgn * 1e-8, lessThan(abs(dir), vec3(1e-8)));
+  vec3 t0 = (uFieldMin - o) * inv, t1 = (uFieldMax - o) * inv;
+  vec3 lo = min(t0, t1), hi = max(t0, t1);
+  float tEnter = max(max(max(lo.x, lo.y), lo.z), 0.0);
+  float tExit = min(min(hi.x, hi.y), hi.z);
+  if (tExit <= tEnter) { outColor = vec4(0.0); return; }
+  const int STEPS = 160;
+  float dt = (tExit - tEnter) / float(STEPS);
+  // Per-pixel jitter of the first sample hides the slicing bands.
+  float jitter = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
+  float trans = 1.0;
+  for (int i = 0; i < STEPS; i++) {
+    vec3 p = o + dir * (tEnter + (float(i) + jitter) * dt);
+    trans *= exp(-uFieldDensity * uFieldGain * field(p) * dt);
+  }
+  float alpha = 1.0 - trans;
+  outColor = vec4(uFieldColor * alpha, alpha);
 }`;
 
 function hexToRgb(hex) {
@@ -397,7 +470,7 @@ export function initViewer(root) {
   const fovUniforms = {
     uFovViewProj: gl.getUniformLocation(fovProgram, 'uFovViewProj'),
     uFovColor: gl.getUniformLocation(fovProgram, 'uFovColor'),
-    uFovOpacity: gl.getUniformLocation(fovProgram, 'uFovOpacity'),
+    uFovGain: gl.getUniformLocation(fovProgram, 'uFovGain'),
   };
   function fovVao(buffer) {
     const v = gl.createVertexArray();
@@ -411,13 +484,27 @@ export function initViewer(root) {
     return v;
   }
   const fovFaceBuffer = gl.createBuffer(), fovEdgeBuffer = gl.createBuffer();
+  const fovRingBuffer = gl.createBuffer();
   const fovFaceVao = fovVao(fovFaceBuffer), fovEdgeVao = fovVao(fovEdgeBuffer);
+  const fovRingVao = fovVao(fovRingBuffer);
   let fovFaces = new Float32Array(0);
+  let fovField = null;   // {detectors, geometry, min, max} of the loaded run
+
+  const fovFieldProgram = linkProgram(gl, VERTEX_SRC, FOV_FIELD_FRAGMENT_SRC);
+  const fovFieldUniforms = {};
+  for (const name of [
+    'uFieldInvViewProj', 'uFieldDet', 'uFieldNDet', 'uFieldHalf', 'uFieldTan', 'uFieldMin',
+    'uFieldMax', 'uFieldIntersect', 'uFieldWeighted', 'uFieldColor', 'uFieldGain',
+    'uFieldDensity',
+  ]) {
+    fovFieldUniforms[name] = gl.getUniformLocation(fovFieldProgram, name);
+  }
+  // Extinction per metre at unit weight and unit gain (the 60% default): a
+  // ~9 m zenith column through one view reads as a soft half-tone.
+  const FOV_FIELD_DENSITY = 0.14;
   const CAMERA_NEAR = 0.05, CAMERA_FAR = 100;
   const RAY_STEPS = 200; // max samples per ray INSIDE the volume box
   const ADAPTIVE_STEPS = 64; // fast-preview step count while state.interacting
-  // Magenta: distinct from the amber detector crosses and from every
-  // colormap's ramp, so a box edge never reads as density.
 
   const uniforms = {};
   for (const name of [
@@ -643,7 +730,7 @@ export function initViewer(root) {
       drawMarkers(viewProj);
     }
     if (state.showFov && state.fovOpacity > 0 && state.meta && state.fovFaceVertexCount > 0) {
-      drawFov(viewProj);
+      drawFov(viewProj, invViewProj);
     }
     if (state.showBeams && state.beamOpacity > 0 && state.meta && state.beamVertexCount > 0) {
       drawBeams(viewProj);
@@ -738,46 +825,86 @@ export function initViewer(root) {
   }
 
   // Fields of view: drawn before the beams, so boxes inside a frustum read
-  // through its translucent walls. Walls are two-sided (no culling): the
-  // far inner wall is what gives the frustum its volume.
-  function drawFov(viewProj) {
+  // through it. Separate unweighted views are two-sided translucent walls
+  // (the far inner wall gives the frustum its volume); acceptance shading and
+  // the intersection are a volumetric field, outlined by the frustum edges or
+  // by the intersection's contour rings.
+  function drawFov(viewProj, invViewProj) {
+    const intersect = state.fovMode === 'intersection';
+    const rgb = hexToRgb(state.fovColor);
+    gl.enable(gl.BLEND);
+    if (intersect || state.fovWeighted) {
+      gl.useProgram(fovFieldProgram);
+      const u = fovFieldUniforms;
+      const dets = new Float32Array(4 * FOV_MAX_DETECTORS);
+      fovField.detectors.forEach((d, i) =>
+        dets.set([d.x, d.y, d.z, (d.az_deg || 0) * Math.PI / 180], 4 * i));
+      gl.uniformMatrix4fv(u.uFieldInvViewProj, false, invViewProj);
+      gl.uniform4fv(u.uFieldDet, dets);
+      gl.uniform1i(u.uFieldNDet, fovField.detectors.length);
+      gl.uniform1f(u.uFieldHalf, fovField.geometry.active_width_m / 2);
+      gl.uniform1f(u.uFieldTan, fovField.geometry.active_width_m / fovField.geometry.layer_gap_m);
+      gl.uniform3fv(u.uFieldMin, fovField.min);
+      gl.uniform3fv(u.uFieldMax, fovField.max);
+      gl.uniform1i(u.uFieldIntersect, intersect ? 1 : 0);
+      gl.uniform1i(u.uFieldWeighted, state.fovWeighted ? 1 : 0);
+      gl.uniform3fv(u.uFieldColor, rgb);
+      gl.uniform1f(u.uFieldGain, fovGain(state.fovOpacity));
+      gl.uniform1f(u.uFieldDensity, FOV_FIELD_DENSITY);
+      gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);   // premultiplied
+      gl.bindVertexArray(vao);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    }
     gl.useProgram(fovProgram);
     gl.uniformMatrix4fv(fovUniforms.uFovViewProj, false, viewProj);
-    gl.uniform3fv(fovUniforms.uFovColor, hexToRgb(state.fovColor));
-    gl.uniform1f(fovUniforms.uFovOpacity, state.fovOpacity);
-    gl.enable(gl.BLEND);
+    gl.uniform3fv(fovUniforms.uFovColor, rgb);
+    gl.uniform1f(fovUniforms.uFovGain, fovGain(state.fovOpacity));
     gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-    gl.bindBuffer(gl.ARRAY_BUFFER, fovFaceBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, sortedBeamFaces(fovFaces, viewProj, FOV_STRIDE), gl.DYNAMIC_DRAW);
-    gl.bindVertexArray(fovFaceVao);
-    gl.drawArrays(gl.TRIANGLES, 0, state.fovFaceVertexCount);
-    gl.bindVertexArray(fovEdgeVao);
-    gl.drawArrays(gl.LINES, 0, state.fovEdgeVertexCount);
+    if (!intersect && !state.fovWeighted) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, fovFaceBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, sortedBeamFaces(fovFaces, viewProj, FOV_STRIDE), gl.DYNAMIC_DRAW);
+      gl.bindVertexArray(fovFaceVao);
+      gl.drawArrays(gl.TRIANGLES, 0, state.fovFaceVertexCount);
+    }
+    gl.bindVertexArray(intersect ? fovRingVao : fovEdgeVao);
+    gl.drawArrays(gl.LINES, 0, intersect ? state.fovRingVertexCount : state.fovEdgeVertexCount);
     gl.disable(gl.BLEND);
     gl.bindVertexArray(null);
   }
 
   // Offered only when the run carries the tracker geometry; off by default,
-  // since the frusta are context for the volume rather than a result.
+  // since the frusta are context for the volume rather than a result. The
+  // intersection is offered only when two or more views actually overlap.
   function applyFov(meta) {
     const geometry = meta.detector_geometry;
     const detectors = meta.detectors || [];
     const available = !!geometry && detectors.length > 0;
+    if (available && detectors.length > FOV_MAX_DETECTORS) {
+      throw new Error(`fields of view support at most ${FOV_MAX_DETECTORS} detector positions`);
+    }
     const { min, extent } = worldBounds();
+    const zTop = min[2] + extent[2];
     const built = available
-      ? fovGeometry(detectors, geometry, min[2] + extent[2])
+      ? fovGeometry(detectors, geometry, zTop)
       : { faces: new Float32Array(0), edges: new Float32Array(0) };
+    const rings = available && detectors.length > 1
+      ? fovIntersectionRings(detectors, geometry, zTop) : new Float32Array(0);
     fovFaces = built.faces;
+    fovField = available ? { detectors, geometry, ...fovFieldBounds(detectors, geometry, zTop) } : null;
     state.fovFaceVertexCount = fovFaces.length / FOV_STRIDE;
     state.fovEdgeVertexCount = built.edges.length / FOV_STRIDE;
+    state.fovRingVertexCount = rings.length / FOV_STRIDE;
     gl.bindBuffer(gl.ARRAY_BUFFER, fovEdgeBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, built.edges, gl.STATIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, fovRingBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, rings, gl.STATIC_DRAW);
     state.showFov = false;
+    state.fovMode = 'separate';
     root.querySelector('#fov-control').hidden = !available;
     root.querySelector('#toggle-fov').checked = false;
-    const legendEl = root.querySelector('#fov-legend');
-    legendEl.textContent = available ? fovLegendText(geometry) : '';
-    legendEl.hidden = true;
+    const modeEl = root.querySelector('#fov-mode');
+    modeEl.value = 'separate';
+    modeEl.querySelector('option[value="intersection"]').disabled = state.fovRingVertexCount === 0;
     syncOverlayCards();
   }
 
@@ -795,7 +922,9 @@ export function initViewer(root) {
     legend.style.setProperty('--beam-swatch', state.beamColor);
     legend.style.setProperty('--fov-swatch', state.fovColor);
     const fovLegend = root.querySelector('#fov-legend');
-    fovLegend.hidden = !(state.showFov && fovLegend.textContent);
+    fovLegend.textContent = fovField
+      ? fovLegendText(fovField.geometry, { mode: state.fovMode, weighted: state.fovWeighted }) : '';
+    fovLegend.hidden = !(state.showFov && fovField);
   }
 
   // A run without a fitted beam model hides the control and
@@ -1220,6 +1349,14 @@ export function initViewer(root) {
     const value = Number(ev.target.value);
     root.querySelector('#fov-opacity-readout').textContent = `${Math.round(100 * value)}%`;
     commit({ fovOpacity: value });
+  });
+  root.querySelector('#fov-mode').addEventListener('change', (ev) => {
+    commit({ fovMode: ev.target.value });
+    syncOverlayCards();
+  });
+  root.querySelector('#fov-weighted').addEventListener('change', (ev) => {
+    commit({ fovWeighted: ev.target.checked });
+    syncOverlayCards();
   });
   root.querySelector('#fov-color').addEventListener('input', (ev) => {
     commit({ fovColor: ev.target.value });

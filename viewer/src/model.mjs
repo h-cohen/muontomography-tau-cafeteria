@@ -63,17 +63,20 @@ export function createState() {
     // Fitted beam boxes (meta.beams): shown by default whenever a run has
     // them; loadRun sets both fields.
     showBeams: false,
-    beamOpacity: 1,
-    beamColor: '#f24dd9',
+    beamOpacity: 0.5,
+    beamColor: '#9ca3af',
     beamVertexCount: 0,
     beamFaceVertexCount: 0,
     // Detector fields of view (meta.detector_geometry): offered when the run
     // carries the tracker geometry, off until the user asks for them.
     showFov: false,
-    fovOpacity: 1,
+    fovOpacity: 0.6, // fov.mjs fovGain: 60% draws the designed weights, 100% is solid
     fovColor: '#7cc7ff',
+    fovMode: 'separate', // 'separate' frusta or their 'intersection'
+    fovWeighted: true, // shade by detector acceptance rather than a flat fill
     fovFaceVertexCount: 0,
     fovEdgeVertexCount: 0,
+    fovRingVertexCount: 0,
     window: null,
   };
 }
@@ -92,6 +95,7 @@ export const EFFECTS = {
   showDetectors: RENDER_ONLY, showBeams: RENDER_ONLY,
   beamOpacity: RENDER_ONLY, beamColor: RENDER_ONLY,
   showFov: RENDER_ONLY, fovOpacity: RENDER_ONLY, fovColor: RENDER_ONLY,
+  fovMode: RENDER_ONLY, fovWeighted: RENDER_ONLY,
   window: ['histogram', 'render'],
   transferStops: ['lut', 'render'],
 };

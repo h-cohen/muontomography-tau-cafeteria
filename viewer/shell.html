@@ -80,6 +80,8 @@
   .overlay-row > label{flex:0 0 4.6em;margin:0;font-size:12px;}
   .overlay-row input[type="range"]{flex:1 1 auto;width:auto;min-width:0;accent-color:var(--swatch);}
   .overlay-row select{flex:1 1 auto;min-width:0;}
+  .overlay-check{display:flex;align-items:center;gap:8px;margin:8px 0 0;font-size:12px;cursor:pointer;}
+  .overlay-check input{width:auto;margin:0;accent-color:var(--swatch);}
   .overlay-note{margin-top:6px;font-size:11px;color:var(--text-dim);}
   .swatch{
     -webkit-appearance:none;appearance:none;flex:0 0 auto;width:22px;height:22px;
@@ -94,7 +96,7 @@
     content:"";display:inline-block;width:8px;height:8px;margin-right:6px;
     border-radius:2px;vertical-align:baseline;
   }
-  #beam-legend::before{background:var(--beam-swatch,#f24dd9);}
+  #beam-legend::before{background:var(--beam-swatch,#9ca3af);}
   #fov-legend::before{background:var(--fov-swatch,#7cc7ff);}
 
   .clip-row{display:flex;align-items:center;gap:6px;margin:4px 0;}
@@ -290,11 +292,11 @@
         <div id="beams-control" class="overlay-card" hidden>
           <div class="overlay-head">
             <label title="Box geometry fitted to angular opacity; voxel thickness is a separate reconstruction diagnostic."><input id="toggle-beams" type="checkbox"> Fitted beams</label>
-            <input id="beam-color" class="swatch" type="color" value="#f24dd9" title="beam color" aria-label="beam color">
+            <input id="beam-color" class="swatch" type="color" value="#9ca3af" title="beam color" aria-label="beam color">
           </div>
           <div class="overlay-body">
             <div class="overlay-row"><label for="beam-model">fit</label><select id="beam-model"></select></div>
-            <div class="overlay-row"><label for="beam-opacity">opacity</label><input id="beam-opacity" type="range" min="0" max="1" step="0.01" value="1"><span id="beam-opacity-readout" class="mono val">100%</span></div>
+            <div class="overlay-row"><label for="beam-opacity">opacity</label><input id="beam-opacity" type="range" min="0" max="1" step="0.01" value="0.5"><span id="beam-opacity-readout" class="mono val">50%</span></div>
           </div>
         </div>
         <div id="fov-control" class="overlay-card" hidden>
@@ -303,8 +305,10 @@
             <input id="fov-color" class="swatch" type="color" value="#7cc7ff" title="field-of-view color" aria-label="field-of-view color">
           </div>
           <div class="overlay-body">
-            <div class="overlay-row"><label for="fov-opacity">opacity</label><input id="fov-opacity" type="range" min="0" max="1" step="0.01" value="1"><span id="fov-opacity-readout" class="mono val">100%</span></div>
-            <div class="overlay-note">Detector acceptance frusta, rotated by each fitted azimuth.</div>
+            <div class="overlay-row"><label for="fov-mode">show</label><select id="fov-mode"><option value="separate" selected>Separate views</option><option value="intersection">Intersection only</option></select></div>
+            <div class="overlay-row"><label for="fov-opacity">opacity</label><input id="fov-opacity" type="range" min="0" max="1" step="0.01" value="0.6"><span id="fov-opacity-readout" class="mono val">60%</span></div>
+            <label class="overlay-check" title="Brightness follows the tracker's relative acceptance per solid angle for the direction from each detector centre: (1-|tx|/T)(1-|ty|/T)(1+tx²+ty²)^-1.5, T = W/D. Intersection: geometric mean over the views."><input id="fov-weighted" type="checkbox" checked> Shade by acceptance</label>
+            <div class="overlay-note">Detector acceptance frusta, rotated by each fitted azimuth; brighter where the tracker is more sensitive.</div>
           </div>
         </div>
         <button id="export-png-btn">Export PNG</button>

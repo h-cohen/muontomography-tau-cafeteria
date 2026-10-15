@@ -51,14 +51,16 @@ def test_no_beams_block_hides_the_control_and_legend(page, dist_path, run_fixtur
 
 def test_beam_opacity_and_color_change_only_the_overlay(page, dist_path, run_fixture):
     _load(page, dist_path, run_fixture(beams=BEAMS))
+    assert page.locator("#beam-opacity-readout").inner_text() == "50%"
+    assert page.locator("#beam-color").input_value() == "#9ca3af"
     original = canvas_data(page)
     page.locator("#beam-opacity").evaluate(
-        "el => { el.value = '0.5'; el.dispatchEvent(new Event('input')); }"
+        "el => { el.value = '0.8'; el.dispatchEvent(new Event('input')); }"
     )
     page.wait_for_timeout(50)
     half = canvas_data(page)
     assert half != original
-    assert page.locator("#beam-opacity-readout").inner_text() == "50%"
+    assert page.locator("#beam-opacity-readout").inner_text() == "80%"
     page.locator("#beam-opacity").evaluate(
         "el => { el.value = '0'; el.dispatchEvent(new Event('input')); }"
     )
