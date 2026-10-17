@@ -184,6 +184,48 @@ class PhysicsSettings:
 
 
 @dataclass(frozen=True)
+class RawSettings:
+    """The DAQ's event-level cluster dumps (`.data`), an alternative source of one
+    exposure's angular counts. Lengths are centimetres, as measured."""
+
+    exposures: dict  # exposure id -> directory of its .data files
+    channel_bars: tuple  # per ASIC: the DAQ channel read by bar 0, 1, ...
+    tx_asics: tuple  # (lower, upper) ASIC pair giving tan(theta_x) = (upper - lower) / gap
+    ty_asics: tuple  # (lower, upper) ASIC pair giving tan(theta_y)
+    gap_cm: tuple  # layer gap of the tx pair and of the ty pair
+    bar_pitch_cm: float  # bar centre b sits at pitch * (b + 1)
+    pedestal_hg: tuple  # per ASIC: high-gain charge of a channel with no signal
+    clock_divisor: float  # run-clock "seconds" per second of data
+
+    def __post_init__(self):
+        if len(self.channel_bars) != 4 or any(len(c) != len(set(c)) for c in self.channel_bars):
+            raise ValueError("raw: channel_bars needs four lists of distinct channels")
+        if len({len(c) for c in self.channel_bars}) != 1:
+            raise ValueError("raw: every ASIC must read the same number of bars")
+        if sorted((*self.tx_asics, *self.ty_asics)) != [0, 1, 2, 3]:
+            raise ValueError("raw: tx_asics and ty_asics must name the four ASICs once each")
+        if len(self.pedestal_hg) != 4 or len(self.gap_cm) != 2 or min(self.gap_cm) <= 0:
+            raise ValueError("raw: need four pedestals and two positive layer gaps")
+        if not self.bar_pitch_cm > 0 or not self.clock_divisor > 0:
+            raise ValueError("raw: pitch and clock divisor must be positive")
+
+
+@dataclass(frozen=True)
+class ViewSettings:
+    """The 2D angular beam view (`cafetomo beams2d`). Presentation only: nothing here
+    feeds an inference, and the count floors only decide which bins are drawn."""
+
+    rebin_factor: int = 5  # 0.025 tan bins from the 0.005 ingest bins
+    min_counts: float = 150.0  # position counts below which a bin is not drawn
+    min_sky_counts: float = 100.0
+    smooth_bins: float = 1.0  # Gaussian sigma of the smoothed panels, in view bins
+    background_bins: float = 12.0  # sigma of the broad background removed in the contrast panel
+    t_display: float = 0.9  # drawn out to |tan| = t_display
+    lam_range: tuple = (0.03, 0.30)
+    contrast_range: float = 0.03
+
+
+@dataclass(frozen=True)
 class Config:
     site: str
     data_dir: Path
@@ -201,6 +243,8 @@ class Config:
     uncertainty: UncertaintySettings = field(default_factory=UncertaintySettings)
     validation: ValidationSettings = field(default_factory=ValidationSettings)
     physics: PhysicsSettings = field(default_factory=PhysicsSettings)
+    raw: RawSettings | None = None
+    view: ViewSettings = field(default_factory=ViewSettings)
 
     def exposure(self, eid: str) -> Exposure:
         for e in self.exposures:
@@ -250,6 +294,14 @@ def _build(cls, raw: dict | None, section: str):
     return cls(**{k: _tuples(v) for k, v in raw.items()})
 
 
+def _load_raw(raw: dict | None, base: Path) -> RawSettings | None:
+    if raw is None:
+        return None
+    settings = _build(RawSettings, raw, "raw")
+    dirs = {k: str((base / v).resolve()) for k, v in settings.exposures.items()}
+    return replace(settings, exposures=dirs)
+
+
 def load_config(path: str | Path, pose_file: str | Path | None = None) -> Config:
     path = Path(path).resolve()
     raw = yaml.safe_load(path.read_text())
@@ -265,8 +317,9 @@ def load_config(path: str | Path, pose_file: str | Path | None = None) -> Config
         "uncertainty": UncertaintySettings,
         "validation": ValidationSettings,
         "physics": PhysicsSettings,
+        "view": ViewSettings,
     }
-    top = {"site", "data_dir", "detector", "sky_reference", "exposures", *sections}
+    top = {"site", "data_dir", "detector", "sky_reference", "exposures", "raw", *sections}
     unknown = sorted(set(raw) - top)
     if unknown:
         raise ValueError(f"config {path.name}: unknown top-level keys {unknown}")
@@ -285,6 +338,7 @@ def load_config(path: str | Path, pose_file: str | Path | None = None) -> Config
         detector=_build(Detector, raw["detector"], "detector"),
         sky_reference=_build(SkyReference, raw["sky_reference"], "sky_reference"),
         exposures=exposures,
+        raw=_load_raw(raw.get("raw"), path.parent),
         **{k: _build(cls, raw.get(k), k) for k, cls in sections.items()},
     )
     if pose_file is not None:

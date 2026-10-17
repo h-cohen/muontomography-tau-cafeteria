@@ -26,6 +26,32 @@ exposures:
     # `cafetomo selfcal` into results/pose.json, which is the pose used downstream.
     pose: {x: 1.75, y: 0.0, z: 0.0, az_deg: 0.0}
 
+# Event-level DAQ cluster dumps (`.data`), an alternative source of an exposure's counts
+# (`cafetomo ingest-raw`); the baseline reads the pre-binned ROOT histograms above.
+raw:
+  exposures:
+    pos0: ../../../01_data/processed/tau_cafeteria_raw_filtered/pos0
+  # Per ASIC, the DAQ channel read by bar 0..22 (engineers' lookup). Validated on the
+  # pos0 data: 97% of two-bar clusters are adjacent bars, 0.1% of rows touch an unmapped
+  # channel; the identity map would give 0.2% adjacency.
+  channel_bars:
+    - [28, 30, 3, 31, 29, 0, 24, 26, 7, 27, 25, 4, 20, 22, 11, 23, 21, 8, 16, 18, 15, 19, 17]
+    - [3, 31, 2, 0, 28, 1, 7, 27, 6, 4, 24, 5, 11, 23, 10, 8, 20, 9, 15, 19, 14, 12, 16]
+    - [19, 15, 18, 16, 12, 17, 23, 11, 22, 20, 8, 21, 27, 7, 26, 24, 4, 25, 31, 3, 30, 28, 0]
+    - [12, 14, 19, 15, 13, 16, 8, 10, 23, 11, 9, 20, 4, 6, 27, 7, 5, 24, 0, 2, 31, 3, 1]
+  # ASIC pairs (lower, upper) behind the ROOT axes: tx is ASICs 0 -> 1, ty is ASICs 3 -> 2,
+  # each (upper - lower) / gap. Gaps and pairing are those whose tangent combs coincide
+  # bin for bin with the ROOT txty marginals (chi2 per bin ~2 at the minimum, >100 at
+  # +-0.2 cm). The gaps differ from the 38.9 cm acceptance-edge value of `detector`.
+  tx_asics: [0, 1]
+  ty_asics: [3, 2]
+  gap_cm: [37.0, 36.8]
+  bar_pitch_cm: 1.6     # bar centre b at 1.6 (b + 1); matches the ROOT hit-position peaks
+  pedestal_hg: [2207, 2210, 2232, 2224]   # median high-gain charge of channels with no hit flag
+  # The run clock reads 50x too long: a daily file spans 4.32e6 clock-seconds, and 50x
+  # fewer gives 86 404 s per file and the ROOT track rate (7.2 Hz).
+  clock_divisor: 50.0
+
 binning:          # the ROOT bins (0.005 tan), cropped to +-1.25
   t_max: 1.25
   n_bins: 500

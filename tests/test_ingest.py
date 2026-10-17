@@ -1,3 +1,4 @@
+import json
 from dataclasses import replace
 
 import numpy as np
@@ -6,7 +7,13 @@ import uproot
 
 from cafetomo.angular import load_counts
 from cafetomo.config import Binning
-from cafetomo.ingest import ingest, live_times, read_live_time, read_root_counts
+from cafetomo.ingest import (
+    ingest,
+    interpolated_live_time,
+    live_times,
+    read_live_time,
+    read_root_counts,
+)
 
 
 def _write_th2(path, values, edges, with_dt=False):
@@ -101,3 +108,44 @@ def test_missing_dt_raises(tmp_path):
         out["txty"] = (np.ones((800, 800)), np.linspace(-2, 2, 801), np.linspace(-2, 2, 801))
     with pytest.raises((ValueError, KeyError), match="dT"):
         read_live_time(f)
+
+
+def test_interpolated_live_time_removes_the_bin_centre_bias():
+    rng = np.random.default_rng(1)
+    dt = rng.exponential(0.14, 400_000)
+    edges = np.arange(0.0, 20.0001, 0.05)
+    counts, _ = np.histogram(dt, edges)
+    centre = float((0.5 * (edges[:-1] + edges[1:]) * counts).sum())
+    assert centre / dt.sum() - 1 > 0.008  # bin centres overstate the time by ~1%
+    assert interpolated_live_time(counts, edges) == pytest.approx(dt.sum(), rel=1e-3)
+
+
+def test_interpolated_live_time_is_exact_for_one_bin_of_flat_density():
+    assert interpolated_live_time(np.array([10.0]), np.array([0.0, 2.0])) == pytest.approx(10.0)
+
+
+def test_ingest_with_raw_counts_replaces_only_those_exposures(cfg, tmp_path):
+    from cafetomo.angular import AngularHist
+    from cafetomo.rawdata import FileCounts, RawIngest
+
+    edges = np.linspace(-2, 2, 801)
+    data = tmp_path / "data"
+    data.mkdir()
+    for i, name in enumerate([e.root_file for e in cfg.exposures] + [cfg.sky_reference.root_file]):
+        _write_th2(data / name, np.full((800, 800), i + 1.0), edges, with_dt=True)
+    cut = cfg.binning.edges()
+    hist = AngularHist(np.full((500, 500), 5, dtype=np.int64), cut, cut, "txty")
+    file = FileCounts("f.data", np.zeros((800, 800), np.int64), 10, 9, 1, 0, 0, 12.5)
+    raw = {"pos0": RawIngest(hist, 9 * 500 * 500, 12.5, (file,), 0)}
+    c = replace(cfg, data_dir=data, raw=replace(cfg.raw, exposures={"pos0": str(tmp_path)}))
+    res = ingest(c, tmp_path / "out", raw)
+    assert (load_counts(tmp_path / "out" / "counts_pos0.npz").values == 5).all()
+    assert (load_counts(tmp_path / "out" / "counts_pos1.npz").values == 2).all()
+    live = live_times(tmp_path / "out", ["pos0", "pos1"])
+    assert live["pos0"] == 12.5 and live["pos1"] < 2 * 0.5 + 4 * 1.5  # below the bin-centre sum
+    meta = json.loads((tmp_path / "out" / "meta.json").read_text())["exposures"]
+    assert meta["pos0"]["live_time_estimator"] == "exact clock sum"
+    assert meta["SKY"]["live_time_estimator"] == "interpolated dT sum"
+    assert [r.source_id for r in res] == ["pos0", "pos1", "SKY"]
+    with pytest.raises(ValueError, match="unknown exposure"):
+        ingest(c, tmp_path / "out2", {"nope": raw["pos0"]})

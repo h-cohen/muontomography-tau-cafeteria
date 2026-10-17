@@ -15,11 +15,15 @@ import json
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 from cafetomo.angular import AngularHist, save_counts
 from cafetomo.config import Config
+
+if TYPE_CHECKING:
+    from cafetomo.rawdata import RawIngest
 
 
 @dataclass(frozen=True)
@@ -43,6 +47,17 @@ def _crop_index(file_edges: np.ndarray, target: np.ndarray, axis: str) -> int:
     return i0
 
 
+def crop_counts(
+    values: np.ndarray, xe: np.ndarray, ye: np.ndarray, name: str, edges: np.ndarray
+) -> AngularHist:
+    """Crop counts on bin edges (xe, ye) to `edges`, which must be a run of the same edges."""
+    i0 = _crop_index(xe, edges, "x")
+    j0 = _crop_index(ye, edges, "y")
+    n = edges.size - 1
+    kept = np.round(values[i0 : i0 + n, j0 : j0 + n]).astype(np.int64)
+    return AngularHist(values=kept, xedges=edges.copy(), yedges=edges.copy(), name=name)
+
+
 def read_root_counts(path: Path, hist: str, edges: np.ndarray) -> tuple[AngularHist, int]:
     """Load a ROOT TH2 and crop it to `edges`. Returns (hist, total counts in file)."""
     import uproot
@@ -55,17 +70,32 @@ def read_root_counts(path: Path, hist: str, edges: np.ndarray) -> tuple[AngularH
 
     if not np.allclose(values, np.round(values)) or (values < 0).any():
         raise ValueError(f"{Path(path).name}:{hist} is not a histogram of non-negative counts")
-    i0 = _crop_index(xe, edges, "x")
-    j0 = _crop_index(ye, edges, "y")
-    n = edges.size - 1
-    kept = np.round(values[i0 : i0 + n, j0 : j0 + n]).astype(np.int64)
-    return (
-        AngularHist(values=kept, xedges=edges.copy(), yedges=edges.copy(), name=hist),
-        int(round(values.sum())),
-    )
+    return crop_counts(values, xe, ye, hist, edges), int(round(values.sum()))
 
 
-def read_live_time(path: Path, hist: str = "dT") -> float:
+def interpolated_live_time(counts: np.ndarray, edges: np.ndarray) -> float:
+    """Sum of the intervals in a histogram, placing each at its mean within its bin.
+
+    Bin centres overstate the time of a falling distribution (by ~1% for 0.05 s bins and
+    a 0.14 s mean interval). Here the density inside a bin is exponential with the log
+    slope of its neighbours, whose mean position sits below the centre."""
+    n = np.asarray(counts, dtype=np.float64)
+    e = np.asarray(edges, dtype=np.float64)
+    c = 0.5 * (e[:-1] + e[1:])
+    w = np.diff(e)
+    lo = np.concatenate([[0], np.arange(n.size - 1)])
+    hi = np.concatenate([np.arange(1, n.size), [n.size - 1]])
+    both = (n[lo] > 0) & (n[hi] > 0) & (lo != hi)
+    slope = np.zeros_like(n)
+    slope[both] = np.log(n[lo[both]] / n[hi[both]]) / (c[hi[both]] - c[lo[both]])
+    x = np.clip(slope * w, -50.0, 50.0)
+    small = np.abs(x) < 1e-6
+    safe = np.where(small, 1.0, x)
+    mean_offset = w * np.where(small, 0.5 - x / 12.0, 1.0 / safe - 1.0 / np.expm1(safe))
+    return float((n * (e[:-1] + mean_offset)).sum())
+
+
+def read_live_time(path: Path, hist: str = "dT", interpolate: bool = False) -> float:
     """Live time of a run: the sum of its inter-event intervals.
 
     `dT` is the DAQ's histogram of time between consecutive tracks (one entry
@@ -89,16 +119,29 @@ def read_live_time(path: Path, hist: str = "dT") -> float:
             f"{Path(path).name}:{hist} has {overflow:g} overflow intervals; "
             "their durations are unknown, so the live time is not measured"
         )
+    if interpolate:
+        return interpolated_live_time(v, e)
     return float((0.5 * (e[:-1] + e[1:]) * v).sum())
 
 
-def ingest(cfg: Config, out_dir: Path) -> list[IngestResult]:
+def ingest(
+    cfg: Config, out_dir: Path, raw: dict[str, RawIngest] | None = None
+) -> list[IngestResult]:
     """Write counts_<id>.npz for every exposure and the open-sky reference.
+
+    Exposures named in `raw` take their counts and live time from the event-level
+    files (`rawdata.ingest_raw`) instead of the ROOT histograms. Their live time is
+    exact, so the ROOT sources then use the interpolated `dT` sum (the bin-centre sum
+    is ~1% high) and every gauge ratio keeps one definition.
 
     Every source is read and validated before anything is written, so a failure
     never leaves a half-ingested directory.
     """
     out_dir = Path(out_dir)
+    raw = raw or {}
+    unknown = sorted(set(raw) - set(cfg.position_ids))
+    if unknown:
+        raise ValueError(f"raw counts for unknown exposure(s) {unknown}")
     edges = cfg.binning.edges()
     sources: list[tuple[str, str, str, dict]] = [
         (e.id, e.root_file, e.root_hist, {"pose": vars(e.pose)}) for e in cfg.exposures
@@ -108,10 +151,33 @@ def ingest(cfg: Config, out_dir: Path) -> list[IngestResult]:
 
     loaded = []
     for sid, fname, hist, meta in sources:
+        if sid in raw:
+            r = raw[sid]
+            folder = Path(cfg.raw.exposures[sid])
+            meta = dict(
+                meta,
+                raw_files=[f.name for f in r.files],
+                raw_rows=sum(f.n_rows for f in r.files),
+                raw_rows_without_track=sum(f.n_no_cluster for f in r.files),
+                raw_clock_resets=sum(f.n_clock_resets for f in r.files),
+                raw_clock_divisor=cfg.raw.clock_divisor,
+            )
+            loaded.append(
+                (
+                    sid,
+                    folder.name,
+                    "txty (raw clusters)",
+                    meta,
+                    r.hist,
+                    r.total_in_files,
+                    r.live_time_s,
+                )
+            )
+            continue
         path = cfg.data_dir / fname
         h, total = read_root_counts(path, hist, edges)
         try:
-            live = read_live_time(path)
+            live = read_live_time(path, interpolate=bool(raw))
         except KeyError as exc:
             raise ValueError(
                 f"{path.name}: no 'dT' histogram; the absolute opacity gauge "
@@ -132,6 +198,13 @@ def ingest(cfg: Config, out_dir: Path) -> list[IngestResult]:
                 root_hist=hist,
                 total_in_file=total,
                 live_time_s=live,
+                live_time_estimator=(
+                    "exact clock sum"
+                    if sid in raw
+                    else "interpolated dT sum"
+                    if raw
+                    else "dT bin-centre sum"
+                ),
             ),
         )
         results.append(IngestResult(sid, out, total, h.total, live))
