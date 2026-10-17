@@ -27,7 +27,7 @@ FIGS    := setup opacity height depth
 FIGPDF  := $(FIGS:%=$(GEN)/figures/%.pdf)
 AUTHORFIG := $(wildcard paper/figures/voxels.png paper/figures/room_voxels.pdf paper/figures/room_voxels.png)
 
-.PHONY: all ingest selfcal opacity reconstruct analysis depthcheck arraydepth validation uncertainty export figures numbers paper viewer test clean arxiv
+.PHONY: all ingest ingest-raw beams2d selfcal opacity reconstruct analysis depthcheck arraydepth validation uncertainty export figures numbers paper viewer test clean arxiv
 .DELETE_ON_ERROR:
 
 all: viewer
@@ -42,6 +42,17 @@ $(RESULTS)/inputs.json: configs/paper-inputs.json
 ingest: $(INGEST)
 $(INGEST) &: $(CONFIG) $(wildcard data/*.root) $(CODE)
 	$(CLI) ingest --config $(CONFIG) --out $(RUNS)/ingest --results $(RESULTS)
+
+# Raw-cluster pos0 (see README "Raw event data"); never part of `all`, never read by the paper.
+RAWRUNS := runs/raw
+ingest-raw: $(RAWRUNS)/ingest/meta.json
+$(RAWRUNS)/ingest/meta.json: $(CONFIG) $(wildcard data/*.root) $(CODE)
+	$(CLI) ingest-raw --config $(CONFIG) --out $(RAWRUNS)/ingest --cache $(RAWRUNS)/cache \
+	  --jobs $(or $(JOBS),4)
+
+beams2d: $(RAWRUNS)/beams2d/meta.json
+$(RAWRUNS)/beams2d/meta.json: $(RAWRUNS)/ingest/meta.json $(CODE)
+	$(CLI) beams2d --config $(CONFIG) --ingest $(RAWRUNS)/ingest --out $(RAWRUNS)/beams2d
 
 selfcal: $(POSE)
 $(POSE): $(INGEST) $(CODE)

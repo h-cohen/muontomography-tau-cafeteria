@@ -113,6 +113,25 @@ changed baseline results require a fresh reviewed selection before compilation.
 | Compile paper | `make paper` | `paper/generated/paper.pdf` |
 | Package arXiv sources | `make arxiv` | `paper/generated/arxiv.tar.gz` |
 
+## Raw event data
+
+The ROOT histograms are the baseline. `cafetomo ingest-raw` instead builds pos0's counts and
+live time from the DAQ's event-level `.data` files (directory set in `configs/cafeteria.yaml`
+under `raw:`), keeping the sky and pos1 from ROOT, and `cafetomo beams2d` draws the
+sky-divided angular opacity image:
+
+```bash
+make ingest-raw JOBS=5   # runs/raw/ingest/ (a full ingest directory; ~1.5 min on 5 cores)
+make beams2d             # runs/raw/beams2d/pos0_beams2d.{png,npz,json}
+```
+
+Reconstruction follows the DAQ (charge-centroid hit positions; tangent pairs and layer gaps
+fixed by matching the ROOT tangent combs), and the result reproduces the ROOT pos0 histogram
+(chi2 per bin 0.3-0.7). The run clock reads 50x too long (`clock_divisor`). With raw counts the
+ROOT sources' live times use an interpolated `dT` sum, since bin centres overstate them by
+~1%. These outputs are separate from the paper baseline; `runs/raw/ingest` can be passed to
+the later stages as `--ingest`.
+
 ## Build and open the viewer
 
 ```bash

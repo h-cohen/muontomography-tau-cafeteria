@@ -79,6 +79,50 @@ def cmd_ingest(args) -> None:
     _write_json(Path(args.results) / "data.json", doc)
 
 
+def cmd_ingest_raw(args) -> None:
+    """An ingest directory in which each exposure with raw files takes its counts and
+    live time from them (see `rawdata`); the other sources keep their ROOT histograms."""
+    from cafetomo.ingest import ingest
+    from cafetomo.provenance import write_meta
+    from cafetomo.rawdata import ingest_raw
+
+    cfg = _cfg(args)
+    if cfg.raw is None:
+        raise SystemExit(f"{args.config}: no raw section")
+    out = Path(args.out)
+    cache = Path(args.cache or out.parent / "cache")
+    raw = {pid: ingest_raw(cfg, pid, cache, jobs=int(args.jobs or 1)) for pid in cfg.raw.exposures}
+    ingest(cfg, out, raw)
+    exposures = json.loads((out / "meta.json").read_text())["exposures"]
+    write_meta(out, config_path=args.config, stage="ingest-raw", extra={"exposures": exposures})
+
+
+def cmd_beams2d(args) -> None:
+    """The 2D angular opacity view (`beamview`) of each position, or of `--exposure`,
+    from an ingest directory."""
+    from cafetomo.angular import load_counts
+    from cafetomo.beamview import opacity_view, render
+    from cafetomo.ingest import live_times
+    from cafetomo.provenance import write_meta
+
+    cfg = _cfg(args)
+    ingest = Path(args.ingest)
+    ids = [args.exposure] if args.exposure else list(cfg.position_ids)
+    sky_id = cfg.sky_reference.id
+    live = live_times(ingest, [sky_id, *ids])
+    sky = load_counts(ingest / f"counts_{sky_id}.npz")
+    for pid in ids:
+        view = opacity_view(
+            load_counts(ingest / f"counts_{pid}.npz"),
+            sky,
+            live[pid] / live[sky_id],
+            cfg.view,
+            cfg.opacity.t_floor,
+        )
+        render(view, cfg.view, Path(args.out), pid)
+    write_meta(args.out, config_path=args.config, stage="beams2d", extra={"exposures": ids})
+
+
 def cmd_selfcal(args) -> None:
     from cafetomo.selfcal import fit_pose, pose_bootstrap, pose_result
 
@@ -377,12 +421,14 @@ def main(argv: list[str] | None = None) -> None:
         # Without --pose a stage runs on the config's prior pose; the Makefile
         # passes the fitted one to every stage after selfcal.
         for o in opts:
-            p.add_argument(f"--{o}", required=o not in {"cache", "pose"})
+            p.add_argument(f"--{o}", required=o not in {"cache", "pose", "jobs", "exposure"})
 
     stage(
         "internal-validate", cmd_internal_validate, "config", "ingest", "settings", "out", "cache"
     )
     stage("ingest", cmd_ingest, "config", "out", "results")
+    stage("ingest-raw", cmd_ingest_raw, "config", "out", "cache", "jobs")
+    stage("beams2d", cmd_beams2d, "config", "ingest", "out", "exposure")
     stage("selfcal", cmd_selfcal, "config", "ingest", "out")
     stage("opacity", cmd_opacity, "config", "pose", "ingest", "out")
     stage("reconstruct", cmd_reconstruct, "config", "pose", "opacity", "out", "results", "cache")
