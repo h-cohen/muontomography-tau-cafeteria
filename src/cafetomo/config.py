@@ -213,7 +213,11 @@ class RawSettings:
 @dataclass(frozen=True)
 class ViewSettings:
     """The 2D angular beam view (`cafetomo beams2d`). Presentation only: nothing here
-    feeds an inference, and the count floors only decide which bins are drawn."""
+    feeds an inference, and the count floors only decide which bins are drawn.
+
+    The floors are deliberately strict: the acceptance is a product of two falling spans, so
+    the corners of the square fall below them and the drawn region is rounded. The noisy
+    corners (sigma >~ 0.1 per bin) are left out on purpose."""
 
     rebin_factor: int = 5  # 0.025 tan bins from the 0.005 ingest bins
     min_counts: float = 150.0  # position counts below which a bin is not drawn

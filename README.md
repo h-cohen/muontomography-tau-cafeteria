@@ -129,7 +129,7 @@ Reconstruction follows the DAQ (charge-centroid hit positions; tangent pairs and
 fixed by matching the ROOT tangent combs), and the result reproduces the ROOT pos0 histogram
 (chi2 per bin 0.3-0.7). The run clock reads 50x too long (`clock_divisor`). With raw counts the
 ROOT sources' live times use an interpolated `dT` sum, since bin centres overstate them by
-~1%. These outputs are separate from the paper baseline; `runs/raw/ingest` can be passed to
+~1%. The drawn region is round, not square, by choice: the `view:` count floors (150 pos0 and 100 sky counts per 0.025 bin) drop the low-acceptance corners, which are too noisy to read. These outputs are separate from the paper baseline; `runs/raw/ingest` can be passed to
 the later stages as `--ingest`.
 
 ## Build and open the viewer
