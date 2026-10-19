@@ -19,6 +19,9 @@ from cafetomo.config import Reconstruction
 from cafetomo.fitdata import FitData
 from cafetomo.forward import ForwardModel
 
+TV_SCALE_PERCENTILE = 95  # TV strength scales with this percentile of the positive voxels
+PROX_INNER_ITERATIONS = 10  # dual-projection steps per outer SIRT iteration
+
 
 def _update_offsets(
     resid: np.ndarray, w: np.ndarray, pos_of_row: np.ndarray, n_pos: int
@@ -136,7 +139,7 @@ def _div3(p: np.ndarray, z_weight: float) -> np.ndarray:
 
 
 def _prox_tv(
-    v: np.ndarray, gamma: float, zw: float, dual: np.ndarray, n_inner: int = 10
+    v: np.ndarray, gamma: float, zw: float, dual: np.ndarray, n_inner: int = PROX_INNER_ITERATIONS
 ) -> np.ndarray:
     """Chambolle dual projection for prox of gamma * ||grad .||_1 under x >= 0.
 
@@ -192,7 +195,7 @@ def sirt_tv(
             np.maximum(x, 0.0, out=x)
         if damp is not None:
             x /= damp
-        scale = float(np.percentile(x[x > 0], 95)) if (x > 0).any() else 0.0
+        scale = float(np.percentile(x[x > 0], TV_SCALE_PERCENTILE)) if (x > 0).any() else 0.0
         gamma = rc.tv_alpha * max(scale, 1e-9)
         x = _prox_tv(x.reshape(shape), gamma, rc.tv_z_weight, dual).ravel()
 

@@ -25,6 +25,8 @@ from cafetomo.inversion import solve
 from cafetomo.opacity import _poisson_replica, build_fit_data, poisson_sigma, solve_opacity
 from cafetomo.voxels import VoxelGrid, auto_grid
 
+POWELL_MAX_ITER = 60  # outer Powell iterations of the pose search
+
 
 @dataclass(frozen=True)
 class PoseFit:
@@ -200,7 +202,7 @@ def fit_pose(
         _scan_start(objective, cfg),
         method="Powell",
         bounds=bounds,
-        options={"xtol": 1e-3, "ftol": 1e-4, "maxiter": 60},
+        options={"xtol": 1e-3, "ftol": 1e-4, "maxiter": POWELL_MAX_ITER},
     )
     if not res.success or not np.isfinite(res.fun) or not np.all(np.isfinite(res.x)):
         raise RuntimeError(f"pose fit failed: {res.message}; objective={res.fun}, pose={res.x}")

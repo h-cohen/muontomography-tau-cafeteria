@@ -43,6 +43,7 @@ from cafetomo.sky import SkyGrid
 
 # The off-beam reference column for a lone beam sits half the ceiling's
 # 1.7 m beam pitch away: where the gap between neighbours would be centred.
+AT_BOUND_FRACTION = 0.01  # a parameter this close to a bound, as a fraction of the span, is at it
 _SINGLE_BEAM_OFF_M = 0.85
 
 _GH = (np.array([-np.sqrt(3.0), 0.0, np.sqrt(3.0)]), np.array([1 / 6, 2 / 3, 1 / 6]))
@@ -530,7 +531,7 @@ def _fit_once(
     # active_mask stays empty, so a parameter pinned by a bound stops a small
     # fraction of the span short of it: 1% of the span is "at the bound".
     span = hi - lo
-    at_bound = bool(np.any(np.minimum(fit.x - lo, hi - fit.x) < 1e-2 * span))
+    at_bound = bool(np.any(np.minimum(fit.x - lo, hi - fit.x) < AT_BOUND_FRACTION * span))
     dof = max(rows.n_rows - (len(fit.x) + X.shape[1]), 1)
     model = fixed + X @ coef
     background = bg @ coef[-bg.shape[1] :]

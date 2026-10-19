@@ -414,6 +414,12 @@ def cmd_numbers(args) -> None:
     write_numbers(Path(args.results), Path(args.out))
 
 
+def cmd_config_numbers(args) -> None:
+    from cafetomo.numbers import write_config_numbers
+
+    write_config_numbers(Path(args.config), Path(args.volume), Path(args.out))
+
+
 def cmd_production_sync(args) -> None:
     from cafetomo.production import sync
 
@@ -508,6 +514,7 @@ def main(argv: list[str] | None = None) -> None:
     stage("export", cmd_export, "config", "pose", "voxels", "bootstrap", "results", "out")
     stage("viewer", cmd_viewer, "export", "out")
     stage("numbers", cmd_numbers, "results", "out")
+    stage("config-numbers", cmd_config_numbers, "config", "volume", "out")
     stage("production-sync", cmd_production_sync, "production", "staged", "results")
     stage("production-check", cmd_production_check, "production", "results", "lint")
     args = ap.parse_args(argv)

@@ -27,8 +27,11 @@ from cafetomo.fitdata import FitData
 from cafetomo.reconstruct import VoxelSolution
 from cafetomo.sky import SkyGrid
 
-_GATE_Y_BAND_M = 2.0  # |y| range of the reconstruction slice profiled by the gate
-_GATE_SMOOTH_M = 0.12  # Gaussian sigma on that profile, so voxel noise is not a beam
+GATE_Y_BAND_M = 2.0  # |y| range of the reconstruction slice profiled by the gate
+GATE_SMOOTH_M = 0.12  # Gaussian sigma on that profile, so voxel noise is not a beam
+FFT_WINDOW_TAN = 0.6  # |tangent| window of the angular-period FFT
+FFT_MIN_BINS = 16  # fewer measured bins in the window give no period
+FFT_MIN_HARMONIC = 2  # lowest FFT bin searched for the peak (skips the detrend residue)
 
 
 def _axis_index(axis: str) -> int:
@@ -289,7 +292,12 @@ def triangulate(
 
 
 def angular_beam_period(
-    img: np.ndarray, centers: np.ndarray, axis: str = "x", t_window: float = 0.6, *, band: float
+    img: np.ndarray,
+    centers: np.ndarray,
+    axis: str = "x",
+    t_window: float = FFT_WINDOW_TAN,
+    *,
+    band: float,
 ) -> float:
     """Dominant angular period of the beam pattern in one position, in tan-units.
 
@@ -301,12 +309,12 @@ def angular_beam_period(
     t, p = profile(img, centers, axis, band)
     sel = np.isfinite(p) & (np.abs(t) < t_window)
     tt, pp = t[sel], p[sel]
-    if len(tt) < 16:
+    if len(tt) < FFT_MIN_BINS:
         return float("nan")
     pp = pp - np.polyval(np.polyfit(tt, pp, 3), tt)
     freq = np.fft.rfftfreq(len(tt), tt[1] - tt[0])
     amp = np.abs(np.fft.rfft(pp * np.hanning(len(pp))))
-    k = int(np.argmax(amp[2:])) + 2
+    k = int(np.argmax(amp[FFT_MIN_HARMONIC:])) + FFT_MIN_HARMONIC
     if k + 1 < len(amp):
         denom = amp[k - 1] - 2 * amp[k] + amp[k + 1]
         dk = 0.5 * (amp[k - 1] - amp[k + 1]) / denom if denom < 0 else 0.0
@@ -397,8 +405,8 @@ def verify_gate(
     pos = np.maximum(sol.rho3(), 0.0)
     iz = int(np.argmin(np.abs(g.axis_centers(2) - z_m)))
     sl = pos[:, :, iz]
-    yband = np.abs(ys_r) < _GATE_Y_BAND_M
-    prof_r = gaussian_filter1d(sl[:, yband].mean(axis=1), _GATE_SMOOTH_M / g.spacing)
+    yband = np.abs(ys_r) < GATE_Y_BAND_M
+    prof_r = gaussian_filter1d(sl[:, yband].mean(axis=1), GATE_SMOOTH_M / g.spacing)
     full_recon = np.where(np.isfinite(full_prof), np.interp(xgrid, xs_r, prof_r), np.nan)
     recon = np.where(shared, full_recon, np.nan)
     pk_recon = beam_peaks(xgrid, recon, s.prominence_sigmas)

@@ -1,9 +1,21 @@
 import json
 import re
+import subprocess
+from pathlib import Path
 
 import pytest
+import yaml
 
-from cafetomo.numbers import flatten, format_value, macro_name, write_numbers
+from cafetomo.numbers import (
+    archive_macros,
+    config_macros,
+    flatten,
+    format_value,
+    macro_name,
+    paper_constants,
+    write_config_numbers,
+    write_numbers,
+)
 
 
 def test_macro_name_spells_digits():
@@ -74,3 +86,90 @@ def test_write_numbers(tmp_path):
 def test_macro_names_are_letters_only(tmp_path):
     (tmp_path / "d2.json").write_text(json.dumps({"pos0_n": 3, "a.b-c": 1.0}))
     assert all(re.fullmatch(r"[A-Za-z]+", k) for k in flatten(tmp_path))
+
+
+def test_config_macros_cover_scalars_and_lists():
+    raw = {
+        "reconstruction": {"algorithm": "tv", "n_iter": 150, "tv_alpha": 0.03},
+        "beams": {"z_scan_m": [4.0, 9.0], "n_z": 81},
+        "volume": {"viewer_clip_m": [[-2.29, 4.19], [5.32, 8.2]]},
+        "site": "x",
+    }
+    m = config_macros(raw)
+    assert m["ConfigReconstructionNIter"] == "150"
+    assert m["ConfigReconstructionTvAlpha"] == "0.03"
+    assert m["ConfigBeamsZScanMZero"] == "4" and m["ConfigBeamsZScanMOne"] == "9"
+    assert m["ConfigVolumeViewerClipMThree"] == "8.2"
+    assert not any("Algorithm" in k or "Site" in k for k in m)
+
+
+def test_paper_constants_match_module_values():
+    from cafetomo import arraydepth, beams, inversion, raycast, selfcal
+
+    c = paper_constants()
+    assert c["ConstSamplesPerVoxel"] == str(raycast.SAMPLES_PER_VOXEL)
+    assert c["ConstTvScalePercentile"] == str(inversion.TV_SCALE_PERCENTILE)
+    assert c["ConstProxInnerIterations"] == str(inversion.PROX_INNER_ITERATIONS)
+    assert c["ConstPowellMaxIter"] == str(selfcal.POWELL_MAX_ITER)
+    assert c["ConstFftWindowTan"] == "0.6" and c["ConstFftMinBins"] == str(beams.FFT_MIN_BINS)
+    assert c["ConstArrayHStartsMZero"] == "0.3" and c["ConstColumnMax"] == "2"
+    assert c["ConstContinuedPerEnd"] == str(arraydepth.CONTINUED_PER_END)
+
+
+def test_archive_macros_read_the_selected_iterate(tmp_path):
+    import json
+
+    import numpy as np
+
+    info = {"best_iter": 56, "n_iter_used": 150, "chi2_history": [42.7, 3.0]}
+    np.savez(tmp_path / "v.npz", meta=np.array(json.dumps({"info": info})))
+    m = archive_macros(tmp_path / "v.npz")
+    assert m == {"ArchiveBestIter": "56", "ArchiveNIterUsed": "150", "ArchiveChisqStart": "42.7"}
+
+
+def test_config_macros_do_not_collide_with_results(tmp_path):
+    out = (
+        write_config_numbers(
+            Path("configs/cafeteria.yaml"),
+            Path("runs/response-aware-2026-10-07/voxels/volume_full.npz"),
+            tmp_path / "config-numbers.tex",
+        )
+        if Path("runs/response-aware-2026-10-07/voxels/volume_full.npz").exists()
+        else None
+    )
+    names = set(config_macros(yaml.safe_load(Path("configs/cafeteria.yaml").read_text())))
+    names |= set(paper_constants())
+    assert not names & set(flatten(Path("results")))
+    if out is not None:
+        assert out.read_text().count("\\newcommand") >= len(names)
+
+
+BASELINE_CONFIG_COMMIT = "c36afe3"
+ANALYSIS_SECTIONS = (
+    "opacity",
+    "reconstruction",
+    "selfcal",
+    "autofocus",
+    "beams",
+    "beamdepth",
+    "uncertainty",
+    "detector",
+    "binning",
+)
+
+
+def test_baseline_config_sections_unchanged():
+    """The macros are read from today's config; they must equal what the baseline ran with."""
+    old = yaml.safe_load(
+        subprocess.run(
+            ["git", "show", f"{BASELINE_CONFIG_COMMIT}:configs/cafeteria.yaml"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+    )
+    new = yaml.safe_load(Path("configs/cafeteria.yaml").read_text())
+    for s in ANALYSIS_SECTIONS:
+        assert old[s] == new[s], s
+    keep = ("z_min_m", "z_max_m", "spacing_m", "n_aperture_sub")
+    assert {k: old["volume"][k] for k in keep} == {k: new["volume"][k] for k in keep}

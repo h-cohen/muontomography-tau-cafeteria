@@ -241,3 +241,8 @@ def test_git_failures_carry_the_git_message(repos):
 
 def test_literal_numbers_reports_a_missing_lint_file(tmp_path):
     assert literal_numbers(tmp_path, ["3d.tex"]) == ["3d.tex: file not found"]
+
+
+def test_literal_numbers_ignores_dimension_words(tmp_path):
+    (tmp_path / "3d.tex").write_text("A 3D image and 2D maps at 7.3 m.\n")
+    assert literal_numbers(tmp_path, ["3d.tex"]) == ["3d.tex:1: 7.3"]

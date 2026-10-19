@@ -21,10 +21,10 @@ MANIFEST = "MANIFEST.json"
 # Arguments that hold labels, keys, paths or lengths, never claims.
 _NON_CLAIM_ARGS = re.compile(
     r"\\(?:ref|eqref|label|cite\w*|includegraphics|input|include|usepackage|documentclass"
-    r"|graphicspath|bibliography\w*|section\*?|subsection\*?|hspace|vspace)\s*(?:\[[^\]]*\])?\{[^}]*\}"
+    r"|graphicspath|bibliography\w*|section\*?|subsection\*?|subsubsection\*?|paragraph\*?|hspace|vspace)\s*(?:\[[^\]]*\])?\{[^}]*\}"
 )
 _OPTIONS = re.compile(r"\[[^\]]*\]")
-_NUMBER = re.compile(r"(?<![\\\w.])\d+(?:\.\d+)?")
+_NUMBER = re.compile(r"(?<![\\\w.^])\d+(?:\.\d+)?(?![A-Za-z])")
 
 
 def _sha(path: Path) -> str:

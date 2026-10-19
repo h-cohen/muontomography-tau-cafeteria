@@ -26,7 +26,7 @@ from cafetomo.voxels import VoxelGrid
 # cache built before a fix is never served after it.
 INVERSION_VERSION = 3
 
-_SAMPLES_PER_VOXEL = 3  # sampling step along a ray = spacing / this
+SAMPLES_PER_VOXEL = 3  # sampling step along a ray = spacing / this
 _ROW_BLOCK = 512  # rows processed per vectorised block
 
 
@@ -124,7 +124,7 @@ def build_system_matrix(
     t_in = np.maximum((z0 - start_z) / dz, 0.0)
     t_out = (z1 - start_z) / dz
     length = np.maximum(t_out - t_in, 0.0)
-    step = grid.spacing / _SAMPLES_PER_VOXEL
+    step = grid.spacing / SAMPLES_PER_VOXEL
     # All sub-rays in a row share sampling fractions, but each traverses its
     # own segment. The longest segment controls the maximum sampling step.
     n_samp = np.maximum(np.ceil(length.max(axis=1) / step).astype(np.int64), 1)
@@ -187,5 +187,5 @@ def _cache_key(
         h.update(f"az:{azimuths.get(pid, 0.0):.6f}|".encode())
         x, y, z = origins[pid]
         h.update(f"{pid}:{x:.6f},{y:.6f},{z:.6f};".encode())
-    h.update(f"{grid.key()}|{aperture_m:.6f}|{n_sub}|{_SAMPLES_PER_VOXEL}".encode())
+    h.update(f"{grid.key()}|{aperture_m:.6f}|{n_sub}|{SAMPLES_PER_VOXEL}".encode())
     return h.hexdigest()[:16]

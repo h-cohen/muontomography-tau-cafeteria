@@ -225,6 +225,8 @@ production-stage: internal-paper
 	test -d $(PRODRUNS)/opacity -a -d $(PRODRUNS)/bootstrap -a -d $(PRODRUNS)/ingest
 	rm -rf $(PRODSTAGE) && mkdir -p $(PRODSTAGE)/figures
 	$(CLI) numbers --results $(RESULTS) --out $(PRODSTAGE)/numbers.tex
+	$(CLI) config-numbers --config $(CONFIG) --volume $(PRODRUNS)/voxels/volume_full.npz \
+	  --out $(PRODSTAGE)/config-numbers.tex
 	cp $(IVFIGOUT)/internal-numbers.tex $(IVFIGOUT)/internal-main.pdf $(PRODSTAGE)/
 	mv $(PRODSTAGE)/internal-main.pdf $(PRODSTAGE)/figures/
 	for f in $(PRODUCTION_FIGURES); do \

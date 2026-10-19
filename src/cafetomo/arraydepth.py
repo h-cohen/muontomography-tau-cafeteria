@@ -13,9 +13,15 @@ import numpy as np
 from scipy.optimize import least_squares
 from scipy.special import logsumexp
 
-from cafetomo.beamdepth import _background, _band
+from cafetomo.beamdepth import AT_BOUND_FRACTION, _background, _band
 from cafetomo.config import Config
 from cafetomo.fitdata import FitData
+
+CONTINUED_PER_END = 2  # centres added at each end of the matched array
+ARRAY_H_STARTS_M = (0.3, 1.8)  # depth starts of the conditional fit
+COLUMN_START = 0.06  # starting normal-incidence column opacity per beam
+COLUMN_MAX = 2.0  # upper bound of a column opacity
+SHIFT_MAX_M = 0.3  # bound on the common array shift
 
 
 def _transverse_paths(offsets, sx, sy, origin_z, *, z, w, h, centres):
@@ -52,9 +58,9 @@ def continued_centres(centres):
     centres = np.asarray(centres)
     pitch = np.median(np.diff(centres))
     return np.r_[
-        centres[0] - pitch * np.arange(2, 0, -1),
+        centres[0] - pitch * np.arange(CONTINUED_PER_END, 0, -1),
         centres,
-        centres[-1] + pitch * np.arange(1, 3),
+        centres[-1] + pitch * np.arange(1, CONTINUED_PER_END + 1),
     ]
 
 
@@ -95,8 +101,8 @@ def fit_array_depth(data: FitData, cfg: Config, *, centres, height_seed, n_sub=3
         yends.max(axis=1) + radius_y > cfg.beamdepth.y_extent_m[1]
     ):
         raise ValueError("conditional transverse model cannot represent finite beam ends")
-    lo = np.r_[zlo, 0.05, 0.05, -0.3, np.zeros(len(centres))]
-    hi = np.r_[zhi, 1.0, cfg.beamdepth.h_max_m, 0.3, np.full(len(centres), 2.0)]
+    lo = np.r_[zlo, 0.05, 0.05, -SHIFT_MAX_M, np.zeros(len(centres))]
+    hi = np.r_[zhi, 1.0, cfg.beamdepth.h_max_m, SHIFT_MAX_M, np.full(len(centres), COLUMN_MAX)]
 
     cache = {}
 
@@ -122,9 +128,13 @@ def fit_array_depth(data: FitData, cfg: Config, *, centres, height_seed, n_sub=3
         return y - bg @ coeff
 
     fits = []
-    for hstart in (0.3, 1.8):
+    for hstart in ARRAY_H_STARTS_M:
         v = np.r_[
-            height_seed - hstart / 2, cfg.beamdepth.w_init_m, hstart, 0, np.full(len(centres), 0.06)
+            height_seed - hstart / 2,
+            cfg.beamdepth.w_init_m,
+            hstart,
+            0,
+            np.full(len(centres), COLUMN_START),
         ]
         fit = least_squares(
             residual, np.clip(v, lo, hi), bounds=(lo, hi), x_scale="jac", max_nfev=600
@@ -160,7 +170,7 @@ def _with_boundary_flags(record):
             [result["bottom"], result["w"], result["h"], result["shift"], *result["normal_columns"]]
         )
         lo, hi = np.array(result["lower_bounds"]), np.array(result["upper_bounds"])
-        near = np.minimum(values - lo, hi - values) < 0.01 * (hi - lo)
+        near = np.minimum(values - lo, hi - values) < AT_BOUND_FRACTION * (hi - lo)
         names = [
             "bottom",
             "width",
