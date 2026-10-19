@@ -221,7 +221,7 @@ __marimo__/
 
 # project
 runs/
-paper/generated/
+paper-draft/generated/
 docs/dev/
 *.aux
 *.fdb_latexmk

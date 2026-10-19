@@ -31,6 +31,6 @@ available; local plans and execution notes are gitignored.
 - Verify relevant changes with make test and the applicable slow numerical checks.
   Use FAST=1 for isolated smoke outputs, not paper measurements.
 - Source is in src/cafetomo/; viewer code is in viewer/. Use existing interfaces.
-- Keep runs/, paper/generated/, docs/dev/ and .superpowers/ out of commits.
+- Keep runs/, paper-draft/generated/, docs/dev/ and .superpowers/ out of commits.
 - Git author: Hadar Cohen <hal.nls@gmail.com>. Use Conventional Commits without
   attribution trailers. Integration target is main; preserve existing work.

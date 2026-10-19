@@ -277,7 +277,8 @@ def test_completed_fit_cache_is_scientific(cfg, tmp_path, monkeypatch):
     assert all(r["cache_scope"].startswith("ordered count sources") for r in records)
 
 
-def test_protect_checkout_outputs_from_other_cwd(cfg, tmp_path, monkeypatch):
+@pytest.mark.parametrize("protected", ["results", "paper-draft", "paper-production"])
+def test_protect_checkout_outputs_from_other_cwd(cfg, tmp_path, monkeypatch, protected):
     from pathlib import Path
 
     import cafetomo.internal_validation as v
@@ -295,10 +296,10 @@ def test_protect_checkout_outputs_from_other_cwd(cfg, tmp_path, monkeypatch):
             live,
             cfg,
             {"mode": "smoke"},
-            out=checkout / "results" / "do-not-create",
+            out=checkout / protected / "do-not-create",
             cache=tmp_path / "cache",
         )
-    assert not (checkout / "results" / "do-not-create").exists()
+    assert not (checkout / protected / "do-not-create").exists()
 
 
 def test_stability_preserves_original_nuisance_prior(cfg, tmp_path, monkeypatch):

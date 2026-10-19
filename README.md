@@ -108,10 +108,10 @@ changed baseline results require a fresh reviewed selection before compilation.
 | Count bootstrap and sensitivity budget | `make uncertainty` | `runs/bootstrap/`, `results/uncertainty.json` |
 | Viewer data export | `make export` | `runs/export/` |
 | Self-contained interactive viewer | `make viewer` | `runs/viewer.html` |
-| Scripted paper figures | `make figures` | `paper/generated/figures/` |
-| Result macros for the paper | `make numbers` | `paper/generated/numbers.tex` |
-| Compile paper | `make paper` | `paper/generated/paper.pdf` |
-| Package arXiv sources | `make arxiv` | `paper/generated/arxiv.tar.gz` |
+| Scripted paper figures | `make figures` | `paper-draft/generated/figures/` |
+| Result macros for the paper | `make numbers` | `paper-draft/generated/numbers.tex` |
+| Compile paper | `make paper` | `paper-draft/generated/paper.pdf` |
+| Package arXiv sources | `make arxiv` | `paper-draft/generated/arxiv.tar.gz` |
 
 ## Raw event data
 
@@ -276,7 +276,7 @@ reviewed internal publication or its diagnostic scalars. `FAST=1 paper` fails
 with a scope reminder; `FAST=1 arxiv` can package an already compiled FAST PDF
 for the archive regression fixture. The normal FAST smoke target is
 analysis/viewer only. No FAST target writes full-run `results/` or
-`paper/generated/`.
+`paper-draft/generated/`.
 
 Open the smoke viewer:
 
@@ -297,7 +297,7 @@ make arxiv TECTONIC=runs/tools/tectonic
 The reviewed paper uses baseline numbers from `results/*.json` and separate
 internal diagnostics from `results/internalvalidation.json`. Its source archive
 contains the selected PDF panels, number macros, manuscript sections and the
-formatted bibliography. The author-provided `paper/figures/voxels.png` is a
+formatted bibliography. The author-provided `paper-draft/figures/voxels.png` is a
 selected, hashed input for the separately labelled conditional illustration.
 
 ## How beam depth is estimated
@@ -450,13 +450,13 @@ node --test viewer/test/*.test.mjs
 
 Tracked numerical results live in `results/`. Generated analysis products,
 bootstrap arrays and viewer files live in `runs/`; paper build outputs live in
-`paper/generated/`. These generated directories are not committed.
+`paper-draft/generated/`. These generated directories are not committed.
 
 ```bash
 make clean
 ```
 
-This removes `runs/` and `paper/generated/`, including caches and local diagnostic
+This removes `runs/` and `paper-draft/generated/`, including caches and local diagnostic
 runs; it leaves the tracked result JSON files in place.
 
 ## Internal validation execution
@@ -523,7 +523,7 @@ files retain their original values. The nominal main image is explicitly
 `runs/response-aware-2026-10-07/voxels/volume_full.npz`, with both-position
 coverage from its `views.npy`. Training-fold support and persistence have their
 own fitted grids and scope. The author-supplied viewer render
-`paper/figures/voxels.png` is a separately labelled conditional box illustration
+`paper-draft/figures/voxels.png` is a separately labelled conditional box illustration
 (voxel field, conditional boxes, detector positions and acceptance frusta).
 
 ```bash
@@ -550,8 +550,8 @@ the new panels, source hashes and scalars before copying that JSON to
 arguments. Existing output directories are refused by the renderer. Selected
 paths are checkout-relative where possible, so identical relocated archives
 retain their identity; changed bytes still fail the guard.
-The generated paper is `paper/generated/paper.pdf`; its self-contained LaTeX
-source archive is `paper/generated/arxiv.tar.gz` (`arxiv-internal` is an alias).
+The generated paper is `paper-draft/generated/paper.pdf`; its self-contained LaTeX
+source archive is `paper-draft/generated/arxiv.tar.gz` (`arxiv-internal` is an alias).
 
 The full original diagnostic set is under
 `runs/figure-review/pilot-2026-10-13-a-2026-10-14/`: 16 per-view prediction

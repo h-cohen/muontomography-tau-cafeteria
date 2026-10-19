@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-FIGURES = Path(__file__).resolve().parents[1] / "paper" / "figures"
+FIGURES = Path(__file__).resolve().parents[1] / "paper-draft" / "figures"
 sys.path.insert(0, str(FIGURES))
 
 
@@ -518,7 +518,7 @@ def test_selected_input_guard_checks_every_source_and_arguments_after_relocation
         "correction": Path("runs/corrected"),
         "main_volume": Path("runs/nominal/volume.npz"),
         "main_coverage": Path("runs/nominal/views.npy"),
-        "overlay": Path("paper/figures/author.jpeg"),
+        "overlay": Path("paper-draft/figures/author.jpeg"),
     }
     sources = [("archive", "manifest.json")]
     sources.extend(("archive", f"results/source-{i}.json") for i in range(9))
@@ -564,6 +564,6 @@ def test_selected_input_guard_checks_every_source_and_arguments_after_relocation
             paths["correction"],
             paths["main_volume"],
             paths["main_coverage"],
-            "paper/figures/other.jpeg",
+            "paper-draft/figures/other.jpeg",
             baseline,
         )

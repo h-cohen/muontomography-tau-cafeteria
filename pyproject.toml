@@ -26,11 +26,11 @@ markers = ["slow: runs the real-data chain (minutes)", "browser: needs Playwrigh
 
 [tool.ruff]
 line-length = 100
-src = ["src", "tests", "paper/figures"]
+src = ["src", "tests", "paper-draft/figures"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "NPY"]
 
 [tool.vulture]
-paths = ["src/cafetomo", "paper/figures"]
+paths = ["src/cafetomo", "paper-draft/figures"]
 min_confidence = 80

@@ -15,17 +15,17 @@ ANALYSIS := $(RESULTS)/beamdepth.json $(RESULTS)/beams.json $(RESULTS)/autofocus
 NUMERIC = $(RESULTS)/data.json $(POSE) $(RESULTS)/reconstruction.json $(ANALYSIS) \
            $(RESULTS)/validation.json $(RESULTS)/uncertainty.json $(RESULTS)/inputs.json \
            $(RESULTS)/depthdiagnostics.json $(RESULTS)/arraydepth.json
-# main.tex reads generated/numbers.tex and generated/figures/ relative to paper/.
-# GEN is that `generated` directory: paper/generated, or runs/fast/generated
-# under FAST. latexmk runs in paper/ with TEXINPUTS led by GEN's parent, so
-# `generated/...` resolves to GEN before paper/ is searched, and -outdir keeps
+# main.tex reads generated/numbers.tex and generated/figures/ relative to paper-draft/.
+# GEN is that `generated` directory: paper-draft/generated, or runs/fast/generated
+# under FAST. latexmk runs in paper-draft/ with TEXINPUTS led by GEN's parent, so
+# `generated/...` resolves to GEN before paper-draft/ is searched, and -outdir keeps
 # every build product in GEN; BIBINPUTS lets bibtex (run from GEN) find refs.bib.
-GEN     := $(if $(FAST),runs/fast/generated,paper/generated)
+GEN     := $(if $(FAST),runs/fast/generated,paper-draft/generated)
 TEXROOT := $(abspath $(dir $(GEN)))
 POSE    := $(RESULTS)/pose.json
 FIGS    := setup opacity height depth
 FIGPDF  := $(FIGS:%=$(GEN)/figures/%.pdf)
-AUTHORFIG := $(wildcard paper/figures/voxels.png paper/figures/room_voxels.pdf paper/figures/room_voxels.png)
+AUTHORFIG := $(wildcard paper-draft/figures/voxels.png paper-draft/figures/room_voxels.pdf paper-draft/figures/room_voxels.png)
 
 .PHONY: all ingest ingest-raw beams2d channelcal selfcal opacity reconstruct analysis depthcheck arraydepth validation uncertainty export figures numbers paper viewer test clean arxiv
 .DELETE_ON_ERROR:
@@ -104,12 +104,12 @@ $(RUNS)/viewer.html: $(RUNS)/export/meta.json $(wildcard viewer/src/*.mjs) viewe
 	$(CLI) viewer --export $(RUNS)/export --out $@
 
 figures: $(FIGPDF)
-$(GEN)/figures/%.pdf: paper/figures/make_%.py paper/figures/style.py \
+$(GEN)/figures/%.pdf: paper-draft/figures/make_%.py paper-draft/figures/style.py \
                       $(RESULTS)/uncertainty.json $(RESULTS)/validation.json \
                       $(RESULTS)/beams.json $(RESULTS)/beamdepth.json $(POSE) \
                       $(RESULTS)/data.json $(RESULTS)/reconstruction.json \
                       $(RESULTS)/autofocus.json $(RUNS)/voxels/meta.json $(RUNS)/opacity/meta.json
-	uv run python paper/figures/make_$*.py --config $(CONFIG) --pose $(POSE) \
+	uv run python paper-draft/figures/make_$*.py --config $(CONFIG) --pose $(POSE) \
 	  --results $(RESULTS) --runs $(RUNS) --out $@
 
 $(GEN)/figures/depth.pdf: $(RESULTS)/inputs.json
@@ -146,12 +146,12 @@ test:
 	node --test viewer/test/*.test.mjs
 
 arxiv:
-	tar -czf $(GEN)/arxiv.tar.gz -C paper main.tex refs.bib sections \
+	tar -czf $(GEN)/arxiv.tar.gz -C paper-draft main.tex refs.bib sections \
 	  -C $(TEXROOT) generated/numbers.tex generated/figures \
 	  -C $(abspath $(GEN)) main.bbl
 
 clean:
-	rm -rf runs paper/generated
+	rm -rf runs paper-draft/generated
 
 # Explicit isolated campaign; choose a fresh IVOUT for each attempt.
 IVOUT ?= runs/internal-validation/pilot-001
@@ -167,7 +167,7 @@ internal-validate:
 IVPAPERARCHIVE ?= runs/internal-validation/pilot-2026-10-13-a
 IVCORRECTION ?= runs/internal-validation/weight-correction-2026-10-14
 IVNOMINAL ?= runs/response-aware-2026-10-07/voxels
-IVFIGOUT ?= runs/figure-review/selected-paper-publication-2026-10-14-fix2
+IVFIGOUT ?= runs/figure-review/selected-paper-publication-2026-10-18-fix3
 IVSUMMARY ?= results/internalvalidation.json
 TECTONIC ?= runs/tools/tectonic
 IVSELECTED := $(IVFIGOUT)/internal-main.pdf $(IVFIGOUT)/internal-overlay.pdf \
@@ -178,35 +178,35 @@ internal-selected: $(IVSELECTED)
 
 internal-preflight:
 	@if test -f $(IVSUMMARY); then \
-	  uv run python paper/figures/make_internal_paper.py --verify-selection \
+	  uv run python paper-draft/figures/make_internal_paper.py --verify-selection \
 	    --archive $(IVPAPERARCHIVE) --correction $(IVCORRECTION) \
 	    --main-volume $(IVNOMINAL)/volume_full.npz --main-coverage $(IVNOMINAL)/views.npy \
-	    --overlay paper/figures/voxels.png --summary $(IVSUMMARY) \
+	    --overlay paper-draft/figures/voxels.png --summary $(IVSUMMARY) \
 	    --baseline-results $(RESULTS); \
 	fi
 
-$(IVSELECTED) &: paper/figures/make_internal_paper.py paper/figures/make_support.py \
-                paper/figures/internal_figure_utils.py paper/figures/style.py \
+$(IVSELECTED) &: paper-draft/figures/make_internal_paper.py paper-draft/figures/make_support.py \
+                paper-draft/figures/internal_figure_utils.py paper-draft/figures/style.py \
                 $(IVPAPERARCHIVE)/manifest.json $(IVCORRECTION)/comparison.json \
                 | internal-preflight
-	uv run python paper/figures/make_internal_paper.py --archive $(IVPAPERARCHIVE) \
+	uv run python paper-draft/figures/make_internal_paper.py --archive $(IVPAPERARCHIVE) \
 	  --correction $(IVCORRECTION) --main-volume $(IVNOMINAL)/volume_full.npz \
-	  --main-coverage $(IVNOMINAL)/views.npy --overlay paper/figures/voxels.png \
+	  --main-coverage $(IVNOMINAL)/views.npy --overlay paper-draft/figures/voxels.png \
 	  --out $(IVFIGOUT) --summary $(IVSUMMARY) --baseline-results $(RESULTS)
 
 internal-paper: internal-selected
-	uv run python paper/figures/make_internal_paper.py --verify-selection \
+	uv run python paper-draft/figures/make_internal_paper.py --verify-selection \
 	  --archive $(IVPAPERARCHIVE) --correction $(IVCORRECTION) \
 	  --main-volume $(IVNOMINAL)/volume_full.npz --main-coverage $(IVNOMINAL)/views.npy \
-	  --overlay paper/figures/voxels.png --summary $(IVSUMMARY) \
+	  --overlay paper-draft/figures/voxels.png --summary $(IVSUMMARY) \
 	  --baseline-results $(RESULTS)
 	mkdir -p $(GEN)/figures
-	uv run python paper/figures/make_height.py --config $(CONFIG) --pose $(POSE) \
+	uv run python paper-draft/figures/make_height.py --config $(CONFIG) --pose $(POSE) \
 	  --results $(RESULTS) --runs $(dir $(IVNOMINAL)) --out $(GEN)/figures/height.pdf
 	cp $(IVFIGOUT)/internal-*.pdf $(IVFIGOUT)/internal-numbers.tex $(GEN)/figures/
 	cp $(IVFIGOUT)/display-settings.json $(GEN)/figures/internal-display-settings.json
 	uv run python -c "from pathlib import Path; from cafetomo.numbers import write_numbers; write_numbers(Path('$(RESULTS)'), Path('$(GEN)/numbers.tex'))"
-	cd paper && $(abspath $(TECTONIC)) --keep-logs --keep-intermediates -o $(abspath $(GEN)) main.tex
+	cd paper-draft && $(abspath $(TECTONIC)) --keep-logs --keep-intermediates -o $(abspath $(GEN)) main.tex
 	mv $(GEN)/main.pdf $(GEN)/paper.pdf
 
 arxiv-internal: arxiv

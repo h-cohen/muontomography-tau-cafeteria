@@ -1,4 +1,4 @@
-"""Shared figure style and command line for paper/figures/make_*.py."""
+"""Shared figure style and command line for paper-draft/figures/make_*.py."""
 
 import argparse
 import json

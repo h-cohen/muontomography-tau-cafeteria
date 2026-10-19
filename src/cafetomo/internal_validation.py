@@ -329,7 +329,14 @@ def run_campaign(grid, live, cfg, document, *, out, cache, provenance=None):
         for path in (out, cache):
             if any(
                 path == protected / name or (protected / name) in path.parents
-                for name in ("results", "paper", "configs", "src", "tests")
+                for name in (
+                    "results",
+                    "paper-draft",
+                    "paper-production",
+                    "configs",
+                    "src",
+                    "tests",
+                )
             ):
                 raise ValueError("output/cache overlaps protected production artifacts")
             production_runs = protected / "runs"

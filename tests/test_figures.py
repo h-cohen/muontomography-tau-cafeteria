@@ -24,7 +24,7 @@ def test_figure_builds_from_fast_run(name, tmp_path):
             "uv",
             "run",
             "python",
-            f"paper/figures/make_{name}.py",
+            f"paper-draft/figures/make_{name}.py",
             "--config",
             "configs/cafeteria.yaml",
             "--pose",
@@ -42,7 +42,7 @@ def test_figure_builds_from_fast_run(name, tmp_path):
 
 
 def test_depth_histogram_tolerates_non_finite_replicas():
-    sys.path.insert(0, "paper/figures")
+    sys.path.insert(0, "paper-draft/figures")
     import matplotlib.pyplot as plt
 
     import make_depth
@@ -54,7 +54,7 @@ def test_depth_histogram_tolerates_non_finite_replicas():
 
 
 def test_depth_histogram_uses_the_supplied_on_site_measurement():
-    sys.path.insert(0, "paper/figures")
+    sys.path.insert(0, "paper-draft/figures")
     import matplotlib.pyplot as plt
 
     import make_depth

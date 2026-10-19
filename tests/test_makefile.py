@@ -105,9 +105,9 @@ def test_paper_inputs_are_copied_into_fast_results_without_touching_full_results
 
 def test_arxiv_archive_places_bibliography_beside_main_tex(built_pipeline):
     files = {
-        "paper/main.tex": "\\bibliography{refs}",
-        "paper/sections/intro.tex": "text",
-        "paper/refs.bib": "bibliography source",
+        "paper-draft/main.tex": "\\bibliography{refs}",
+        "paper-draft/sections/intro.tex": "text",
+        "paper-draft/refs.bib": "bibliography source",
         "runs/fast/generated/main.bbl": "formatted bibliography",
         "runs/fast/generated/paper.pdf": "compiled draft",
     }
