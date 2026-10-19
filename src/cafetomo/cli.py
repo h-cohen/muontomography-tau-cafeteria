@@ -97,6 +97,38 @@ def cmd_ingest_raw(args) -> None:
     write_meta(out, config_path=args.config, stage="ingest-raw", extra={"exposures": exposures})
 
 
+def cmd_channelcal(args) -> None:
+    """Per-channel Landau x Gauss charge calibration of each raw exposure (`channelcal`)."""
+    from cafetomo.channelcal import render, summarize
+    from cafetomo.provenance import write_meta
+    from cafetomo.rawdata import ingest_raw
+
+    cfg = _cfg(args)
+    if cfg.raw is None:
+        raise SystemExit(f"{args.config}: no raw section")
+    out = Path(args.out)
+    cache = Path(args.cache or out.parent / "cache")
+    for pid in cfg.raw.exposures:
+        files = ingest_raw(cfg, pid, cache, jobs=int(args.jobs or 1)).files
+        hit = [f.hit_hist for f in files]
+        ped = [f.ped_hist for f in files]
+        doc = summarize(
+            hit,
+            ped,
+            n_flagged=sum(f.n_flagged for f in files),
+            n_valid_rows=sum(f.n_valid_rows for f in files),
+            channel_bars=cfg.raw.channel_bars,
+            settings=cfg.calibration,
+        )
+        render(doc, hit, ped, out, pid)
+    write_meta(
+        out,
+        config_path=args.config,
+        stage="channelcal",
+        extra={"exposures": list(cfg.raw.exposures)},
+    )
+
+
 def cmd_beams2d(args) -> None:
     """The 2D angular opacity view (`beamview`) of each position, or of `--exposure`,
     from an ingest directory."""
@@ -428,6 +460,7 @@ def main(argv: list[str] | None = None) -> None:
     )
     stage("ingest", cmd_ingest, "config", "out", "results")
     stage("ingest-raw", cmd_ingest_raw, "config", "out", "cache", "jobs")
+    stage("channelcal", cmd_channelcal, "config", "out", "cache", "jobs")
     stage("beams2d", cmd_beams2d, "config", "ingest", "out", "exposure")
     stage("selfcal", cmd_selfcal, "config", "ingest", "out")
     stage("opacity", cmd_opacity, "config", "pose", "ingest", "out")

@@ -211,6 +211,18 @@ class RawSettings:
 
 
 @dataclass(frozen=True)
+class CalibrationSettings:
+    """Per-channel charge calibration (`cafetomo channelcal`): a Landau convolved with a
+    Gaussian fitted to each channel's single-hit spectrum, net of its pedestal."""
+
+    fit_min_frac: float = 0.5  # fit window starts at this fraction of the spectrum peak
+    fit_max_adc: float = 9000.0  # window ends here: above it the high-gain range saturates
+    min_solo_counts: int = 2000  # single-hit counts below which a channel is not fitted
+    outlier_frac: float = 0.15  # |MPV / ASIC median - 1| above which a channel is flagged
+    peak_tol_frac: float = 0.10  # |fitted MPV / empirical peak - 1| above which the fit is poor
+
+
+@dataclass(frozen=True)
 class ViewSettings:
     """The 2D angular beam view (`cafetomo beams2d`). Presentation only: nothing here
     feeds an inference, and the count floors only decide which bins are drawn.
@@ -249,6 +261,7 @@ class Config:
     physics: PhysicsSettings = field(default_factory=PhysicsSettings)
     raw: RawSettings | None = None
     view: ViewSettings = field(default_factory=ViewSettings)
+    calibration: CalibrationSettings = field(default_factory=CalibrationSettings)
 
     def exposure(self, eid: str) -> Exposure:
         for e in self.exposures:
@@ -322,6 +335,7 @@ def load_config(path: str | Path, pose_file: str | Path | None = None) -> Config
         "validation": ValidationSettings,
         "physics": PhysicsSettings,
         "view": ViewSettings,
+        "calibration": CalibrationSettings,
     }
     top = {"site", "data_dir", "detector", "sky_reference", "exposures", "raw", *sections}
     unknown = sorted(set(raw) - top)

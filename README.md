@@ -132,6 +132,19 @@ ROOT sources' live times use an interpolated `dT` sum, since bin centres oversta
 ~1%. The drawn region is round, not square, by choice: the `view:` count floors (150 pos0 and 100 sky counts per 0.025 bin) drop the low-acceptance corners, which are too noisy to read. These outputs are separate from the paper baseline; `runs/raw/ingest` can be passed to
 the later stages as `--ingest`.
 
+### Channel calibration
+
+`make channelcal JOBS=5` fits every channel's single-hit high-gain spectrum (net of its
+pedestal) with a Landau convolved with a Gaussian, on the summed data and per day:
+`runs/raw/channelcal/pos0_channelcal.{json,_asic0..3.png,_summary.png}` (MPV, error,
+empirical peak, pedestal, day-to-day spread, status). Unmapped channels carry ~0.05% of
+hits and are reported `inactive`, not flagged. The Landau model is not exact for triangular
+bars (chi2 per degree of freedom >> 1), so the empirical peak is the check on the MPV;
+the high-gain range saturates near 10,000 ADC net. Calibration is diagnostic: the angular
+counts use uncalibrated charges like the DAQ that produced the sky histogram, because a
+gain-corrected pos0 against an uncorrected sky moves the sub-bin comb of the ratio by about
+the counting noise of a 0.025 bin (see the stage notes in the report).
+
 ## Build and open the viewer
 
 ```bash

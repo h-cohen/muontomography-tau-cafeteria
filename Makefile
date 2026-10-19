@@ -27,7 +27,7 @@ FIGS    := setup opacity height depth
 FIGPDF  := $(FIGS:%=$(GEN)/figures/%.pdf)
 AUTHORFIG := $(wildcard paper/figures/voxels.png paper/figures/room_voxels.pdf paper/figures/room_voxels.png)
 
-.PHONY: all ingest ingest-raw beams2d selfcal opacity reconstruct analysis depthcheck arraydepth validation uncertainty export figures numbers paper viewer test clean arxiv
+.PHONY: all ingest ingest-raw beams2d channelcal selfcal opacity reconstruct analysis depthcheck arraydepth validation uncertainty export figures numbers paper viewer test clean arxiv
 .DELETE_ON_ERROR:
 
 all: viewer
@@ -53,6 +53,11 @@ $(RAWRUNS)/ingest/meta.json: $(CONFIG) $(wildcard data/*.root) $(CODE)
 beams2d: $(RAWRUNS)/beams2d/meta.json
 $(RAWRUNS)/beams2d/meta.json: $(RAWRUNS)/ingest/meta.json $(CODE)
 	$(CLI) beams2d --config $(CONFIG) --ingest $(RAWRUNS)/ingest --out $(RAWRUNS)/beams2d
+
+channelcal: $(RAWRUNS)/channelcal/meta.json
+$(RAWRUNS)/channelcal/meta.json: $(CONFIG) $(CODE)
+	$(CLI) channelcal --config $(CONFIG) --out $(RAWRUNS)/channelcal --cache $(RAWRUNS)/cache \
+	  --jobs $(or $(JOBS),4)
 
 selfcal: $(POSE)
 $(POSE): $(INGEST) $(CODE)
