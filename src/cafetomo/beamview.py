@@ -168,3 +168,75 @@ def render(
     }
     (out / f"{name}_beams2d.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
     return png
+
+
+@dataclass(frozen=True)
+class SkyDifference:
+    """One position's opacity against two skies, the first a subset of the second's days."""
+
+    first: OpacityView
+    second: OpacityView
+    delta: np.ndarray  # first - second; NaN unless both are measured
+    noise: np.ndarray  # counting sigma of delta: sqrt(1/n_sky_first - 1/n_sky_second)
+
+
+def sky_difference(first: OpacityView, second: OpacityView) -> SkyDifference:
+    """The position's own counts cancel in the difference, and the shared days of a
+    nested sky cancel too, leaving the noise of the days only `second` holds."""
+    both = np.isfinite(first.lam) & np.isfinite(second.lam)
+    n1 = np.where(both, first.counts_sky, 1).astype(np.float64)
+    n2 = np.where(both, second.counts_sky, 1).astype(np.float64)
+    noise = np.where(both, np.sqrt(np.clip(1.0 / n1 - 1.0 / n2, 0.0, None)), np.nan)
+    return SkyDifference(first, second, np.where(both, first.lam - second.lam, np.nan), noise)
+
+
+def render_sky_difference(
+    diffs: dict[str, SkyDifference], settings: ViewSettings, path: Path, labels=("raw", "ROOT")
+) -> Path:
+    """One row per position: opacity against each sky (smoothed), their difference
+    (smoothed) and the unsmoothed difference in units of its counting noise."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    lo, hi = settings.lam_range
+    t = settings.t_display
+    fig, axes = plt.subplots(len(diffs), 4, figsize=(21, 5.2 * len(diffs)), squeeze=False)
+    for row, (name, d) in zip(axes, diffs.items(), strict=True):
+        weight = np.where(np.isfinite(d.delta), d.second.weight, 0.0)
+        smooth_delta = smooth_weighted(np.nan_to_num(d.delta), weight, settings.smooth_bins)
+        pull = d.delta / d.noise
+        rms = float(np.nanstd(d.delta))
+        expected = float(np.sqrt(np.nanmean(d.noise**2)))
+        panels = [
+            (f"{name}: {labels[0]} sky", smooth_weighted(d.first.lam, d.first.weight,
+             settings.smooth_bins), "magma_r", lo, hi, r"$\lambda$"),
+            (f"{name}: {labels[1]} sky", smooth_weighted(d.second.lam, d.second.weight,
+             settings.smooth_bins), "magma_r", lo, hi, r"$\lambda$"),
+            (f"{labels[0]} - {labels[1]}, smoothed (mean {np.nanmean(d.delta):+.3f})",
+             smooth_delta, "RdBu_r", -0.1, 0.1, r"$\Delta\lambda$"),
+            (f"difference / counting noise (rms {rms:.3f}, noise {expected:.3f})",
+             pull, "RdBu_r", -4.0, 4.0, r"$\Delta\lambda / \sigma$"),
+        ]  # fmt: skip
+        extent = [d.first.edges[0], d.first.edges[-1]] * 2
+        for ax, (title, img, cmap, vmin, vmax, label) in zip(row, panels, strict=True):
+            cm = plt.get_cmap(cmap).with_extremes(bad="#efeeea")
+            h = ax.imshow(img.T, origin="lower", extent=extent, cmap=cm, vmin=vmin, vmax=vmax)
+            ax.set_title(title, fontsize=9)
+            ax.set_xlim(-t, t)
+            ax.set_ylim(-t, t)
+            ax.set_xlabel(r"$\tan\theta_x$")
+            ax.set_ylabel(r"$\tan\theta_y$")
+            fig.colorbar(h, ax=ax, shrink=0.8, label=label)
+    fig.suptitle(
+        f"Opacity against the {labels[0]} and the {labels[1]} sky reference "
+        "(same position counts; detector frame, 0.025 tan bins)",
+        fontsize=11,
+    )
+    fig.tight_layout()
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(path, dpi=130, bbox_inches="tight")
+    plt.close(fig)
+    return path

@@ -213,6 +213,29 @@ def cmd_rawcheck(args) -> None:
             cfg.data_dir / cfg.sky_reference.root_file, interpolate=True
         )
 
+    if sky in cfg.raw.exposures:
+        from cafetomo.beamview import opacity_view, render_sky_difference, sky_difference
+
+        raw_live = meta[sky]["live_time_s"]
+        root_live = read_live_time(cfg.data_dir / cfg.sky_reference.root_file, interpolate=True)
+        diffs = {}
+        for pid in cfg.raw.exposures:
+            if pid == sky:
+                continue
+            pos = load_counts(raw_dir / f"counts_{pid}.npz")
+            views = [
+                opacity_view(pos, s, meta[pid]["live_time_s"] / t, cfg.view, cfg.opacity.t_floor)
+                for s, t in ((raw_sky, raw_live), (root_sky, root_live))
+            ]
+            diffs[pid] = sky_difference(*views)
+            o = names[pid]
+            doc |= {
+                f"{o}_sky_delta_mean": float(np.nanmean(diffs[pid].delta)),
+                f"{o}_sky_delta_rms": float(np.nanstd(diffs[pid].delta)),
+                f"{o}_sky_delta_noise": float(np.sqrt(np.nanmean(diffs[pid].noise ** 2))),
+            }
+        render_sky_difference(diffs, cfg.view, Path(args.out).parent / "sky_difference.png")
+
     grid, live = _grid(cfg, raw_dir)
     lam = solve_opacity(grid, cfg, live).lam
     noise = poisson_sigma(grid, cfg, live)

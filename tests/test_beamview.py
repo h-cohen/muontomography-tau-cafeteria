@@ -117,3 +117,18 @@ def test_without_floors_draws_every_bin_with_counts_in_both():
     full = opacity_view(_hist(values), sky, ratio, without_floors(VIEW), t_floor=0.05)
     assert np.isfinite(full.lam[:2]).all() and np.isnan(full.lam[2]).all()
     assert np.isnan(opacity_view(_hist(values), sky, ratio, VIEW, t_floor=0.05).lam[0]).all()
+
+
+def test_sky_difference_figure_and_its_noise(tmp_path):
+    from cafetomo.beamview import render_sky_difference, sky_difference
+
+    pos, sky, ratio = _scene()
+    half = _hist(np.round(sky.values * 0.5).astype(np.int64))
+    a = opacity_view(pos, half, 2 * ratio, VIEW, t_floor=0.05)
+    b = opacity_view(pos, sky, ratio, VIEW, t_floor=0.05)
+    d = sky_difference(a, b)
+    assert np.nanmax(np.abs(d.delta)) < 1e-2  # same truth, rounding only
+    n_a, n_b = a.counts_sky[5, 5], b.counts_sky[5, 5]
+    assert d.noise[5, 5] == pytest.approx(np.sqrt(1 / n_a - 1 / n_b))
+    png = render_sky_difference({"pos0": d}, VIEW, tmp_path / "sky_difference.png")
+    assert png.stat().st_size > 5_000
