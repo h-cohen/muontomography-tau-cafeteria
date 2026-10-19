@@ -187,3 +187,16 @@ def test_gate_checks_shared_coverage_without_single_view_edge_features():
     assert gate["passed"]
     assert gate["n_beams_data"] == len(shared)
     assert gate["n_single_view_peaks"] >= 1
+
+
+def test_spectrum_peak_gives_angular_period():
+    from cafetomo.beams import angular_beam_period, angular_spectrum
+
+    centers = np.arange(-1.225, 1.25, 0.05)
+    tx, ty = np.meshgrid(centers, centers, indexing="ij")
+    img = 0.2 + 0.05 * np.cos(2 * np.pi * tx / 0.23) + 0.01 * tx**2
+    freq, amp = angular_spectrum(img, centers, band=0.32)
+    k = int(np.argmax(amp[2:])) + 2
+    period = angular_beam_period(img, centers, band=0.32)
+    assert 1 / freq[k + 1] < period < 1 / freq[k - 1]
+    assert angular_spectrum(np.full_like(img, np.nan), centers, band=0.32) is None

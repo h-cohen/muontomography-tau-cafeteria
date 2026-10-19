@@ -291,6 +291,25 @@ def triangulate(
     }
 
 
+def angular_spectrum(
+    img: np.ndarray,
+    centers: np.ndarray,
+    axis: str = "x",
+    t_window: float = FFT_WINDOW_TAN,
+    *,
+    band: float,
+) -> tuple[np.ndarray, np.ndarray] | None:
+    """Hann-windowed FFT amplitude of the cubic-detrended profile on |t| < t_window,
+    as (frequencies in 1/tan-unit, amplitudes); None with fewer than FFT_MIN_BINS bins."""
+    t, p = profile(img, centers, axis, band)
+    sel = np.isfinite(p) & (np.abs(t) < t_window)
+    tt, pp = t[sel], p[sel]
+    if len(tt) < FFT_MIN_BINS:
+        return None
+    pp = pp - np.polyval(np.polyfit(tt, pp, 3), tt)
+    return np.fft.rfftfreq(len(tt), tt[1] - tt[0]), np.abs(np.fft.rfft(pp * np.hanning(len(pp))))
+
+
 def angular_beam_period(
     img: np.ndarray,
     centers: np.ndarray,
@@ -306,14 +325,10 @@ def angular_beam_period(
     no height, which is what makes it useful for closing the scale (see
     scale_closure). NaN when fewer than 16 measured bins fall in the window.
     """
-    t, p = profile(img, centers, axis, band)
-    sel = np.isfinite(p) & (np.abs(t) < t_window)
-    tt, pp = t[sel], p[sel]
-    if len(tt) < FFT_MIN_BINS:
+    spectrum = angular_spectrum(img, centers, axis, t_window, band=band)
+    if spectrum is None:
         return float("nan")
-    pp = pp - np.polyval(np.polyfit(tt, pp, 3), tt)
-    freq = np.fft.rfftfreq(len(tt), tt[1] - tt[0])
-    amp = np.abs(np.fft.rfft(pp * np.hanning(len(pp))))
+    freq, amp = spectrum
     k = int(np.argmax(amp[FFT_MIN_HARMONIC:])) + FFT_MIN_HARMONIC
     if k + 1 < len(amp):
         denom = amp[k - 1] - 2 * amp[k] + amp[k + 1]

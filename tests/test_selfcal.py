@@ -222,3 +222,30 @@ def test_recovers_injected_offset(cfg):
     fit = fit_pose(grid, replace(prior, selfcal=fixed), live)
     assert fit.pose.x == pytest.approx(truth.x, abs=0.1)
     assert fit.pose.y == pytest.approx(truth.y, abs=0.1)
+
+
+def test_pose_objective_matches_fit_pose_objective(cfg, monkeypatch):
+    from scipy.optimize import OptimizeResult
+
+    from cafetomo import selfcal
+
+    grid = AnalysisGrid(
+        edges=np.linspace(-0.1, 0.1, 3),
+        counts={
+            "pos0": np.full((2, 2), 3000),
+            "pos1": np.full((2, 2), 3500),
+            "SKY": np.full((2, 2), 5000),
+        },
+    )
+    live = {"pos0": 1.0, "pos1": 1.0, "SKY": 1.0}
+    c = replace(cfg, selfcal=replace(cfg.selfcal, baseline_m=None))
+    seen = {}
+
+    def minimize(fun, x0, **kwargs):
+        seen["value"] = fun(np.asarray(x0))
+        return OptimizeResult(success=True, fun=seen["value"], x=np.asarray(x0), nfev=1)
+
+    monkeypatch.setattr(selfcal.optimize, "minimize", minimize)
+    fit = selfcal.fit_pose(grid, c, live)
+    theta = np.array([fit.pose.x, fit.pose.y, fit.pose.az_deg])
+    assert selfcal.pose_objective(grid, c, live)(theta) == seen["value"] == fit.objective

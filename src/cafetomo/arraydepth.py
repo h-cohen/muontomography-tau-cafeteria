@@ -64,11 +64,10 @@ def continued_centres(centres):
     ]
 
 
-def fit_array_depth(data: FitData, cfg: Config, *, centres, height_seed, n_sub=32):
-    """Two common starts; free width starts at the configured rough estimate."""
+def _array_geometry(data: FitData, cfg: Config, centres, height_seed, n_sub):
+    """Band rows, aperture offsets, background design and bounds of the array fit."""
     band = _band(data, cfg)
     rows = band.rows
-    centres = np.asarray(centres)
     origins = np.array([cfg.origins()[rows.position_ids[i]] for i in rows.pos_of_row])
     poses = {e.id: e.pose for e in cfg.exposures}
     az = np.radians([poses[rows.position_ids[i]].az_deg for i in rows.pos_of_row])
@@ -104,27 +103,53 @@ def fit_array_depth(data: FitData, cfg: Config, *, centres, height_seed, n_sub=3
     lo = np.r_[zlo, 0.05, 0.05, -SHIFT_MAX_M, np.zeros(len(centres))]
     hi = np.r_[zhi, 1.0, cfg.beamdepth.h_max_m, SHIFT_MAX_M, np.full(len(centres), COLUMN_MAX)]
 
+    return {
+        "band": band,
+        "rows": rows,
+        "origins": origins,
+        "offsets": offsets,
+        "bg": bg,
+        "target": target,
+        "lo": lo,
+        "hi": hi,
+    }
+
+
+def _beam_opacity(g, v, centres, cache):
+    """Aperture-averaged (logsumexp) beam opacity at parameters v = (z, w, h, shift, C)."""
+    z, w, h, shift = v[:4]
+    key = tuple(v[:4])
+    if cache.get("key") != key:
+        cache["paths"] = _transverse_paths(
+            g["offsets"],
+            g["rows"].sx,
+            g["rows"].sy,
+            g["origins"][:, 2],
+            z=z,
+            w=w,
+            h=h,
+            centres=centres + shift,
+        )
+        cache["key"] = key
+    attenuation = np.einsum("rqb,b->rq", cache["paths"], v[4:] / h)
+    return -logsumexp(-attenuation, axis=1) + np.log(g["offsets"].shape[1])
+
+
+def _background_fit(g, beam):
+    """Weighted data minus beam term, and its lstsq background coefficients."""
+    y = g["target"] - beam * g["band"].sw
+    return y, np.linalg.lstsq(g["bg"], y, rcond=None)[0]
+
+
+def fit_array_depth(data: FitData, cfg: Config, *, centres, height_seed, n_sub=32):
+    """Two common starts; free width starts at the configured rough estimate."""
+    centres = np.asarray(centres)
+    g = _array_geometry(data, cfg, centres, height_seed, n_sub)
+    rows, bg, lo, hi = g["rows"], g["bg"], g["lo"], g["hi"]
     cache = {}
 
     def residual(v):
-        z, w, h, shift = v[:4]
-        key = tuple(v[:4])
-        if cache.get("key") != key:
-            cache["paths"] = _transverse_paths(
-                offsets,
-                rows.sx,
-                rows.sy,
-                origins[:, 2],
-                z=z,
-                w=w,
-                h=h,
-                centres=centres + shift,
-            )
-            cache["key"] = key
-        attenuation = np.einsum("rqb,b->rq", cache["paths"], v[4:] / h)
-        lam = -logsumexp(-attenuation, axis=1) + np.log(offsets.shape[1])
-        y = target - lam * band.sw
-        coeff = np.linalg.lstsq(bg, y, rcond=None)[0]
+        y, coeff = _background_fit(g, _beam_opacity(g, v, centres, cache))
         return y - bg @ coeff
 
     fits = []
@@ -217,6 +242,27 @@ def summarize_study(study):
         }
     )
     return result
+
+
+def array_model(data: FitData, cfg: Config, record, *, height_seed, n_sub=32):
+    """Data, beam term and fitted background on the fit's band rows at a fitted record,
+    with the fit's own chi2 (so a caller can check it scored the same data)."""
+    centres = np.asarray(record["centres"]) - record["shift"]
+    g = _array_geometry(data, cfg, centres, height_seed, n_sub)
+    v = np.r_[record["bottom"], record["w"], record["h"], record["shift"], record["normal_columns"]]
+    beam = _beam_opacity(g, v, centres, {})
+    y, coeff = _background_fit(g, beam)
+    r = y - g["bg"] @ coeff
+    rows = g["rows"]
+    return {
+        "pos": [rows.position_ids[i] for i in rows.pos_of_row],
+        "sx": rows.sx,
+        "sy": rows.sy,
+        "lam": g["band"].lam,
+        "beam": beam,
+        "background": (g["bg"] @ coeff) / g["band"].sw,
+        "chi2": float(r @ r),
+    }
 
 
 def main():

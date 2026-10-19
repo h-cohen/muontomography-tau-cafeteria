@@ -159,6 +159,34 @@ def _scan_start(objective, cfg: Config) -> np.ndarray:
     return np.array([bearings[int(np.argmin(scores))], x0[1]])
 
 
+def pose_objective(
+    grid: AnalysisGrid,
+    cfg: Config,
+    live_time: dict[str, float],
+    observation_mask: dict[str, np.ndarray] | None = None,
+):
+    """The cross-position score at a candidate free pose θ, averaged over the
+    twin half-shifted lattices; what `fit_pose` minimises."""
+    s = cfg.selfcal
+    nominal = build_fit_data(
+        solve_opacity(grid, cfg, live_time, observation_mask=observation_mask),
+        cfg,
+        poisson_sigma(grid, cfg, live_time, observation_mask=observation_mask),
+    )
+    vgrids = _objective_grids(cfg, nominal)
+
+    def objective(theta: np.ndarray) -> float:
+        c = cfg.with_pose(s.free_pose, _pose_from(theta, cfg))
+        data = build_fit_data(
+            solve_opacity(grid, c, live_time, observation_mask=observation_mask),
+            c,
+            poisson_sigma(grid, c, live_time, observation_mask=observation_mask),
+        )
+        return float(np.mean([cross_position_score(data, c, g) for g in vgrids]))
+
+    return objective
+
+
 def fit_pose(
     grid: AnalysisGrid,
     cfg: Config,
@@ -179,23 +207,7 @@ def fit_pose(
     - The score is not zero at the true pose (one view predicts the other
       only through a min-norm reconstruction), and that geometric part can
       pull the minimum; nothing here measures that pull."""
-    s = cfg.selfcal
-    nominal = build_fit_data(
-        solve_opacity(grid, cfg, live_time, observation_mask=observation_mask),
-        cfg,
-        poisson_sigma(grid, cfg, live_time, observation_mask=observation_mask),
-    )
-    vgrids = _objective_grids(cfg, nominal)
-
-    def objective(theta: np.ndarray) -> float:
-        c = cfg.with_pose(s.free_pose, _pose_from(theta, cfg))
-        data = build_fit_data(
-            solve_opacity(grid, c, live_time, observation_mask=observation_mask),
-            c,
-            poisson_sigma(grid, c, live_time, observation_mask=observation_mask),
-        )
-        return float(np.mean([cross_position_score(data, c, g) for g in vgrids]))
-
+    objective = pose_objective(grid, cfg, live_time, observation_mask)
     _, bounds = _search_space(cfg)
     res = optimize.minimize(
         objective,
