@@ -177,3 +177,23 @@ def test_conditional_array_study_is_generated_before_paper_numbers(built_pipelin
     assert scheduled.index("python -m cafetomo.arraydepth") < scheduled.index(
         "cafetomo --fast numbers"
     )
+
+
+def test_production_push_requires_check_and_sync_is_staged_from_baseline():
+    out = subprocess.run(
+        ["make", "--no-print-directory", "-n", "production-push"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    assert out.index("production-check") < out.index("push origin HEAD:main")
+
+
+def test_production_check_skipped_without_submodule(tmp_path):
+    out = subprocess.run(
+        ["make", "--no-print-directory", "-n", "test", f"PRODUCTION={tmp_path / 'absent'}"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    assert "absent/generated/MANIFEST.json" in out  # guarded by test -f, so skipped at run time

@@ -11,6 +11,9 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import shutil
+import subprocess
+import tempfile
 from pathlib import Path
 
 MANIFEST = "MANIFEST.json"
@@ -79,3 +82,65 @@ def literal_numbers(tex_root: Path, files: list[str]) -> list[str]:
             text = _OPTIONS.sub("", _NON_CLAIM_ARGS.sub("", text))
             hits += [f"{rel}:{n}: {m.group(0)}" for m in _NUMBER.finditer(text)]
     return hits
+
+
+def _git(repo: Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", *args], cwd=repo, check=True, capture_output=True, text=True
+    ).stdout.strip()
+
+
+def _require_clean(repo: Path) -> None:
+    if _git(repo, "status", "--porcelain"):
+        raise RuntimeError(f"uncommitted changes in {repo}: commit or stash them first")
+
+
+def _fast_forward(production: Path) -> None:
+    """Bring in Overleaf edits; never overwrite them."""
+    _git(production, "fetch", "-q", "origin")
+    upstream = _git(production, "rev-parse", "--abbrev-ref", "@{upstream}")
+    behind, ahead = (
+        int(n)
+        for n in _git(
+            production, "rev-list", "--left-right", "--count", f"{upstream}...HEAD"
+        ).split()
+    )
+    if behind and ahead:
+        raise RuntimeError(
+            f"{production} and {upstream} have diverged ({ahead} local, {behind} remote commits): "
+            "push or rebase the local commits first"
+        )
+    if behind:
+        _git(production, "merge", "-q", "--ff-only", upstream)
+
+
+def sync(production: Path, *, staged: Path, results: Path, source_root: Path) -> str:
+    if not (staged / "numbers.tex").is_file():
+        raise FileNotFoundError(f"{staged} has no numbers.tex: run make production-stage")
+    _require_clean(source_root)
+    _require_clean(production)
+    _fast_forward(production)
+    commit = _git(source_root, "rev-parse", "HEAD")
+    generated = production / "generated"
+    with tempfile.TemporaryDirectory(dir=production) as tmp:
+        fresh = Path(tmp) / "generated"
+        shutil.copytree(staged, fresh)
+        write_manifest(fresh, results=results, source_commit=commit)
+        if generated.exists():
+            shutil.rmtree(generated)
+        fresh.rename(generated)
+    _git(production, "add", "-A", "generated")
+    if not _git(production, "status", "--porcelain"):
+        return _git(production, "rev-parse", "HEAD")
+    _git(
+        production,
+        "-c",
+        "user.name=Hadar Cohen",
+        "-c",
+        "user.email=hal.nls@gmail.com",
+        "commit",
+        "-q",
+        "-m",
+        f"chore: sync generated from cafetomo {commit[:7]}",
+    )
+    return _git(production, "rev-parse", "HEAD")

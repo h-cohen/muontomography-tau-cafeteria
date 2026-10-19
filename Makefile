@@ -144,6 +144,7 @@ test:
 	uv run vulture
 	uv run pytest -m "not slow"
 	node --test viewer/test/*.test.mjs
+	@if test -f $(PRODUCTION)/generated/MANIFEST.json; then $(MAKE) --no-print-directory production-check; fi
 
 arxiv:
 	tar -czf $(GEN)/arxiv.tar.gz -C paper-draft main.tex refs.bib sections \
@@ -211,3 +212,28 @@ internal-paper: internal-selected
 
 arxiv-internal: arxiv
 	cp $(GEN)/arxiv.tar.gz $(GEN)/arxiv-internal.tar.gz
+
+# Production paper (Overleaf submodule). Stage from the reviewed baseline,
+# sync into paper-production/generated, check, and push only on request.
+PRODUCTION ?= paper-production
+PRODSTAGE  := runs/production-stage
+PRODRUNS   ?= runs/response-aware-2026-10-07
+PRODUCTION_FIGURES := height depth opacity setup
+PRODUCTION_LINT ?= 3d.tex
+.PHONY: production-stage production-sync production-check production-push
+production-stage: internal-paper
+	test -d $(PRODRUNS)/opacity -a -d $(PRODRUNS)/bootstrap -a -d $(PRODRUNS)/ingest
+	rm -rf $(PRODSTAGE) && mkdir -p $(PRODSTAGE)/figures
+	$(CLI) numbers --results $(RESULTS) --out $(PRODSTAGE)/numbers.tex
+	cp $(IVFIGOUT)/internal-numbers.tex $(IVFIGOUT)/internal-main.pdf $(PRODSTAGE)/
+	mv $(PRODSTAGE)/internal-main.pdf $(PRODSTAGE)/figures/
+	for f in $(PRODUCTION_FIGURES); do \
+	  uv run python paper-draft/figures/make_$$f.py --config $(CONFIG) --pose $(POSE) \
+	    --results $(RESULTS) --runs $(PRODRUNS) --out $(PRODSTAGE)/figures/$$f.pdf || exit 1; \
+	done
+production-sync: production-stage
+	$(CLI) production-sync --production $(PRODUCTION) --staged $(PRODSTAGE) --results $(RESULTS)
+production-check:
+	$(CLI) production-check --production $(PRODUCTION) --results $(RESULTS) --lint $(PRODUCTION_LINT)
+production-push: production-check
+	git -C $(PRODUCTION) push origin HEAD:main

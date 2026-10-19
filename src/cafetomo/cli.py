@@ -414,6 +414,31 @@ def cmd_numbers(args) -> None:
     write_numbers(Path(args.results), Path(args.out))
 
 
+def cmd_production_sync(args) -> None:
+    from cafetomo.production import sync
+
+    sha = sync(
+        Path(args.production),
+        staged=Path(args.staged),
+        results=Path(args.results),
+        source_root=Path.cwd(),
+    )
+    print(f"{args.production} at {sha[:7]}; push with: make production-push")
+
+
+def cmd_production_check(args) -> None:
+    from cafetomo.production import check, literal_numbers
+
+    root = Path(args.production)
+    for warning in literal_numbers(root, args.lint.split(",")):
+        print(f"warning: typed number {warning}")
+    problems = check(root / "generated", results=Path(args.results))
+    for p in problems:
+        print(f"error: {p}")
+    if problems:
+        raise SystemExit(1)
+
+
 def cmd_internal_validate(args) -> None:
     import hashlib
 
@@ -483,5 +508,7 @@ def main(argv: list[str] | None = None) -> None:
     stage("export", cmd_export, "config", "pose", "voxels", "bootstrap", "results", "out")
     stage("viewer", cmd_viewer, "export", "out")
     stage("numbers", cmd_numbers, "results", "out")
+    stage("production-sync", cmd_production_sync, "production", "staged", "results")
+    stage("production-check", cmd_production_check, "production", "results", "lint")
     args = ap.parse_args(argv)
     args.fn(args)
