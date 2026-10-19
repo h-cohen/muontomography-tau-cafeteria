@@ -116,8 +116,8 @@ changed baseline results require a fresh reviewed selection before compilation.
 ## Raw event data
 
 The ROOT histograms are the baseline. `cafetomo ingest-raw` instead builds pos0's counts and
-live time from the DAQ's event-level `.data` files (directory set in `configs/cafeteria.yaml`
-under `raw:`), keeping the sky and pos1 from ROOT, and `cafetomo beams2d` draws the
+live time from the DAQ's event-level `.data` files (directories set in `configs/cafeteria.yaml`
+under `raw:`: pos0 and the roof sky, DET200037-57; pos1 stays on ROOT), and `cafetomo beams2d` draws the
 sky-divided angular opacity image:
 
 ```bash

@@ -129,8 +129,8 @@ def ingest(
 ) -> list[IngestResult]:
     """Write counts_<id>.npz for every exposure and the open-sky reference.
 
-    Exposures named in `raw` take their counts and live time from the event-level
-    files (`rawdata.ingest_raw`) instead of the ROOT histograms. Their live time is
+    Exposures (or the sky reference) named in `raw` take their counts and live time from
+    the event-level files (`rawdata.ingest_raw`) instead of the ROOT histograms. Their live time is
     exact, so the ROOT sources then use the interpolated `dT` sum (the bin-centre sum
     is ~1% high) and every gauge ratio keeps one definition.
 
@@ -139,7 +139,7 @@ def ingest(
     """
     out_dir = Path(out_dir)
     raw = raw or {}
-    unknown = sorted(set(raw) - set(cfg.position_ids))
+    unknown = sorted(set(raw) - {*cfg.position_ids, cfg.sky_reference.id})
     if unknown:
         raise ValueError(f"raw counts for unknown exposure(s) {unknown}")
     edges = cfg.binning.edges()

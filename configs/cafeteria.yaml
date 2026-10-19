@@ -31,6 +31,7 @@ exposures:
 raw:
   exposures:
     pos0: ../../../01_data/processed/tau_cafeteria_raw_filtered/pos0
+    SKY: ../../../01_data/processed/tau_cafeteria_raw_filtered/roof
   # Per ASIC, the DAQ channel read by bar 0..22 (engineers' lookup). Validated on the
   # pos0 data: 97% of two-bar clusters are adjacent bars, 0.1% of rows touch an unmapped
   # channel; the identity map would give 0.2% adjacency.

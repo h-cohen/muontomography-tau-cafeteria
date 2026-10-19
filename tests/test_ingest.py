@@ -152,3 +152,28 @@ def test_ingest_with_raw_counts_replaces_only_those_exposures(cfg, tmp_path):
     assert [r.source_id for r in res] == ["pos0", "pos1", "SKY"]
     with pytest.raises(ValueError, match="unknown exposure"):
         ingest(c, tmp_path / "out2", {"nope": raw["pos0"]})
+
+
+def test_raw_counts_may_replace_the_sky_reference_too(cfg, tmp_path):
+    from cafetomo.angular import AngularHist
+    from cafetomo.rawdata import FileCounts, RawIngest
+
+    edges = np.linspace(-2, 2, 801)
+    data = tmp_path / "data"
+    data.mkdir()
+    for i, name in enumerate([e.root_file for e in cfg.exposures] + [cfg.sky_reference.root_file]):
+        _write_th2(data / name, np.full((800, 800), i + 1.0), edges, with_dt=True)
+    cut = cfg.binning.edges()
+    z = np.zeros((4, 32, 1), np.int64)
+    file = FileCounts(
+        "s.data", np.zeros((800, 800), np.int64), 10, 9, 1, 0, 0, 99.0, 10, z, z, z[..., 0]
+    )
+    sky = RawIngest(
+        AngularHist(np.full((500, 500), 7, dtype=np.int64), cut, cut, "txty"), 1, 99.0, (file,), 0
+    )
+    c = replace(cfg, data_dir=data, raw=replace(cfg.raw, exposures={"SKY": str(tmp_path)}))
+    ingest(c, tmp_path / "out", {"SKY": sky})
+    assert (load_counts(tmp_path / "out" / "counts_SKY.npz").values == 7).all()
+    meta = json.loads((tmp_path / "out" / "meta.json").read_text())["exposures"]
+    assert meta["SKY"]["live_time_s"] == 99.0 and meta["SKY"]["role"] == "open_sky_reference"
+    assert meta["pos0"]["live_time_estimator"] == "interpolated dT sum"
