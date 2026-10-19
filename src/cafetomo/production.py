@@ -79,15 +79,17 @@ _MATH_ENVS = r"(?:equation|align|gather|multline|eqnarray|algorithmic|displaymat
 _MATH_TOKEN = re.compile(
     rf"(\\\[|\\\]|(?<!\\)\$|\\begin\{{{_MATH_ENVS}\}}|\\end\{{{_MATH_ENVS}\}})"
 )
-_DECIMAL = re.compile(r"(?<![\\\w.^])\d+\.\d+(?![A-Za-z])")
+# In math: decimals and multi-digit integers; single digits and braced arguments
+# (sqrt{12}, x^{10}) are structural.
+_MATH_NUMBER = re.compile(r"(?<![\\\w.^_{])(?:\d+\.\d+|\d{2,})(?![A-Za-z.\d}])")
 
 
 def _claims(line: str, state: tuple[bool, bool]) -> tuple[list[str], tuple[bool, bool]]:
     """Numbers in one line that look like typed claims, and the (environment, inline)
     math state after it.
 
-    Prose: every number. Math: only decimals, since formulas carry structural
-    integers (1/2, sqrt 12, exponents) while typed measurements carry decimals."""
+    Prose: every number. Math: decimals and multi-digit integers, since formulas
+    carry structural single digits (1/2, 4(2+z^2)) and braced arguments (sqrt{12})."""
     env, inline = state
     hits = []
     for part in _MATH_TOKEN.split(line):
@@ -99,7 +101,7 @@ def _claims(line: str, state: tuple[bool, bool]) -> tuple[list[str], tuple[bool,
         elif token:
             inline = not inline
         elif env or inline:
-            hits += [m.group(0) for m in _DECIMAL.finditer(part)]
+            hits += [m.group(0) for m in _MATH_NUMBER.finditer(part)]
         else:
             text = _OPTIONS.sub("", _NON_CLAIM_ARGS.sub("", part))
             hits += [m.group(0) for m in _NUMBER.finditer(text)]

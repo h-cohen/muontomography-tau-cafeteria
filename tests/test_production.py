@@ -279,3 +279,11 @@ def test_literal_numbers_skips_layout_lengths(tmp_path):
         "\\fbox{\\parbox[c][0.35\\textheight][c]{0.85\\textwidth}{x}} at 7.3 m\n"
     )
     assert literal_numbers(tmp_path, ["3d.tex"]) == ["3d.tex:1: 7.3"]
+
+
+def test_literal_numbers_flags_multidigit_integers_in_math(tmp_path):
+    (tmp_path / "3d.tex").write_text(
+        "$\\nu=840$ and $\\sqrt{12}$, $x^{10}$, $4(2+\\zeta^2)$\n"
+        "\\begin{equation*} N=2586 \\end{equation*}\n"
+    )
+    assert literal_numbers(tmp_path, ["3d.tex"]) == ["3d.tex:1: 840", "3d.tex:2: 2586"]
