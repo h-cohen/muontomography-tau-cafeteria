@@ -261,3 +261,14 @@ def test_literal_numbers_allows_structural_integers_in_math(tmp_path):
         "3d.tex:1: 40",
         "3d.tex:3: 6.9",
     ]
+
+
+def test_literal_numbers_inline_math_inside_algorithmic(tmp_path):
+    (tmp_path / "3d.tex").write_text(
+        "\\begin{algorithmic}[1]\n"
+        "\\State $\\boldsymbol x\\gets0$, $k=1$\n"
+        "\\end{algorithmic}\n"
+        "\\begin{figure}[t]\n"
+        "\\includegraphics[width=0.9\\textwidth]{a.pdf} and 40 bars\n"
+    )
+    assert literal_numbers(tmp_path, ["3d.tex"]) == ["3d.tex:5: 40"]

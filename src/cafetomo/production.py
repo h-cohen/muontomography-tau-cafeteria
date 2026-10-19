@@ -80,25 +80,28 @@ _MATH_TOKEN = re.compile(
 _DECIMAL = re.compile(r"(?<![\\\w.^])\d+\.\d+(?![A-Za-z])")
 
 
-def _claims(line: str, in_math: bool) -> tuple[list[str], bool]:
-    """Numbers in one line that look like typed claims, and the math state after it.
+def _claims(line: str, state: tuple[bool, bool]) -> tuple[list[str], tuple[bool, bool]]:
+    """Numbers in one line that look like typed claims, and the (environment, inline)
+    math state after it.
 
     Prose: every number. Math: only decimals, since formulas carry structural
     integers (1/2, sqrt 12, exponents) while typed measurements carry decimals."""
+    env, inline = state
     hits = []
     for part in _MATH_TOKEN.split(line):
-        if part in ("\\[",) or part.startswith("\\begin"):
-            in_math = True
-        elif part in ("\\]",) or part.startswith("\\end"):
-            in_math = False
-        elif part == "$":
-            in_math = not in_math
-        elif in_math:
+        token = _MATH_TOKEN.fullmatch(part)
+        if token and (part == "\\[" or part.startswith("\\begin")):
+            env = True
+        elif token and (part == "\\]" or part.startswith("\\end")):
+            env = False
+        elif token:
+            inline = not inline
+        elif env or inline:
             hits += [m.group(0) for m in _DECIMAL.finditer(part)]
         else:
             text = _OPTIONS.sub("", _NON_CLAIM_ARGS.sub("", part))
             hits += [m.group(0) for m in _NUMBER.finditer(text)]
-    return hits, in_math
+    return hits, (env, inline)
 
 
 def literal_numbers(tex_root: Path, files: list[str]) -> list[str]:
@@ -108,9 +111,9 @@ def literal_numbers(tex_root: Path, files: list[str]) -> list[str]:
         if not path.is_file():
             hits.append(f"{rel}: file not found")
             continue
-        in_math = False
+        state = (False, False)
         for n, line in enumerate(path.read_text().splitlines(), 1):
-            found, in_math = _claims(re.sub(r"(?<!\\)%.*", "", line), in_math)
+            found, state = _claims(re.sub(r"(?<!\\)%.*", "", line), state)
             hits += [f"{rel}:{n}: {x}" for x in found]
     return hits
 
