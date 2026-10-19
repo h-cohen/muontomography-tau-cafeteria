@@ -5,6 +5,7 @@ import pytest
 
 from cafetomo.config import RawSettings
 from cafetomo.rawdata import (
+    CHARGE_EDGES,
     cluster_positions,
     count_file,
     ingest_raw,
@@ -173,3 +174,25 @@ def test_ingest_raw_without_files_is_an_error(tmp_path, cfg):
     cfg = replace(cfg, raw=replace(SETTINGS, exposures={"pos0": str(empty)}))
     with pytest.raises(ValueError, match="no .data files"):
         ingest_raw(cfg, "pos0", tmp_path / "cache", jobs=1)
+
+
+def test_count_file_histograms_solo_hit_charge_and_pedestal_per_channel(tmp_path):
+    rows = [
+        _row(1, 1e9, (0, 1, 2, 3), _single(5, 5, 5, 5)),  # every ASIC: channel 5 alone
+        _row(
+            2,
+            2e9,
+            (0, 1, 2, 3),
+            {3: {5: PED + 1010, 6: PED + 500}, 2: {5: 3000}, 0: {5: 3000}, 1: {5: 3000}},
+        ),
+    ]
+    _write(tmp_path / "a.data", rows)
+    c = count_file(tmp_path / "a.data", SETTINGS, np.linspace(-2, 2, 801))
+    assert c.hit_hist.shape == (4, 32, len(CHARGE_EDGES) - 1)
+    # ASIC 3 channel 5 fired alone once (PED + 4000); in row 2 channels 5 and 6 shared
+    assert c.hit_hist[3, 5].sum() == 1 and c.hit_hist[3, 6].sum() == 0
+    assert c.hit_hist[3, 5][np.searchsorted(CHARGE_EDGES, PED + 4000, side="right") - 1] == 1
+    assert c.n_flagged[3, 5] == 2 and c.n_flagged[3, 6] == 1
+    # an unflagged channel contributes its charge to the pedestal histogram
+    assert c.ped_hist[3, 0].sum() == 2 and c.ped_hist[3, 5].sum() == 0
+    assert c.n_valid_rows == 2

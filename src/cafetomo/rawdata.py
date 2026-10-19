@@ -28,7 +28,7 @@ import hashlib
 import json
 from collections.abc import Iterator
 from concurrent.futures import ProcessPoolExecutor
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 
 import numpy as np
@@ -45,6 +45,9 @@ _SLOT = 105
 _FLAGS = 9  # bookkeeping columns before a slot's hit flags
 _HEADER = b"ID_CLUSTER"
 _FULL_EDGES = np.linspace(-2.0, 2.0, 801)  # the ROOT txty binning
+CHARGE_EDGES = np.arange(0.0, 16001.0, 50.0)  # high-gain ADC of a channel that fired alone
+PEDESTAL_EDGES = np.arange(0.0, 4001.0, 10.0)  # high-gain ADC of a channel with no hit flag
+_SCHEMA = 2  # bumped whenever the cached per-file counts gain or change a field
 
 
 @dataclass(frozen=True)
@@ -52,7 +55,7 @@ class RawBlock:
     timecode_ns: np.ndarray  # (n,) cluster run clock
     hit: np.ndarray  # (n, ASIC, channel) hit flag
     charge: np.ndarray  # (n, ASIC, channel) high-gain charge
-    n_bad_asics: int  # rows whose four slots did not name the four ASICs once each
+    asics_ok: np.ndarray  # (n,) the row's four slots named the four ASICs once each
 
 
 def _parse(lines: list[bytes], name: str) -> np.ndarray:
@@ -77,7 +80,7 @@ def _block(rows: np.ndarray) -> RawBlock:
     pick = order[:, :, None]
     hit = np.take_along_axis(slot_hit, pick, axis=1) & ok[:, None, None]
     charge = np.take_along_axis(slot_hg, pick, axis=1)
-    return RawBlock(rows[:, 1].copy(), hit, charge, int((~ok).sum()))
+    return RawBlock(rows[:, 1].copy(), hit, charge, ok)
 
 
 def read_blocks(path: Path, rows: int = 50_000) -> Iterator[RawBlock]:
@@ -132,13 +135,31 @@ class FileCounts:
     n_bad_asics: int
     n_clock_resets: int
     live_time_s: float
+    n_valid_rows: int  # rows whose slots named the four ASICs once each
+    hit_hist: np.ndarray  # (ASIC, channel, charge bin): high-gain charge when it fired alone
+    ped_hist: np.ndarray  # (ASIC, channel, pedestal bin): charge with no hit flag
+    n_flagged: np.ndarray  # (ASIC, channel): rows with the hit flag, alone or not
+
+
+def _charge_counts(mask: np.ndarray, charge: np.ndarray, edges: np.ndarray) -> np.ndarray:
+    """Per (ASIC, channel) histogram of `charge` where `mask`; overflow joins the last bin."""
+    nbins = edges.size - 1
+    bin_ = np.clip(((charge - edges[0]) // (edges[1] - edges[0])).astype(np.int64), 0, nbins - 1)
+    _, asic, chan = np.nonzero(mask)
+    flat = (asic * N_CHANNELS + chan) * nbins + bin_[mask]
+    return np.bincount(flat, minlength=N_ASICS * N_CHANNELS * nbins).reshape(
+        N_ASICS, N_CHANNELS, nbins
+    )
 
 
 def count_file(
     path: Path, settings: RawSettings, edges: np.ndarray, block_rows: int = 50_000
 ) -> FileCounts:
     values = np.zeros((edges.size - 1,) * 2, dtype=np.int64)
-    n_rows = n_tracks = n_no_cluster = n_bad = n_resets = 0
+    n_rows = n_tracks = n_no_cluster = n_bad = n_resets = n_valid = 0
+    hit_hist = np.zeros((N_ASICS, N_CHANNELS, CHARGE_EDGES.size - 1), dtype=np.int64)
+    ped_hist = np.zeros((N_ASICS, N_CHANNELS, PEDESTAL_EDGES.size - 1), dtype=np.int64)
+    n_flagged = np.zeros((N_ASICS, N_CHANNELS), dtype=np.int64)
     clock_ns = 0.0
     last = None
     for blk in read_blocks(path, block_rows):
@@ -165,7 +186,14 @@ def count_file(
         n_rows += n
         n_tracks += int(ok.sum())
         n_no_cluster += int((~ok).sum())
-        n_bad += blk.n_bad_asics
+        n_bad += int((~blk.asics_ok).sum())
+        n_valid += int(blk.asics_ok.sum())
+        alone = blk.hit & (blk.hit.sum(axis=2, keepdims=True) == 1)
+        hit_hist += _charge_counts(alone, blk.charge, CHARGE_EDGES)
+        ped_hist += _charge_counts(
+            ~blk.hit & blk.asics_ok[:, None, None], blk.charge, PEDESTAL_EDGES
+        )
+        n_flagged += blk.hit.sum(axis=0)
     return FileCounts(
         Path(path).name,
         values,
@@ -175,6 +203,10 @@ def count_file(
         n_bad,
         n_resets,
         clock_ns / 1e9 / settings.clock_divisor,
+        n_valid,
+        hit_hist,
+        ped_hist,
+        n_flagged,
     )
 
 
@@ -189,8 +221,11 @@ class RawIngest:
 
 def _digest(path: Path, settings: RawSettings) -> str:
     """Identity of one file's counts: its size and name plus every setting that shapes them."""
-    spec = asdict(settings) | {"exposures": None, "bytes": path.stat().st_size}
+    spec = asdict(settings) | {"exposures": None, "bytes": path.stat().st_size, "schema": _SCHEMA}
     return hashlib.sha256(json.dumps([path.name, spec], sort_keys=True).encode()).hexdigest()
+
+
+_ARRAYS = ("values", "hit_hist", "ped_hist", "n_flagged")
 
 
 def _load(cache: Path, digest: str) -> FileCounts | None:
@@ -199,15 +234,17 @@ def _load(cache: Path, digest: str) -> FileCounts | None:
     with np.load(cache) as d:
         if str(d["digest"]) != digest:
             return None
-        meta = json.loads(str(d["meta"]))
-        return FileCounts(values=d["values"], **meta)
+        return FileCounts(**json.loads(str(d["meta"])), **{k: d[k] for k in _ARRAYS})
 
 
 def _store(cache: Path, digest: str, c: FileCounts) -> None:
     cache.parent.mkdir(parents=True, exist_ok=True)
-    meta = {k: v for k, v in asdict(c).items() if k != "values"}
+    meta = {f.name: getattr(c, f.name) for f in fields(c) if f.name not in _ARRAYS}
     np.savez_compressed(
-        cache, digest=np.array(digest), meta=np.array(json.dumps(meta)), values=c.values
+        cache,
+        digest=np.array(digest),
+        meta=np.array(json.dumps(meta)),
+        **{k: getattr(c, k) for k in _ARRAYS},
     )
 
 

@@ -135,7 +135,10 @@ def test_ingest_with_raw_counts_replaces_only_those_exposures(cfg, tmp_path):
         _write_th2(data / name, np.full((800, 800), i + 1.0), edges, with_dt=True)
     cut = cfg.binning.edges()
     hist = AngularHist(np.full((500, 500), 5, dtype=np.int64), cut, cut, "txty")
-    file = FileCounts("f.data", np.zeros((800, 800), np.int64), 10, 9, 1, 0, 0, 12.5)
+    z = np.zeros((4, 32, 1), np.int64)
+    file = FileCounts(
+        "f.data", np.zeros((800, 800), np.int64), 10, 9, 1, 0, 0, 12.5, 10, z, z, z[..., 0]
+    )
     raw = {"pos0": RawIngest(hist, 9 * 500 * 500, 12.5, (file,), 0)}
     c = replace(cfg, data_dir=data, raw=replace(cfg.raw, exposures={"pos0": str(tmp_path)}))
     res = ingest(c, tmp_path / "out", raw)
