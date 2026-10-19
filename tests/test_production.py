@@ -223,3 +223,21 @@ def test_sync_ignores_its_own_submodule_pointer(repos, tmp_path):
     (repos["staged"] / "numbers.tex").write_text("\\newcommand{\\BeamsZ}{7.0}\n")
     second = sync(prod, staged=repos["staged"], results=repos["results"], source_root=src)
     assert second != first
+
+
+def test_sync_on_detached_head_says_how_to_fix_it(repos):
+    """`git submodule update --init` leaves the clone detached."""
+    prod = repos["prod"]
+    _git(prod, "checkout", "-q", "--detach")
+    with pytest.raises(RuntimeError, match="not on a branch: run git -C .* checkout main"):
+        _sync(repos)
+
+
+def test_git_failures_carry_the_git_message(repos):
+    _git(repos["prod"], "remote", "set-url", "origin", str(repos["prod"].parent / "gone.git"))
+    with pytest.raises(RuntimeError, match="git fetch .* failed: .*gone.git"):
+        _sync(repos)
+
+
+def test_literal_numbers_reports_a_missing_lint_file(tmp_path):
+    assert literal_numbers(tmp_path, ["3d.tex"]) == ["3d.tex: file not found"]

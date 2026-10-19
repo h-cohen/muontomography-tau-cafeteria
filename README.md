@@ -308,7 +308,8 @@ Coauthors edit its prose in Overleaf; its `generated/` directory (number macros
 and figures) is written only from this repository.
 
 ```bash
-git submodule update --init paper-production   # once per clone
+git submodule update --init paper-production   # once per clone, then:
+git -C paper-production checkout main           # sync needs a branch, not a detached HEAD
 make production-sync TECTONIC=runs/tools/tectonic
 make production-check
 make production-push                           # only when agreed
@@ -330,6 +331,10 @@ since the last sync, and warns about numbers typed into `PRODUCTION_LINT`
 Overleaf authenticates git with a personal token (Overleaf account settings,
 Git integration, username `git`). Keep it in a git credential helper, never in
 `.gitmodules` or a URL.
+
+Push `paper-production` (`make production-push`) before pushing a commit of this
+repository that moves its submodule pointer; otherwise other clones cannot
+check out the recorded Overleaf commit.
 
 ## How beam depth is estimated
 

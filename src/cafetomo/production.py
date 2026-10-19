@@ -77,6 +77,9 @@ def literal_numbers(tex_root: Path, files: list[str]) -> list[str]:
     hits = []
     for rel in files:
         path = tex_root / rel
+        if not path.is_file():
+            hits.append(f"{rel}: file not found")
+            continue
         for n, line in enumerate(path.read_text().splitlines(), 1):
             text = re.sub(r"(?<!\\)%.*", "", line)
             text = _OPTIONS.sub("", _NON_CLAIM_ARGS.sub("", text))
@@ -85,9 +88,10 @@ def literal_numbers(tex_root: Path, files: list[str]) -> list[str]:
 
 
 def _git(repo: Path, *args: str) -> str:
-    return subprocess.run(
-        ["git", *args], cwd=repo, check=True, capture_output=True, text=True
-    ).stdout.strip()
+    done = subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True)
+    if done.returncode:
+        raise RuntimeError(f"git {' '.join(args)} in {repo} failed: {done.stderr.strip()}")
+    return done.stdout.strip()
 
 
 def _require_clean(repo: Path, *exclude: str) -> None:
@@ -98,6 +102,10 @@ def _require_clean(repo: Path, *exclude: str) -> None:
 
 def _fast_forward(production: Path) -> None:
     """Bring in Overleaf edits; never overwrite them."""
+    if not _git(production, "branch", "--show-current"):
+        raise RuntimeError(
+            f"{production} is not on a branch: run git -C {production} checkout main"
+        )
     _git(production, "fetch", "-q", "origin")
     upstream = _git(production, "rev-parse", "--abbrev-ref", "@{upstream}")
     behind, ahead = (
