@@ -218,7 +218,7 @@ arxiv-internal: arxiv
 PRODUCTION ?= paper-production
 PRODSTAGE  := runs/production-stage
 PRODRUNS   ?= runs/response-aware-2026-10-07
-PRODUCTION_FIGURES := height depth opacity setup
+PRODUCTION_FIGURES := parallax depth opacity setup slices zprofile arrayfit pose
 PRODUCTION_LINT ?= 3d.tex
 .PHONY: production-stage production-sync production-check production-push
 production-stage: internal-paper

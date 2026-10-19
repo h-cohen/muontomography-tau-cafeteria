@@ -10,6 +10,11 @@ FIGS = [
     "opacity",
     "height",
     "depth",
+    "parallax",
+    "slices",
+    "zprofile",
+    "arrayfit",
+    "pose",
 ]
 
 
