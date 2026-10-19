@@ -103,7 +103,7 @@ def test_render_writes_asic_grids_summary_and_json(tmp_path):
     h, p = _file_hists(mpv, n=6000)
     bars = tuple(tuple(range(23)) for _ in range(4))
     doc = summarize([h], [p], np.full((4, 32), 9000), 10_000, bars, SET)
-    render(doc, [h], [p], tmp_path, "pos0")
+    render(doc, [h], [p], tmp_path, "pos0", SET)
     for name in (
         "pos0_channelcal_asic0.png",
         "pos0_channelcal_asic3.png",

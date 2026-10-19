@@ -279,6 +279,7 @@ def render(
     ped_hists: list[np.ndarray],
     out_dir: Path,
     name: str,
+    settings: CalibrationSettings,
 ) -> None:
     """Write <name>_channelcal.json, one spectrum grid per ASIC and an MPV summary figure."""
     import matplotlib
@@ -353,7 +354,11 @@ def render(
             ms=3,
             color="#898781",
         )
-        ax.plot(ch[bad], np.nan_to_num(mpv[bad], nan=0.0), "x", color="#d1495b")
+        lo, hi = settings.mpv_axis_adc
+        # a flagged channel without an MPV sits on the bottom edge of the shared axis
+        shown = np.clip(np.nan_to_num(mpv[bad], nan=lo), lo, hi)
+        ax.plot(ch[bad], shown, "x", color="#d1495b", clip_on=False)
+        ax.set_ylim(lo, hi)
         ax.set_xlim(-1, N_CHANNELS)
         ax.axhline(doc["asics"][a]["median_mpv_adc"], color="#0b0b0b", lw=0.6, ls=":")
         ax.set_title(f"ASIC {a}", fontsize=9)

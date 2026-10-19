@@ -120,7 +120,7 @@ def cmd_channelcal(args) -> None:
             channel_bars=cfg.raw.channel_bars,
             settings=cfg.calibration,
         )
-        render(doc, hit, ped, out, pid)
+        render(doc, hit, ped, out, pid, cfg.calibration)
     write_meta(
         out,
         config_path=args.config,

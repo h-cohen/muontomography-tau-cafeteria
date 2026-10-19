@@ -220,6 +220,7 @@ class CalibrationSettings:
     min_solo_counts: int = 2000  # single-hit counts below which a channel is not fitted
     outlier_frac: float = 0.15  # |MPV / ASIC median - 1| above which a channel is flagged
     peak_tol_frac: float = 0.10  # |fitted MPV / empirical peak - 1| above which the fit is poor
+    mpv_axis_adc: tuple = (3500.0, 8500.0)  # display only: one MPV axis for every source
 
 
 @dataclass(frozen=True)
