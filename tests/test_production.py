@@ -272,3 +272,10 @@ def test_literal_numbers_inline_math_inside_algorithmic(tmp_path):
         "\\includegraphics[width=0.9\\textwidth]{a.pdf} and 40 bars\n"
     )
     assert literal_numbers(tmp_path, ["3d.tex"]) == ["3d.tex:5: 40"]
+
+
+def test_literal_numbers_skips_layout_lengths(tmp_path):
+    (tmp_path / "3d.tex").write_text(
+        "\\fbox{\\parbox[c][0.35\\textheight][c]{0.85\\textwidth}{x}} at 7.3 m\n"
+    )
+    assert literal_numbers(tmp_path, ["3d.tex"]) == ["3d.tex:1: 7.3"]

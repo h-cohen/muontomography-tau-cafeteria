@@ -24,7 +24,9 @@ _NON_CLAIM_ARGS = re.compile(
     r"|graphicspath|bibliography\w*|section\*?|subsection\*?|subsubsection\*?|paragraph\*?|hspace|vspace)\s*(?:\[[^\]]*\])?\{[^}]*\}"
 )
 _OPTIONS = re.compile(r"\[[^\]]*\]")
-_NUMBER = re.compile(r"(?<![\\\w.^])\d+(?:\.\d+)?(?![A-Za-z])")
+# A number scaling a page dimension is layout, not a claim.
+_LAYOUT = r"(?!\\(?:text|line|column|paper)(?:width|height))"
+_NUMBER = re.compile(r"(?<![\\\w.^])\d+(?:\.\d+)?(?![A-Za-z.\d])" + _LAYOUT)
 
 
 def _sha(path: Path) -> str:
