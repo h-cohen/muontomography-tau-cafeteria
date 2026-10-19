@@ -139,9 +139,9 @@ interpolated `dT` sum, since bin centres overstate them by ~1%. `rawdata.json` i
 by the paper until it is reviewed and promoted into `results/`; `rawcheck` reads the
 reviewed ROOT ingest and pose but never rebuilds them.
 
-The drawn region of `beams2d` is round, not square, by choice: the `view:` count floors (150
+The top row of `beams2d` is round, not square, by choice: the `view:` count floors (150
 position and 100 sky counts per 0.025 bin) drop the low-acceptance corners, which are too
-noisy to read.
+noisy to read. The bottom row shows the same counts with no floor over the whole square.
 
 The raw roof files cover runs DET200037-57 (21 days, 51% of the ROOT sky's live time; the
 ROOT sky spans runs 37-77). Those days are self-consistent (shape scatter between their

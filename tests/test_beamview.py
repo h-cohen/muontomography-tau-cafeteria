@@ -4,7 +4,13 @@ import numpy as np
 import pytest
 
 from cafetomo.angular import AngularHist
-from cafetomo.beamview import local_contrast, opacity_view, render, smooth_weighted
+from cafetomo.beamview import (
+    local_contrast,
+    opacity_view,
+    render,
+    smooth_weighted,
+    without_floors,
+)
 from cafetomo.config import ViewSettings
 
 EDGES = np.linspace(-1.0, 1.0, 101)  # 0.02 bins
@@ -93,9 +99,21 @@ def test_contrast_is_flat_for_a_smooth_background_and_shows_a_stripe():
 def test_render_writes_figure_arrays_and_summary(tmp_path):
     pos, sky, ratio = _scene()
     v = opacity_view(pos, sky, ratio, VIEW, t_floor=0.05)
-    png = render(v, VIEW, tmp_path, "pos0")
+    full = opacity_view(pos, sky, ratio, without_floors(VIEW), t_floor=0.05)
+    png = render(v, full, VIEW, tmp_path, "pos0")
     assert png.name == "pos0_beams2d.png" and png.stat().st_size > 5_000
     with np.load(tmp_path / "pos0_beams2d.npz") as d:
         assert d["lam"].shape == (50, 50) and {"smoothed", "contrast", "sigma"} <= set(d.files)
+        assert {"lam_unfiltered", "smoothed_unfiltered", "contrast_unfiltered"} <= set(d.files)
     doc = json.loads((tmp_path / "pos0_beams2d.json").read_text())
     assert doc["measured_bins"] > 0 and doc["median_sigma"] > 0
+
+
+def test_without_floors_draws_every_bin_with_counts_in_both():
+    pos, sky, ratio = _scene()
+    values = pos.values.copy()
+    values[:4, :] = 3  # far below the floor, but counted
+    values[4:6, :] = 0  # no counts: still not measured
+    full = opacity_view(_hist(values), sky, ratio, without_floors(VIEW), t_floor=0.05)
+    assert np.isfinite(full.lam[:2]).all() and np.isnan(full.lam[2]).all()
+    assert np.isnan(opacity_view(_hist(values), sky, ratio, VIEW, t_floor=0.05).lam[0]).all()

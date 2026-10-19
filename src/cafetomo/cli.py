@@ -234,7 +234,7 @@ def cmd_beams2d(args) -> None:
     """The 2D angular opacity view (`beamview`) of each position, or of `--exposure`,
     from an ingest directory."""
     from cafetomo.angular import load_counts
-    from cafetomo.beamview import opacity_view, render
+    from cafetomo.beamview import opacity_view, render, without_floors
     from cafetomo.ingest import live_times
     from cafetomo.provenance import write_meta
 
@@ -245,14 +245,13 @@ def cmd_beams2d(args) -> None:
     live = live_times(ingest, [sky_id, *ids])
     sky = load_counts(ingest / f"counts_{sky_id}.npz")
     for pid in ids:
-        view = opacity_view(
-            load_counts(ingest / f"counts_{pid}.npz"),
-            sky,
-            live[pid] / live[sky_id],
-            cfg.view,
-            cfg.opacity.t_floor,
+        pos = load_counts(ingest / f"counts_{pid}.npz")
+        ratio = live[pid] / live[sky_id]
+        view, full = (
+            opacity_view(pos, sky, ratio, v, cfg.opacity.t_floor)
+            for v in (cfg.view, without_floors(cfg.view))
         )
-        render(view, cfg.view, Path(args.out), pid)
+        render(view, full, cfg.view, Path(args.out), pid)
     write_meta(args.out, config_path=args.config, stage="beams2d", extra={"exposures": ids})
 
 
