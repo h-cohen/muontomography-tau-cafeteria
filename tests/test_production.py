@@ -208,3 +208,18 @@ def test_check_cli_fails_on_problems_and_only_warns_on_typed_numbers(tmp_path, c
         main([*argv, "--lint", "3d.tex"])
     assert exc.value.code == 1
     assert "error: generated/numbers.tex differs" in capsys.readouterr().out
+
+
+def test_sync_ignores_its_own_submodule_pointer(repos, tmp_path):
+    """Inside the analysis repo the production clone is a submodule; its moved
+    pointer after a sync must not count as an uncommitted source change."""
+    src = repos["src"]
+    remote = tmp_path / "overleaf.git"
+    _git(src, "-c", "protocol.file.allow=always", "submodule", "add", "-q", str(remote), "prod")
+    _git(src, "commit", "-qm", "submodule")
+    prod = src / "prod"
+    _git(prod, "-c", "user.name=T", "-c", "user.email=t@t", "checkout", "-q", "main")
+    first = sync(prod, staged=repos["staged"], results=repos["results"], source_root=src)
+    (repos["staged"] / "numbers.tex").write_text("\\newcommand{\\BeamsZ}{7.0}\n")
+    second = sync(prod, staged=repos["staged"], results=repos["results"], source_root=src)
+    assert second != first

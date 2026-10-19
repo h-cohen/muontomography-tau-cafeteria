@@ -300,6 +300,37 @@ contains the selected PDF panels, number macros, manuscript sections and the
 formatted bibliography. The author-provided `paper-draft/figures/voxels.png` is a
 selected, hashed input for the separately labelled conditional illustration.
 
+## Production paper (Overleaf)
+
+`paper-draft/` is the short inner draft built above. The longer technical paper
+is written in Overleaf and lives here as the git submodule `paper-production/`.
+Coauthors edit its prose in Overleaf; its `generated/` directory (number macros
+and figures) is written only from this repository.
+
+```bash
+git submodule update --init paper-production   # once per clone
+make production-sync TECTONIC=runs/tools/tectonic
+make production-check
+make production-push                           # only when agreed
+```
+
+`production-sync` stages the macros from `results/*.json` and the figures from
+`paper-draft/figures/make_*.py` (run against the reviewed baseline archive
+`runs/response-aware-2026-10-07`) into `runs/production-stage/`. It refuses
+when this repository or `paper-production/` has uncommitted changes, pulls
+Overleaf edits by fast-forward only (refusing diverged histories), replaces
+`generated/` and its `MANIFEST.json` (source commit and sha256 of every result
+and file), and commits inside `paper-production/`. It never pushes; the
+submodule pointer here is updated by a normal commit when wanted.
+
+`production-check` fails when a generated file was edited or `results/` changed
+since the last sync, and warns about numbers typed into `PRODUCTION_LINT`
+(default `3d.tex`). `make test` runs it whenever the submodule is checked out.
+
+Overleaf authenticates git with a personal token (Overleaf account settings,
+Git integration, username `git`). Keep it in a git credential helper, never in
+`.gitmodules` or a URL.
+
 ## How beam depth is estimated
 
 ### Data and geometric information

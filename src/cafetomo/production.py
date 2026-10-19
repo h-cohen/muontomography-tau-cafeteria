@@ -90,8 +90,9 @@ def _git(repo: Path, *args: str) -> str:
     ).stdout.strip()
 
 
-def _require_clean(repo: Path) -> None:
-    if _git(repo, "status", "--porcelain"):
+def _require_clean(repo: Path, *exclude: str) -> None:
+    pathspec = ["--", ".", *(f":(exclude){e}" for e in exclude)]
+    if _git(repo, "status", "--porcelain", *pathspec):
         raise RuntimeError(f"uncommitted changes in {repo}: commit or stash them first")
 
 
@@ -117,7 +118,13 @@ def _fast_forward(production: Path) -> None:
 def sync(production: Path, *, staged: Path, results: Path, source_root: Path) -> str:
     if not (staged / "numbers.tex").is_file():
         raise FileNotFoundError(f"{staged} has no numbers.tex: run make production-stage")
-    _require_clean(source_root)
+    # The production clone is usually a submodule of the source repository:
+    # its pointer moves with every sync and is bumped on request, not here.
+    root = source_root.resolve()
+    inside = production.resolve().is_relative_to(root)
+    _require_clean(
+        source_root, *([production.resolve().relative_to(root).as_posix()] if inside else [])
+    )
     _require_clean(production)
     _fast_forward(production)
     commit = _git(source_root, "rev-parse", "HEAD")
