@@ -129,6 +129,107 @@ def cmd_channelcal(args) -> None:
     )
 
 
+def cmd_rawcheck(args) -> None:
+    """rawdata.json: the raw build against the ROOT histograms (counts, live time, opacity),
+    the sky's stability across its days and later runs, and the channel calibration of
+    every raw source. Keys are `<ordinal>_...` as in data.json."""
+    from cafetomo.angular import AngularHist, load_counts
+    from cafetomo.ingest import crop_counts, read_live_time
+    from cafetomo.opacity import poisson_sigma, solve_opacity
+    from cafetomo.rawcheck import count_match, epoch_scatter, lambda_shift
+    from cafetomo.rawdata import TAN_EDGES, ingest_raw
+
+    cfg = _cfg(args)
+    raw_dir, root_dir, cal_dir = Path(args.ingest), Path(args.root_ingest), Path(args.channelcal)
+    names = _source_names(cfg)
+    meta = json.loads((raw_dir / "meta.json").read_text())["exposures"]
+    roots = {e.id: e.root_file for e in cfg.exposures} | {
+        cfg.sky_reference.id: cfg.sky_reference.root_file
+    }
+    doc: dict = {"clock_divisor": cfg.raw.clock_divisor}
+    cal = {}
+    for sid in cfg.raw.exposures:
+        o = names[sid]
+        raw, root = (load_counts(d / f"counts_{sid}.npz") for d in (raw_dir, root_dir))
+        chi2, scale = count_match(raw, root)
+        root_live = read_live_time(cfg.data_dir / roots[sid], interpolate=True)
+        doc |= {
+            f"{o}_raw_files": len(meta[sid]["raw_files"]),
+            f"{o}_raw_tracks": int(meta[sid]["total_counts"]),
+            f"{o}_raw_hours": meta[sid]["live_time_s"] / 3600.0,
+            f"{o}_root_chi": chi2,
+            f"{o}_root_count_ratio": scale,
+            f"{o}_root_live_ratio": meta[sid]["live_time_s"] / root_live,
+        }
+        cal[sid] = json.loads((cal_dir / f"{sid}_channelcal.json").read_text())
+        ok = [r for r in cal[sid]["channels"] if r["status"] == "ok"]
+        drift = [r["day_rms_adc"] / r["mpv_adc"] for r in ok if r["day_rms_adc"] is not None]
+        spread = [a["mpv_rms_frac"] for a in cal[sid]["asics"] if a["mpv_rms_frac"] is not None]
+        doc |= {
+            f"{o}_cal_ok": cal[sid]["n_ok"],
+            f"{o}_cal_flagged": cal[sid]["n_flagged"],
+            f"{o}_cal_inactive": cal[sid]["n_inactive"],
+            f"{o}_cal_gain_spread": float(np.median(spread)) if spread else float("nan"),
+            f"{o}_cal_day_drift": float(np.median(drift)) if drift else float("nan"),
+        }
+    first = cfg.position_ids[0]
+    for sid in cal:
+        if sid == first:
+            continue
+        rows = {(r["asic"], r["channel"]): r for r in cal[first]["channels"]}
+        pairs = [
+            (r["peak_adc"], rows[k]["peak_adc"], r["pedestal_adc"] - rows[k]["pedestal_adc"])
+            for r in cal[sid]["channels"]
+            if r["bar"] is not None
+            and np.isfinite(r["peak_adc"])
+            and np.isfinite(rows[k := (r["asic"], r["channel"])]["peak_adc"])
+        ]
+        gain = np.array([p / q for p, q, _ in pairs])
+        o = names[sid]
+        doc |= {
+            f"{o}_first_gain_ratio": float(gain.mean()),
+            f"{o}_first_gain_scatter": float(gain.std()),
+            f"{o}_first_pedestal_shift": float(np.mean([d for *_, d in pairs])),
+        }
+
+    sky = cfg.sky_reference.id
+    if sky in cfg.raw.exposures:
+        days = [
+            crop_counts(f.values, TAN_EDGES, TAN_EDGES, "txty", cfg.binning.edges())
+            for f in ingest_raw(cfg, sky, Path(args.cache or raw_dir.parent / "cache")).files
+        ]
+        half = len(days) // 2
+        doc["sky_halves_shape_scatter"], doc["sky_halves_shape_noise"] = epoch_scatter(
+            days[:half], days[half:]
+        )
+        raw_sky, root_sky = (load_counts(d / f"counts_{sky}.npz") for d in (raw_dir, root_dir))
+        later = AngularHist(
+            root_sky.values - raw_sky.values, root_sky.xedges, root_sky.yedges, "txty"
+        )
+        doc["sky_late_shape_scatter"], doc["sky_late_shape_noise"] = epoch_scatter(
+            [raw_sky], [later]
+        )
+        doc["sky_raw_live_fraction"] = meta[sky]["live_time_s"] / read_live_time(
+            cfg.data_dir / cfg.sky_reference.root_file, interpolate=True
+        )
+
+    grid, live = _grid(cfg, raw_dir)
+    lam = solve_opacity(grid, cfg, live).lam
+    noise = poisson_sigma(grid, cfg, live)
+    root_grid, root_live = _grid(cfg, root_dir)
+    root_lam = solve_opacity(root_grid, cfg, root_live).lam
+    for pid in cfg.position_ids:
+        o = names[pid]
+        shift, scatter, n = lambda_shift(lam[pid], root_lam[pid])
+        doc |= {
+            f"{o}_lam_shift": shift,
+            f"{o}_lam_scatter": scatter,
+            f"{o}_lam_noise": float(np.nanmedian(noise[pid])),
+            f"{o}_lam_bins": n,
+        }
+    _write_json(Path(args.out), doc)
+
+
 def cmd_beams2d(args) -> None:
     """The 2D angular opacity view (`beamview`) of each position, or of `--exposure`,
     from an ingest directory."""
@@ -491,6 +592,17 @@ def main(argv: list[str] | None = None) -> None:
     )
     stage("ingest", cmd_ingest, "config", "out", "results")
     stage("ingest-raw", cmd_ingest_raw, "config", "out", "cache", "jobs")
+    stage(
+        "rawcheck",
+        cmd_rawcheck,
+        "config",
+        "pose",
+        "ingest",
+        "root-ingest",
+        "channelcal",
+        "cache",
+        "out",
+    )
     stage("channelcal", cmd_channelcal, "config", "out", "cache", "jobs")
     stage("beams2d", cmd_beams2d, "config", "ingest", "out", "exposure")
     stage("selfcal", cmd_selfcal, "config", "ingest", "out")

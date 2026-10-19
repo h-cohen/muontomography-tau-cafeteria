@@ -115,35 +115,55 @@ changed baseline results require a fresh reviewed selection before compilation.
 
 ## Raw event data
 
-The ROOT histograms are the baseline. `cafetomo ingest-raw` instead builds pos0's counts and
-live time from the DAQ's event-level `.data` files (directories set in `configs/cafeteria.yaml`
-under `raw:`: pos0 and the roof sky, DET200037-57; pos1 stays on ROOT), and `cafetomo beams2d` draws the
-sky-divided angular opacity image:
+The ROOT histograms are the baseline. The raw chain rebuilds every source from the DAQ's
+event-level `.data` files instead (directories under `raw:` in `configs/cafeteria.yaml`:
+pos0, pos1 and the roof sky; both DAQ exports, the semicolon table and the multi-line
+record file, are read):
 
 ```bash
-make ingest-raw JOBS=5   # runs/raw/ingest/ (a full ingest directory; ~1.5 min on 5 cores)
-make beams2d             # runs/raw/beams2d/pos0_beams2d.{png,npz,json}
+make raw JOBS=5   # ingest-raw, beams2d, channelcal and rawcheck (~15 min cold, cached after)
 ```
 
+| Target | Output |
+|---|---|
+| `ingest-raw` | `runs/raw/ingest/`: a full ingest directory, usable as `--ingest` by later stages |
+| `beams2d` | `runs/raw/beams2d/<id>_beams2d.{png,npz,json}`: sky-divided angular opacity per position |
+| `channelcal` | `runs/raw/channelcal/<id>_channelcal*`: per-channel Landau x Gauss calibration |
+| `rawcheck` | `runs/raw/results/rawdata.json`: raw-versus-ROOT and stability checks, macro-ready keys |
+
 Reconstruction follows the DAQ (charge-centroid hit positions; tangent pairs and layer gaps
-fixed by matching the ROOT tangent combs), and the result reproduces the ROOT pos0 histogram
-(chi2 per bin 0.3-0.7). The run clock reads 50x too long (`clock_divisor`). With raw counts the
-ROOT sources' live times use an interpolated `dT` sum, since bin centres overstate them by
-~1%. The drawn region is round, not square, by choice: the `view:` count floors (150 pos0 and 100 sky counts per 0.025 bin) drop the low-acceptance corners, which are too noisy to read. These outputs are separate from the paper baseline; `runs/raw/ingest` can be passed to
-the later stages as `--ingest`.
+fixed by matching the ROOT tangent combs): the raw pos0 and pos1 histograms reproduce the
+ROOT ones (chi2 per bin 0.33 and 0.30 on shared clusters). The run clock reads 50x too long
+(`clock_divisor`); raw live times are exact clock sums, and the ROOT sources then use an
+interpolated `dT` sum, since bin centres overstate them by ~1%. `rawdata.json` is not read
+by the paper until it is reviewed and promoted into `results/`; `rawcheck` reads the
+reviewed ROOT ingest and pose but never rebuilds them.
+
+The drawn region of `beams2d` is round, not square, by choice: the `view:` count floors (150
+position and 100 sky counts per 0.025 bin) drop the low-acceptance corners, which are too
+noisy to read.
+
+The raw roof files cover runs DET200037-57 (21 days, 51% of the ROOT sky's live time; the
+ROOT sky spans runs 37-77). Those days are self-consistent (shape scatter between their
+halves at the Poisson level), but the later runs differ from them by a smooth ~+-10%
+gradient along tan theta_y (`sky_late_shape_scatter` against `sky_late_shape_noise`), and
+pos0's opacity against the two skies differs by more than counting noise. **Open check:**
+the roof detector is reported not to have moved; that, its levelling and any change in
+conditions between runs 37-57 and 58-77 are to be verified before the sky choice is final.
 
 ### Channel calibration
 
-`make channelcal JOBS=5` fits every channel's single-hit high-gain spectrum (net of its
-pedestal) with a Landau convolved with a Gaussian, on the summed data and per day:
-`runs/raw/channelcal/pos0_channelcal.{json,_asic0..3.png,_summary.png}` (MPV, error,
-empirical peak, pedestal, day-to-day spread, status). Unmapped channels carry ~0.05% of
-hits and are reported `inactive`, not flagged. The Landau model is not exact for triangular
-bars (chi2 per degree of freedom >> 1), so the empirical peak is the check on the MPV;
-the high-gain range saturates near 10,000 ADC net. Calibration is diagnostic: the angular
-counts use uncalibrated charges like the DAQ that produced the sky histogram, because a
-gain-corrected pos0 against an uncorrected sky moves the sub-bin comb of the ratio by about
-the counting noise of a 0.025 bin (see the stage notes in the report).
+`channelcal` fits every channel's single-hit high-gain spectrum (net of its pedestal) with a
+Landau convolved with a Gaussian, on the summed data and per file (day): MPV, error,
+empirical peak, pedestal, day-to-day spread and status. Unmapped channels carry ~0.05% of
+hits and are reported `inactive`, not flagged; bars at the ends (0 and 22) have a flat
+spectrum and are `poor_fit`. The Landau model is not exact for triangular bars (chi2 per
+degree of freedom >> 1), so the empirical peak is the check on the MPV; the high-gain
+range saturates near 10,000 ADC net. Pedestals agree between the three sources to a few
+ADC and channel gains to a few per cent. Calibration stays diagnostic: with pos0 and the
+raw sky both gain-corrected, the opacity changes by less than its counting noise and its
+bin-to-bin roughness does not improve, while correcting only one side adds roughness. The
+angular counts therefore use uncalibrated charges, as the DAQ does.
 
 ## Build and open the viewer
 

@@ -27,7 +27,7 @@ FIGS    := setup opacity height depth
 FIGPDF  := $(FIGS:%=$(GEN)/figures/%.pdf)
 AUTHORFIG := $(wildcard paper-draft/figures/voxels.png paper-draft/figures/room_voxels.pdf paper-draft/figures/room_voxels.png)
 
-.PHONY: all ingest ingest-raw beams2d channelcal selfcal opacity reconstruct analysis depthcheck arraydepth validation uncertainty export figures numbers paper viewer test clean arxiv
+.PHONY: all ingest ingest-raw beams2d channelcal rawcheck raw selfcal opacity reconstruct analysis depthcheck arraydepth validation uncertainty export figures numbers paper viewer test clean arxiv
 .DELETE_ON_ERROR:
 
 all: viewer
@@ -58,6 +58,16 @@ channelcal: $(RAWRUNS)/channelcal/meta.json
 $(RAWRUNS)/channelcal/meta.json: $(CONFIG) $(CODE)
 	$(CLI) channelcal --config $(CONFIG) --out $(RAWRUNS)/channelcal --cache $(RAWRUNS)/cache \
 	  --jobs $(or $(JOBS),4)
+
+# rawcheck reads the reviewed ROOT ingest and pose as fixed inputs: they are deliberately not
+# prerequisites, so a raw check can never rebuild the baseline.
+rawcheck: $(RAWRUNS)/results/rawdata.json
+$(RAWRUNS)/results/rawdata.json: $(RAWRUNS)/ingest/meta.json $(RAWRUNS)/channelcal/meta.json $(CODE)
+	$(CLI) rawcheck --config $(CONFIG) --pose $(POSE) --ingest $(RAWRUNS)/ingest \
+	  --root-ingest $(RUNS)/ingest --channelcal $(RAWRUNS)/channelcal --cache $(RAWRUNS)/cache \
+	  --out $@
+
+raw: beams2d channelcal rawcheck
 
 selfcal: $(POSE)
 $(POSE): $(INGEST) $(CODE)
