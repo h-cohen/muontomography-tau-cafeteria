@@ -246,3 +246,18 @@ def test_literal_numbers_reports_a_missing_lint_file(tmp_path):
 def test_literal_numbers_ignores_dimension_words(tmp_path):
     (tmp_path / "3d.tex").write_text("A 3D image and 2D maps at 7.3 m.\n")
     assert literal_numbers(tmp_path, ["3d.tex"]) == ["3d.tex:1: 7.3"]
+
+
+def test_literal_numbers_allows_structural_integers_in_math(tmp_path):
+    (tmp_path / "3d.tex").write_text(
+        "Inline $\\tfrac12 + \\sqrt{12}$ and $h=1.2$ m, prose 40 bars.\n"
+        "\\begin{equation}\n"
+        "  \\tau = 1/(4(2+\\zeta^2)), \\quad z = 6.9\n"
+        "\\end{equation}\n"
+        "\\[ x_{k+1} = 2x_k \\]\n"
+    )
+    assert literal_numbers(tmp_path, ["3d.tex"]) == [
+        "3d.tex:1: 1.2",
+        "3d.tex:1: 40",
+        "3d.tex:3: 6.9",
+    ]

@@ -73,6 +73,34 @@ def check(generated: Path, *, results: Path) -> list[str]:
     return problems
 
 
+_MATH_ENVS = r"(?:equation|align|gather|multline|eqnarray|algorithmic|displaymath|math)\*?"
+_MATH_TOKEN = re.compile(
+    rf"(\\\[|\\\]|(?<!\\)\$|\\begin\{{{_MATH_ENVS}\}}|\\end\{{{_MATH_ENVS}\}})"
+)
+_DECIMAL = re.compile(r"(?<![\\\w.^])\d+\.\d+(?![A-Za-z])")
+
+
+def _claims(line: str, in_math: bool) -> tuple[list[str], bool]:
+    """Numbers in one line that look like typed claims, and the math state after it.
+
+    Prose: every number. Math: only decimals, since formulas carry structural
+    integers (1/2, sqrt 12, exponents) while typed measurements carry decimals."""
+    hits = []
+    for part in _MATH_TOKEN.split(line):
+        if part in ("\\[",) or part.startswith("\\begin"):
+            in_math = True
+        elif part in ("\\]",) or part.startswith("\\end"):
+            in_math = False
+        elif part == "$":
+            in_math = not in_math
+        elif in_math:
+            hits += [m.group(0) for m in _DECIMAL.finditer(part)]
+        else:
+            text = _OPTIONS.sub("", _NON_CLAIM_ARGS.sub("", part))
+            hits += [m.group(0) for m in _NUMBER.finditer(text)]
+    return hits, in_math
+
+
 def literal_numbers(tex_root: Path, files: list[str]) -> list[str]:
     hits = []
     for rel in files:
@@ -80,10 +108,10 @@ def literal_numbers(tex_root: Path, files: list[str]) -> list[str]:
         if not path.is_file():
             hits.append(f"{rel}: file not found")
             continue
+        in_math = False
         for n, line in enumerate(path.read_text().splitlines(), 1):
-            text = re.sub(r"(?<!\\)%.*", "", line)
-            text = _OPTIONS.sub("", _NON_CLAIM_ARGS.sub("", text))
-            hits += [f"{rel}:{n}: {m.group(0)}" for m in _NUMBER.finditer(text)]
+            found, in_math = _claims(re.sub(r"(?<!\\)%.*", "", line), in_math)
+            hits += [f"{rel}:{n}: {x}" for x in found]
     return hits
 
 
