@@ -1,10 +1,14 @@
 """Angular counts and live time of one exposure from the DAQ's event-level dumps.
 
-A `.data` file is a semicolon-separated table with CRLF line ends and one row per
-four-fold cluster: 4 cluster columns, then for each of 4 readout slots 9 bookkeeping
-columns followed by 32 hit flags and 32 low- and 32 high-gain charges. The slot does
-not identify the ASIC: each slot's `ASIC_k` column does, and the order rotates between
-rows, so every per-channel column is re-indexed by the ASIC it reports.
+A `.data` file comes in one of two exports. The table is semicolon-separated with CRLF
+line ends and one row per four-fold cluster: 4 cluster columns, then for each of 4
+readout slots 9 bookkeeping columns followed by 32 hit flags and 32 low- and 32
+high-gain charges. The record export is comma-separated over 14 lines per cluster: a
+`1234BBBB1234` marker, the 4 cluster fields, then per slot its 9 bookkeeping fields, 32
+hit flags and 32 high-gain charges (no low gain); large timecodes may be written in E
+notation. In both, the slot does not identify the ASIC: each slot's `ASIC_k` column
+does, and the order rotates between rows, so every per-channel column is re-indexed by
+the ASIC it reports.
 
 Reconstruction follows the DAQ that produced the pre-binned ROOT histograms, so the
 open-sky division stays like for like. The bars read out by one ASIC are triangular and
@@ -37,14 +41,25 @@ from cafetomo.angular import AngularHist
 from cafetomo.config import Config, RawSettings
 from cafetomo.ingest import crop_counts
 
-N_COLUMNS = 424
+N_COLUMNS = 424  # numbers per cluster in the table export
 N_ASICS = 4
 N_CHANNELS = 32
 _HEAD = 4
-_SLOT = 105
 _FLAGS = 9  # bookkeeping columns before a slot's hit flags
+_MARKER = b"1234BBBB1234,"
+
+
+@dataclass(frozen=True)
+class _Layout:
+    numbers: int  # per cluster
+    slot: int  # numbers per readout slot
+    hg: int  # offset of the high-gain charges within a slot
+
+
+_TABLE = _Layout(N_COLUMNS, 105, _FLAGS + 2 * N_CHANNELS)
+_RECORDS = _Layout(_HEAD + 4 * 73, 73, _FLAGS + N_CHANNELS)
 _HEADER = b"ID_CLUSTER"
-_FULL_EDGES = np.linspace(-2.0, 2.0, 801)  # the ROOT txty binning
+TAN_EDGES = np.linspace(-2.0, 2.0, 801)  # the ROOT txty binning
 CHARGE_EDGES = np.arange(0.0, 16001.0, 50.0)  # high-gain ADC of a channel that fired alone
 PEDESTAL_EDGES = np.arange(0.0, 4001.0, 10.0)  # high-gain ADC of a channel with no hit flag
 _SCHEMA = 2  # bumped whenever the cached per-file counts gain or change a field
@@ -58,22 +73,22 @@ class RawBlock:
     asics_ok: np.ndarray  # (n,) the row's four slots named the four ASICs once each
 
 
-def _parse(lines: list[bytes], name: str) -> np.ndarray:
-    text = b"".join(lines).replace(b"\r\n", b";").replace(b"\n", b";").replace(b";", b" ")
-    values = np.fromstring(text, sep=" ")
-    if values.size != len(lines) * N_COLUMNS:
+def _parse(text: bytes, n: int, layout: _Layout, name: str) -> np.ndarray:
+    """`n` clusters of numbers separated by any mix of `;`, `,` and whitespace."""
+    values = np.fromstring(text.replace(b";", b" ").replace(b",", b" "), sep=" ")
+    if values.size != n * layout.numbers:
         raise ValueError(
-            f"{name}: {len(lines)} rows hold {values.size} numbers, not {N_COLUMNS} per row"
+            f"{name}: {n} clusters hold {values.size} numbers, not {layout.numbers} each"
         )
-    return values.reshape(-1, N_COLUMNS)
+    return values.reshape(n, layout.numbers)
 
 
-def _block(rows: np.ndarray) -> RawBlock:
-    base = _HEAD + _SLOT * np.arange(N_ASICS)
+def _block(rows: np.ndarray, layout: _Layout) -> RawBlock:
+    base = _HEAD + layout.slot * np.arange(N_ASICS)
     slot_asic = rows[:, base].astype(np.int64)
     slot_hit = np.stack([rows[:, b + _FLAGS : b + _FLAGS + N_CHANNELS] > 0 for b in base], axis=1)
     slot_hg = np.stack(
-        [rows[:, b + _FLAGS + 2 * N_CHANNELS : b + _SLOT] for b in base], axis=1
+        [rows[:, b + layout.hg : b + layout.hg + N_CHANNELS] for b in base], axis=1
     ).astype(np.float32)
     ok = (np.sort(slot_asic, axis=1) == np.arange(N_ASICS)).all(axis=1)
     order = np.argsort(np.where(ok[:, None], slot_asic, np.arange(N_ASICS)), axis=1)
@@ -83,9 +98,7 @@ def _block(rows: np.ndarray) -> RawBlock:
     return RawBlock(rows[:, 1].copy(), hit, charge, ok)
 
 
-def read_blocks(path: Path, rows: int = 50_000) -> Iterator[RawBlock]:
-    """Stream a `.data` file in blocks of at most `rows` clusters, skipping header lines."""
-    path = Path(path)
+def _table_blocks(path: Path, rows: int) -> Iterator[RawBlock]:
     pending: list[bytes] = []
     with open(path, "rb") as f:
         for line in f:
@@ -93,10 +106,40 @@ def read_blocks(path: Path, rows: int = 50_000) -> Iterator[RawBlock]:
                 continue
             pending.append(line)
             if len(pending) == rows:
-                yield _block(_parse(pending, path.name))
+                yield _block(_parse(b" ".join(pending), rows, _TABLE, path.name), _TABLE)
                 pending = []
     if pending:
-        yield _block(_parse(pending, path.name))
+        yield _block(_parse(b" ".join(pending), len(pending), _TABLE, path.name), _TABLE)
+
+
+def _record_blocks(path: Path, rows: int, chunk_bytes: int) -> Iterator[RawBlock]:
+    """Split the stream on the record marker; the text after the last marker of a chunk
+    is held back until the next chunk (or the end of the file) completes it."""
+    done: list[bytes] = []
+    tail = b""
+    with open(path, "rb") as f:
+        while chunk := f.read(chunk_bytes):
+            parts = (tail + chunk).split(_MARKER)
+            tail = parts.pop()
+            done += [p for p in parts if p.strip()]
+            while len(done) >= rows:
+                head, done = done[:rows], done[rows:]
+                yield _block(_parse(b" ".join(head), rows, _RECORDS, path.name), _RECORDS)
+    if tail.strip():
+        done.append(tail)
+    if done:
+        yield _block(_parse(b" ".join(done), len(done), _RECORDS, path.name), _RECORDS)
+
+
+def read_blocks(path: Path, rows: int = 50_000, chunk_bytes: int = 1 << 25) -> Iterator[RawBlock]:
+    """Stream a `.data` file of either export in blocks of at most `rows` clusters."""
+    path = Path(path)
+    with open(path, "rb") as f:
+        start = f.read(len(_MARKER))
+    if start == _MARKER:
+        yield from _record_blocks(path, rows, chunk_bytes)
+    else:
+        yield from _table_blocks(path, rows)
 
 
 def cluster_positions(
@@ -250,7 +293,7 @@ def _store(cache: Path, digest: str, c: FileCounts) -> None:
 
 def _count_job(args) -> FileCounts:
     path, settings = args
-    return count_file(path, settings, _FULL_EDGES)
+    return count_file(path, settings, TAN_EDGES)
 
 
 def ingest_raw(cfg: Config, exposure: str, cache_dir: Path, jobs: int = 1) -> RawIngest:
@@ -283,7 +326,7 @@ def ingest_raw(cfg: Config, exposure: str, cache_dir: Path, jobs: int = 1) -> Ra
     files = tuple(found)
     full = sum(c.values for c in files)
     return RawIngest(
-        hist=crop_counts(full, _FULL_EDGES, _FULL_EDGES, "txty", cfg.binning.edges()),
+        hist=crop_counts(full, TAN_EDGES, TAN_EDGES, "txty", cfg.binning.edges()),
         total_in_files=int(full.sum()),
         live_time_s=float(sum(c.live_time_s for c in files)),
         files=files,

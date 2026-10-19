@@ -196,3 +196,54 @@ def test_count_file_histograms_solo_hit_charge_and_pedestal_per_channel(tmp_path
     # an unflagged channel contributes its charge to the pedestal histogram
     assert c.ped_hist[3, 0].sum() == 2 and c.ped_hist[3, 5].sum() == 0
     assert c.n_valid_rows == 2
+
+
+def _record(cluster_id, t_ns, asic_order, hits, t_fmt="{:.0f}"):
+    """The same cluster in the multi-line record export: a marker line, a cluster line,
+    then per slot a bookkeeping line, a hit-flag line and one (high-gain) charge line."""
+    lines = ["1234BBBB1234, ", f"{cluster_id},{t_fmt.format(t_ns)},0,4,"]
+    for asic in asic_order:
+        flag = np.zeros(32, int)
+        hg = np.full(32, int(PED))
+        for ch, q in hits[asic].items():
+            flag[ch] = 1
+            hg[ch] = int(q)
+        lines += [
+            f"{asic},0,0,0,0,0,0,0,0,",
+            ",".join(map(str, flag)) + ",",
+            ",".join(map(str, hg)),
+        ]
+    lines[-1] += "\r,"
+    return "\n".join(lines) + "\n"
+
+
+def test_record_export_reads_like_the_table(tmp_path):
+    clusters = [
+        (1, 1e9, (0, 1, 2, 3), _single(5, 5, 5, 5)),
+        (2, 3.3736645326475e15, (1, 2, 3, 0), _single(2, 12, 7, 9)),
+    ]
+    _write(tmp_path / "a.data", [_row(*c) for c in clusters])
+    (tmp_path / "b.data").write_text(
+        "".join(_record(*clusters[0]) + _record(*clusters[1], t_fmt="{:.13E}") for _ in [0])
+    )
+    (a,) = list(read_blocks(tmp_path / "a.data"))
+    (b,) = list(read_blocks(tmp_path / "b.data"))
+    assert (a.hit == b.hit).all() and (a.charge == b.charge).all()
+    assert b.timecode_ns.tolist() == pytest.approx([1e9, 3.3736645326475e15])
+
+
+def test_record_export_streams_across_chunks_and_blocks(tmp_path):
+    text = "".join(_record(k, (k + 1) * 1e9, (0, 1, 2, 3), _single(5, 5, 5, 5)) for k in range(7))
+    (tmp_path / "b.data").write_text(text)
+    blocks = list(read_blocks(tmp_path / "b.data", rows=3, chunk_bytes=500))
+    assert [b.timecode_ns.size for b in blocks] == [3, 3, 1]
+    assert np.concatenate([b.timecode_ns for b in blocks]).tolist() == [
+        (k + 1) * 1e9 for k in range(7)
+    ]
+
+
+def test_truncated_record_is_an_error_naming_the_file(tmp_path):
+    text = _record(1, 1e9, (0, 1, 2, 3), _single(5, 5, 5, 5))
+    (tmp_path / "cut.data").write_text(text + text[: len(text) // 2])
+    with pytest.raises(ValueError, match="cut.data"):
+        list(read_blocks(tmp_path / "cut.data"))
