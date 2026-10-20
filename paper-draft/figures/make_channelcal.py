@@ -12,13 +12,12 @@ COLORS = {**style.POSITION_COLORS, "SKY": style.MUTED}
 
 
 def channel_points(rows: list[dict]) -> list[dict]:
-    """Fitted channels, inactive ones dropped; any status other than ok is flagged."""
+    """Fitted channels; inactive ones are dropped."""
     return [
         {
             "asic": r["asic"],
             "channel": r["channel"],
             "mpv": r["mpv_adc"],
-            "flagged": r["status"] != "ok",
         }
         for r in rows
         if r["status"] != "inactive" and r["mpv_adc"] is not None
@@ -41,17 +40,16 @@ def main(argv=None) -> None:
     )
     for k, (sid, pts) in enumerate(points.items()):
         for ax, asic in zip(axes, asics, strict=True):
-            for flagged, marker in ((False, "o"), (True, "x")):
-                sel = [p for p in pts if p["asic"] == asic and p["flagged"] == flagged]
-                ax.plot(
-                    [p["channel"] + 0.2 * (k - 1) for p in sel],
-                    [p["mpv"] for p in sel],
-                    marker,
-                    ms=3,
-                    color=COLORS[sid],
-                    ls="none",
-                    label=SOURCES[sid] if (asic == asics[0] and not flagged) else None,
-                )
+            sel = [p for p in pts if p["asic"] == asic]
+            ax.plot(
+                [p["channel"] + 0.2 * (k - 1) for p in sel],
+                [p["mpv"] for p in sel],
+                "o",
+                ms=3,
+                color=COLORS[sid],
+                ls="none",
+                label=SOURCES[sid] if asic == asics[0] else None,
+            )
     for ax, asic in zip(axes, asics, strict=True):
         ax.set(title=f"ASIC {asic}", xlabel="channel")
     axes[0].set_ylabel("MPV net of pedestal (ADC)")

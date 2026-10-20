@@ -47,7 +47,7 @@ def test_projected_profiles_share_one_world_grid():
     assert np.isnan(out["pos0"][-1]) and np.isfinite(out["pos1"][-1])
 
 
-def test_calibrated_channels_drop_inactive_and_mark_flags():
+def test_calibrated_channels_drop_inactive():
     from make_channelcal import channel_points
 
     rows = [
@@ -56,7 +56,8 @@ def test_calibrated_channels_drop_inactive_and_mark_flags():
         {"asic": 1, "channel": 3, "mpv_adc": 7400.0, "status": "mpv_outlier"},
     ]
     pts = channel_points(rows)
-    assert [(p["asic"], p["channel"], p["flagged"]) for p in pts] == [(0, 1, False), (1, 3, True)]
+    assert [(p["asic"], p["channel"]) for p in pts] == [(0, 1), (1, 3)]
+    assert all("flagged" not in p for p in pts)
 
 
 def test_map_extent_crops_to_display_range():
