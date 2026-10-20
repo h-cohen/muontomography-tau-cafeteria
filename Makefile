@@ -229,7 +229,8 @@ PRODUCTION ?= paper-production
 PRODSTAGE  := runs/production-stage
 PRODRUNS   ?= runs/response-aware-2026-10-07
 PRODUCTION_FIGURES := parallax depth opacity setup slices zprofile arrayfit pose
-PRODUCTION_LINT ?= 3d.tex
+PRODUCTION_RAW_FIGURES := maps2d channelcal
+PRODUCTION_LINT ?= 3d.tex,2d.tex,rawdata.tex
 .PHONY: production-stage production-sync production-check production-push
 production-stage: internal-paper
 	test -d $(PRODRUNS)/opacity -a -d $(PRODRUNS)/bootstrap -a -d $(PRODRUNS)/ingest
@@ -237,11 +238,17 @@ production-stage: internal-paper
 	$(CLI) numbers --results $(RESULTS) --out $(PRODSTAGE)/numbers.tex
 	$(CLI) config-numbers --config $(CONFIG) --volume $(PRODRUNS)/voxels/volume_full.npz \
 	  --out $(PRODSTAGE)/config-numbers.tex
+	$(CLI) raw-numbers --rawdata $(RAWRUNS)/results/rawdata.json --config $(CONFIG) \
+	  --out $(PRODSTAGE)/raw-numbers.tex
 	cp $(IVFIGOUT)/internal-numbers.tex $(IVFIGOUT)/internal-main.pdf $(PRODSTAGE)/
 	mv $(PRODSTAGE)/internal-main.pdf $(PRODSTAGE)/figures/
 	for f in $(PRODUCTION_FIGURES); do \
 	  uv run python paper-draft/figures/make_$$f.py --config $(CONFIG) --pose $(POSE) \
 	    --results $(RESULTS) --runs $(PRODRUNS) --out $(PRODSTAGE)/figures/$$f.pdf || exit 1; \
+	done
+	for f in $(PRODUCTION_RAW_FIGURES); do \
+	  uv run python paper-draft/figures/make_$$f.py --config $(CONFIG) --pose $(POSE) \
+	    --results $(RESULTS) --runs $(RAWRUNS) --out $(PRODSTAGE)/figures/$$f.pdf || exit 1; \
 	done
 production-sync: production-stage
 	$(CLI) production-sync --production $(PRODUCTION) --staged $(PRODSTAGE) --results $(RESULTS)

@@ -45,3 +45,25 @@ def test_projected_profiles_share_one_world_grid():
     grid, out = projected_profiles(t, prof, origins, z=2.0, n=21)
     assert grid[0] == -1.0 and grid[-1] == 2.0 and set(out) == {"pos0", "pos1"}
     assert np.isnan(out["pos0"][-1]) and np.isfinite(out["pos1"][-1])
+
+
+def test_calibrated_channels_drop_inactive_and_mark_flags():
+    from make_channelcal import channel_points
+
+    rows = [
+        {"asic": 0, "channel": 1, "mpv_adc": 6000.0, "status": "ok"},
+        {"asic": 0, "channel": 2, "mpv_adc": None, "status": "inactive"},
+        {"asic": 1, "channel": 3, "mpv_adc": 7400.0, "status": "mpv_outlier"},
+    ]
+    pts = channel_points(rows)
+    assert [(p["asic"], p["channel"], p["flagged"]) for p in pts] == [(0, 1, False), (1, 3, True)]
+
+
+def test_map_extent_crops_to_display_range():
+    from make_maps2d import cropped
+
+    edges = np.linspace(-1.25, 1.25, 101)
+    img = np.arange(100 * 100, dtype=float).reshape(100, 100)
+    sub, extent = cropped(img, edges, 0.9)
+    assert extent[0] >= -0.9 - 1e-9 and extent[1] <= 0.9 + 1e-9
+    assert sub.shape[0] == sub.shape[1] == 72

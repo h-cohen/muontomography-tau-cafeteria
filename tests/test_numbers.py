@@ -173,3 +173,17 @@ def test_baseline_config_sections_unchanged():
         assert old[s] == new[s], s
     keep = ("z_min_m", "z_max_m", "spacing_m", "n_aperture_sub")
     assert {k: old["volume"][k] for k in keep} == {k: new["volume"][k] for k in keep}
+
+
+def test_raw_macros_cover_rawdata_and_settings(tmp_path, cfg):
+    from cafetomo.numbers import raw_macros
+
+    path = tmp_path / "rawdata.json"
+    path.write_text(json.dumps({"first_root_chi": 0.3334, "sky_cal_ok": 75, "x": float("nan")}))
+    m = raw_macros(path, cfg)
+    assert m["RawFirstRootChi"] == "0.333"
+    assert m["RawSkyCalOk"] == "75"
+    assert m["RawX"] == "--"
+    assert m["RawCalibrationOutlierFrac"] == "0.15"
+    assert any(k.startswith("RawView") for k in m)
+    assert not set(m) & set(flatten(Path("results")))
