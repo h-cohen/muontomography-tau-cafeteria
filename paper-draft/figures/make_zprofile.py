@@ -3,6 +3,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
+import frame
 import style
 
 
@@ -11,7 +12,7 @@ def half_maximum(profile) -> float:
 
 
 def main(argv=None) -> None:
-    a, _ = style.setup(argv)
+    a, _ = frame.setup(argv)
     bd = style.load_result(a, "beamdepth")
     array = style.load_result(a, "arraydepth")
     z = np.asarray(bd["zprofile_profile_z"])

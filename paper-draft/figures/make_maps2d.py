@@ -5,6 +5,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
+import frame
 import style
 
 
@@ -13,11 +14,11 @@ def cropped(img: np.ndarray, edges: np.ndarray, t: float):
     centres = 0.5 * (edges[1:] + edges[:-1])
     keep = np.abs(centres) <= t
     lo, hi = edges[:-1][keep][0], edges[1:][keep][-1]
-    return style.top_view(img[np.ix_(keep, keep)], (lo, hi), (lo, hi))
+    return frame.top_view(img[np.ix_(keep, keep)], (lo, hi), (lo, hi))
 
 
 def main(argv=None) -> None:
-    a, cfg = style.setup(argv)
+    a, cfg = frame.setup(argv)
     view = cfg.view
     pids = list(cfg.position_ids)
     fig, axes = plt.subplots(

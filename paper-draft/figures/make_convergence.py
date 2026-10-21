@@ -5,6 +5,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
+import frame
 import style
 from cafetomo.reconstruct import VoxelSolution
 
@@ -16,7 +17,7 @@ def selected(history) -> int:
 
 
 def main(argv=None) -> None:
-    a, _ = style.setup(argv)
+    a, _ = frame.setup(argv)
     info = VoxelSolution.load(Path(a.runs) / "voxels" / "volume_full.npz").info
     history = np.asarray(info["chi2_history"])
     k = selected(history)

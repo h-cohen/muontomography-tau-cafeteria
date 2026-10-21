@@ -6,6 +6,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
+import frame
 import style
 
 
@@ -16,7 +17,7 @@ def relative_score(score) -> np.ndarray:
 
 
 def main(argv=None) -> None:
-    a, _ = style.setup(argv)
+    a, _ = frame.setup(argv)
     af = json.loads((Path(a.results) / "production" / "autofocuslayer.json").read_text())
     beams = style.load_result(a, "beams")
     fig, ax = plt.subplots(figsize=(style.COLUMN_IN, 2.4), layout="constrained")

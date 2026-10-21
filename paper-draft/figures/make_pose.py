@@ -5,6 +5,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
+import frame
 import style
 from cafetomo.cli import _grid
 from cafetomo.config import load_config
@@ -14,7 +15,7 @@ from cafetomo.selfcal import pose_objective
 def label(name: str) -> str:
     if name == "az":
         return r"$\varphi_1$ (deg)"
-    return rf"${style.ax(name)}_1$ (m)"
+    return rf"${frame.ax(name)}_1$ (m)"
 
 
 def scan_axes(pose: dict, n: int = 11) -> dict:
@@ -26,7 +27,7 @@ def scan_axes(pose: dict, n: int = 11) -> dict:
 
 
 def main(argv=None) -> None:
-    a, _ = style.setup(argv)
+    a, _ = frame.setup(argv)
     pose = style.load_result(a, "pose")
     prior = load_config(a.config)
     grid, live = _grid(prior, Path(a.runs) / "ingest")

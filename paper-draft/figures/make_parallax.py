@@ -5,6 +5,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
+import frame
 import style
 from cafetomo.beams import angular_spectrum, profile, sky_images, world_profile
 from cafetomo.cli import _fit_data
@@ -21,7 +22,7 @@ def projected_profiles(t, profiles: dict, origins: dict, *, z: float, n: int = 4
 
 
 def main(argv=None) -> None:
-    a, cfg = style.setup(argv)
+    a, cfg = frame.setup(argv)
     beams = style.load_result(a, "beams")
     maps, _, data = _fit_data(cfg, Path(a.runs) / "opacity")
     images = sky_images(data, maps.sky)
@@ -31,12 +32,12 @@ def main(argv=None) -> None:
 
     fig, (ax, bx, cx) = plt.subplots(1, 3, figsize=(style.FULL_IN, 2.5), layout="constrained")
     ax.plot(
-        beams["scan_z"], beams["scan_corr_x"], color=style.INK, label=rf"$\rho_{style.ax('x')}$"
+        beams["scan_z"], beams["scan_corr_x"], color=style.INK, label=rf"$\rho_{frame.ax('x')}$"
     )
     ax.plot(
-        beams["scan_z"], beams["scan_corr_y"], color=style.MUTED, label=rf"$\rho_{style.ax('y')}$"
+        beams["scan_z"], beams["scan_corr_y"], color=style.MUTED, label=rf"$\rho_{frame.ax('y')}$"
     )
-    ax.axvline(beams["z_x"], color=style.INK, ls="--", lw=0.8, label=rf"$z_{style.ax('x')}$")
+    ax.axvline(beams["z_x"], color=style.INK, ls="--", lw=0.8, label=rf"$z_{frame.ax('x')}$")
     ax.axvline(beams["z"], color=style.INK, ls=":", lw=0.8, label=r"joint $z$")
     ax.set(xlabel="trial ceiling height (m)", ylabel="parallax correlation")
     ax.legend(loc="lower center", ncols=2)
@@ -51,7 +52,7 @@ def main(argv=None) -> None:
     for x in beams["beams_x"]:
         bx.axvline(x, color=style.GRID, lw=0.8, zorder=0)
     bx.set(
-        xlabel=rf"${style.ax('x')}$ at joint $z$ (m)", ylabel=r"opacity $\lambda$ (dimensionless)"
+        xlabel=rf"${frame.ax('x')}$ at joint $z$ (m)", ylabel=r"opacity $\lambda$ (dimensionless)"
     )
     bx.legend(loc="upper right")
 

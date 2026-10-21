@@ -6,13 +6,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.colors import LogNorm
 
+import frame
 import style
 from cafetomo.angular import load_counts, rebin
 from cafetomo.opacity import OpacityMaps
 
 
 def main(argv=None) -> None:
-    a, cfg = style.setup(argv)
+    a, cfg = frame.setup(argv)
     t = cfg.opacity.max_tan
     maps = OpacityMaps.load(Path(a.runs) / "opacity" / "maps.npz")
     sky = rebin(load_counts(Path(a.runs) / "ingest" / "counts_SKY.npz"), cfg.opacity.rebin_factor)
@@ -25,7 +26,7 @@ def main(argv=None) -> None:
     lam = [maps.image(pid) for pid in maps.lam]
     vmax = float(np.nanmax(np.concatenate([im.ravel() for im in lam])))
     for ax, pid, im in zip(axes[:2], maps.lam, lam, strict=True):
-        shown, extent_shown = style.top_view(im, extent[:2], extent[2:])
+        shown, extent_shown = frame.top_view(im, extent[:2], extent[2:])
         h = ax.imshow(
             shown, origin="lower", extent=extent_shown, cmap=style.SEQUENTIAL, vmin=0.0, vmax=vmax
         )
@@ -33,7 +34,7 @@ def main(argv=None) -> None:
     fig.colorbar(h, ax=axes[:2], shrink=0.8, pad=0.02, label=r"opacity $\lambda$ (dimensionless)")
 
     counts = np.where(sky.values > 0, sky.values, np.nan)
-    shown, extent_shown = style.top_view(counts, sky.xedges[[0, -1]], sky.xedges[[0, -1]])
+    shown, extent_shown = frame.top_view(counts, sky.xedges[[0, -1]], sky.xedges[[0, -1]])
     h = axes[2].imshow(
         shown,
         origin="lower",

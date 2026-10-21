@@ -5,6 +5,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
+import frame
 import style
 
 
@@ -26,7 +27,7 @@ def histogram_panel(ax, h_boot, h_nominal: float, h_measured: float) -> None:
 
 
 def main(argv=None) -> None:
-    a, _ = style.setup(argv)
+    a, _ = frame.setup(argv)
     bd = style.load_result(a, "beamdepth")
     inputs = style.load_result(a, "inputs")
     h_boot = np.load(Path(a.runs) / "bootstrap" / "values.npz")["depth_h"]

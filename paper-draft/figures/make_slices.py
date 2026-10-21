@@ -5,6 +5,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
+import frame
 import style
 from cafetomo.reconstruct import VoxelSolution
 from internal_figure_utils import DISPLAY
@@ -15,7 +16,7 @@ def nearest_layers(centres, heights) -> list[int]:
 
 
 def main(argv=None) -> None:
-    a, cfg = style.setup(argv)
+    a, cfg = frame.setup(argv)
     array = style.load_result(a, "arraydepth")
     voxels = Path(a.runs) / "voxels"
     sol = VoxelSolution.load(voxels / "volume_full.npz")
@@ -32,7 +33,7 @@ def main(argv=None) -> None:
     grid = fig.add_gridspec(2, 3)
     axes = [fig.add_subplot(grid[0, i]) for i in range(3)]
     for ax, k in zip(axes, layers, strict=True):
-        shown, extent_shown = style.top_view(q[:, :, k], extent_xy[:2], extent_xy[2:])
+        shown, extent_shown = frame.top_view(q[:, :, k], extent_xy[:2], extent_xy[2:])
         im = ax.imshow(
             shown,
             origin="lower",
@@ -42,7 +43,7 @@ def main(argv=None) -> None:
             vmax=vmax,
         )
         for pid, (x, y, _) in cfg.origins().items():
-            ax.plot(*style.point(x, y), "o", ms=3, color=style.POSITION_COLORS[pid])
+            ax.plot(*frame.point(x, y), "o", ms=3, color=style.POSITION_COLORS[pid])
         ax.set(
             title=rf"$z={zc[k]:.1f}$ m",
             xlabel=r"$x$ (m)",
@@ -63,7 +64,7 @@ def main(argv=None) -> None:
     )
     for z in (array["bottom"], array["bottom"] + array["h"]):
         side.axhline(z, color=style.INK_SECONDARY, lw=0.6, ls="--")
-    side.set(xlabel=rf"${style.ax('x')}$ (m)", ylabel=r"$z$ (m)")
+    side.set(xlabel=rf"${frame.ax('x')}$ (m)", ylabel=r"$z$ (m)")
     fig.colorbar(im, ax=axes, label=r"$q$ (1/m)", shrink=0.8)
     style.label_panels([*axes, side])
     style.save(fig, a)

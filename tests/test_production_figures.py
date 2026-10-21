@@ -91,7 +91,7 @@ def test_score_normalized_to_its_minimum():
 
 
 def test_detector_frame_swaps_names_points_and_top_views():
-    import style
+    import frame as style
 
     img = np.arange(6.0).reshape(2, 3)  # [i_x, j_y]
     style.set_frame("analysis")

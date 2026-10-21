@@ -5,6 +5,7 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 
+import frame
 import style
 
 SOURCES = {"pos0": "pos0", "pos1": "pos1", "SKY": "open sky"}
@@ -25,7 +26,7 @@ def channel_points(rows: list[dict]) -> list[dict]:
 
 
 def main(argv=None) -> None:
-    a, _ = style.setup(argv)
+    a, _ = frame.setup(argv)
     points = {
         sid: channel_points(
             json.loads((Path(a.runs) / "channelcal" / f"{sid}_channelcal.json").read_text())[

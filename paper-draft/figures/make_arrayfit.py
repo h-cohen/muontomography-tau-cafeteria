@@ -5,6 +5,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
+import frame
 import style
 from cafetomo.arraydepth import array_model
 from cafetomo.cli import _fit_data
@@ -16,7 +17,7 @@ def band_average(sx, values):
 
 
 def main(argv=None) -> None:
-    a, cfg = style.setup(argv)
+    a, cfg = frame.setup(argv)
     record = style.load_result(a, "arraydepth")
     beams = style.load_result(a, "beams")
     _, _, data = _fit_data(cfg, Path(a.runs) / "opacity")
@@ -47,7 +48,7 @@ def main(argv=None) -> None:
         top.set(title=pid, ylabel=r"opacity $\lambda$ (dimensionless)")
         bottom.plot(s, lam - mod, ".", ms=3, color=style.POSITION_COLORS[pid])
         bottom.axhline(0, color=style.MUTED, lw=0.6)
-        bottom.set(xlabel=rf"sky tangent $s_{style.ax('x')}$ (dimensionless)", ylabel="residual")
+        bottom.set(xlabel=rf"sky tangent $s_{frame.ax('x')}$ (dimensionless)", ylabel="residual")
     axes[0, 0].legend(loc="upper left")
     style.label_panels(axes[0])
     style.save(fig, a)
