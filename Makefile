@@ -247,13 +247,13 @@ production-stage: internal-paper
 	mv $(PRODSTAGE)/internal-main.pdf $(PRODSTAGE)/figures/
 	for f in $(PRODUCTION_FIGURES); do \
 	  uv run python paper-draft/figures/make_$$f.py --config $(CONFIG) --pose $(POSE) \
-	    --results $(RESULTS) --runs $(PRODRUNS) --out $(PRODSTAGE)/figures/$$f.pdf || exit 1; \
+	    --results $(RESULTS) --runs $(PRODRUNS) --frame detector --out $(PRODSTAGE)/figures/$$f.pdf || exit 1; \
 	done
 	uv run python paper-draft/figures/make_convergence.py --config $(CONFIG) --pose $(POSE) \
-	  --results $(RESULTS) --runs $(CONVRUNS) --out $(PRODSTAGE)/figures/convergence.pdf
+	  --results $(RESULTS) --runs $(CONVRUNS) --frame detector --out $(PRODSTAGE)/figures/convergence.pdf
 	for f in $(PRODUCTION_RAW_FIGURES); do \
 	  uv run python paper-draft/figures/make_$$f.py --config $(CONFIG) --pose $(POSE) \
-	    --results $(RESULTS) --runs $(RAWRUNS) --out $(PRODSTAGE)/figures/$$f.pdf || exit 1; \
+	    --results $(RESULTS) --runs $(RAWRUNS) --frame detector --out $(PRODSTAGE)/figures/$$f.pdf || exit 1; \
 	done
 production-sync: production-stage
 	$(CLI) production-sync --production $(PRODUCTION) --staged $(PRODSTAGE) --results $(RESULTS)

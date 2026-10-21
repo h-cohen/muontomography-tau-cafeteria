@@ -32,17 +32,22 @@ def main(argv=None) -> None:
     grid = fig.add_gridspec(2, 3)
     axes = [fig.add_subplot(grid[0, i]) for i in range(3)]
     for ax, k in zip(axes, layers, strict=True):
+        shown, extent_shown = style.top_view(q[:, :, k], extent_xy[:2], extent_xy[2:])
         im = ax.imshow(
-            q[:, :, k].T,
+            shown,
             origin="lower",
-            extent=extent_xy,
+            extent=extent_shown,
             cmap=style.SEQUENTIAL,
             vmin=vmin,
             vmax=vmax,
         )
         for pid, (x, y, _) in cfg.origins().items():
-            ax.plot(x, y, "o", ms=3, color=style.POSITION_COLORS[pid])
-        ax.set(title=rf"$z={zc[k]:.1f}$ m", xlabel=r"$x$ (m)", ylabel=r"$y$ (m)")
+            ax.plot(*style.point(x, y), "o", ms=3, color=style.POSITION_COLORS[pid])
+        ax.set(
+            title=rf"$z={zc[k]:.1f}$ m",
+            xlabel=r"$x$ (m)",
+            ylabel=r"$y$ (m)",
+        )
     side = fig.add_subplot(grid[1, :])
     band = np.abs(yc) <= cfg.beamdepth.y_band_m[1]
     with np.errstate(invalid="ignore"):
@@ -58,7 +63,7 @@ def main(argv=None) -> None:
     )
     for z in (array["bottom"], array["bottom"] + array["h"]):
         side.axhline(z, color=style.INK_SECONDARY, lw=0.6, ls="--")
-    side.set(xlabel=r"$x$ (m)", ylabel=r"$z$ (m)")
+    side.set(xlabel=rf"${style.ax('x')}$ (m)", ylabel=r"$z$ (m)")
     fig.colorbar(im, ax=axes, label=r"$q$ (1/m)", shrink=0.8)
     style.label_panels([*axes, side])
     style.save(fig, a)

@@ -9,11 +9,11 @@ import style
 
 
 def cropped(img: np.ndarray, edges: np.ndarray, t: float):
-    """The square |tan| <= t of an [i_x, j_y] image, transposed for imshow, and its extent."""
+    """The square |tan| <= t of an [i_x, j_y] image, oriented for imshow, and its extent."""
     centres = 0.5 * (edges[1:] + edges[:-1])
     keep = np.abs(centres) <= t
     lo, hi = edges[:-1][keep][0], edges[1:][keep][-1]
-    return img[np.ix_(keep, keep)].T, [lo, hi, lo, hi]
+    return style.top_view(img[np.ix_(keep, keep)], (lo, hi), (lo, hi))
 
 
 def main(argv=None) -> None:
@@ -43,7 +43,11 @@ def main(argv=None) -> None:
             vmin=-view.contrast_range,
             vmax=view.contrast_range,
         )
-        row[0].set(title=f"{pid}: opacity", xlabel=r"$\tan\theta_x$", ylabel=r"$\tan\theta_y$")
+        row[0].set(
+            title=f"{pid}: opacity",
+            xlabel=r"$\tan\theta_x$",
+            ylabel=r"$\tan\theta_y$",
+        )
         row[1].set(title=f"{pid}: local contrast", xlabel=r"$\tan\theta_x$")
         fig.colorbar(im0, ax=row[0], label=r"$\lambda$")
         fig.colorbar(im1, ax=row[1], label=r"$\Delta\lambda$")

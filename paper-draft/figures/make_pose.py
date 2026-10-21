@@ -10,7 +10,11 @@ from cafetomo.cli import _grid
 from cafetomo.config import load_config
 from cafetomo.selfcal import pose_objective
 
-LABELS = {"x": r"$x_1$ (m)", "y": r"$y_1$ (m)", "az": r"$\varphi_1$ (deg)"}
+
+def label(name: str) -> str:
+    if name == "az":
+        return r"$\varphi_1$ (deg)"
+    return rf"${style.ax(name)}_1$ (m)"
 
 
 def scan_axes(pose: dict, n: int = 11) -> dict:
@@ -41,7 +45,7 @@ def main(argv=None) -> None:
         ax.axvspan(best[name] - sigma, best[name] + sigma, color=style.GRID, label=r"$\pm\sigma$")
         ax.plot(values, scores, "o-", ms=3, color=style.INK)
         ax.axvline(best[name], color=style.INK_SECONDARY, lw=0.8, ls="--", label="fitted")
-        ax.set(xlabel=LABELS[name])
+        ax.set(xlabel=label(name))
     axes[0].set_ylabel(r"objective $\mathcal{J}$")
     axes[0].legend(loc="upper center")
     style.label_panels(axes)

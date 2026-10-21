@@ -25,17 +25,19 @@ def main(argv=None) -> None:
     lam = [maps.image(pid) for pid in maps.lam]
     vmax = float(np.nanmax(np.concatenate([im.ravel() for im in lam])))
     for ax, pid, im in zip(axes[:2], maps.lam, lam, strict=True):
+        shown, extent_shown = style.top_view(im, extent[:2], extent[2:])
         h = ax.imshow(
-            im.T, origin="lower", extent=extent, cmap=style.SEQUENTIAL, vmin=0.0, vmax=vmax
+            shown, origin="lower", extent=extent_shown, cmap=style.SEQUENTIAL, vmin=0.0, vmax=vmax
         )
         ax.set_title(pid, fontsize=8, color=style.POSITION_COLORS[pid])
     fig.colorbar(h, ax=axes[:2], shrink=0.8, pad=0.02, label=r"opacity $\lambda$ (dimensionless)")
 
     counts = np.where(sky.values > 0, sky.values, np.nan)
+    shown, extent_shown = style.top_view(counts, sky.xedges[[0, -1]], sky.xedges[[0, -1]])
     h = axes[2].imshow(
-        counts.T,
+        shown,
         origin="lower",
-        extent=[sky.xedges[0], sky.xedges[-1]] * 2,
+        extent=extent_shown,
         cmap=style.SEQUENTIAL,
         norm=LogNorm(),
     )

@@ -28,19 +28,24 @@ def main(argv=None) -> None:
     zb, zt, w = bd["zbottom"], bd["ztop"], bd["w"]
 
     fig, (ax, bx) = plt.subplots(1, 2, figsize=(style.FULL_IN, 2.6), gridspec_kw={"wspace": 0.3})
-    ax.add_patch(Rectangle((x0, y0), x1 - x0, y1 - y0, fill=False, ec=style.MUTED, lw=0.8, ls=":"))
+    ax.add_patch(
+        Rectangle(*style.rect(x0, y0, x1 - x0, y1 - y0), fill=False, ec=style.MUTED, lw=0.8, ls=":")
+    )
     for xb in illustrative_xs:
         ax.add_patch(
-            Rectangle((xb - w / 2, ybeam[0]), w, ybeam[1] - ybeam[0], fc=style.GRID, ec="none")
+            Rectangle(
+                *style.rect(xb - w / 2, ybeam[0], w, ybeam[1] - ybeam[0]), fc=style.GRID, ec="none"
+            )
         )
     for pid, (px, py, _pz) in cfg.origins().items():
-        ax.plot(px, py, "o", color=style.POSITION_COLORS[pid], ms=4, label=pid)
+        ax.plot(*style.point(px, py), "o", color=style.POSITION_COLORS[pid], ms=4, label=pid)
     px_all = [p[0] for p in cfg.origins().values()]
     py_all = [p[1] for p in cfg.origins().values()]
     reach = max(abs(x0), abs(x1), abs(y0), abs(y1))
     xlim = (min(px_all) - reach - 0.5, max(px_all) + reach + 0.5)
-    ax.set_xlim(*xlim)
-    ax.set_ylim(min(py_all) - reach - 0.5, max(py_all) + reach + 0.5)
+    ylim = (min(py_all) - reach - 0.5, max(py_all) + reach + 0.5)
+    ax.set_xlim(*style.point(xlim, ylim)[0])
+    ax.set_ylim(*style.point(xlim, ylim)[1])
     ax.set_aspect("equal")
     ax.set_xlabel("x (m)")
     ax.set_ylabel("y (m)")
@@ -54,7 +59,7 @@ def main(argv=None) -> None:
     bx.axhline(zb, color=style.MUTED, lw=0.5, ls=":")
     bx.set_xlim(*xlim)
     bx.set_ylim(-0.4, zt + 0.8)
-    bx.set_xlabel("x (m)")
+    bx.set_xlabel(f"{style.ax('x')} (m)")
     bx.set_ylabel("z (m)")
     bx.text(
         xlim[1] - 0.2,

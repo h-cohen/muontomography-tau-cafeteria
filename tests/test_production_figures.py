@@ -88,3 +88,21 @@ def test_score_normalized_to_its_minimum():
     from make_autofocus import relative_score
 
     assert relative_score(np.array([2.0, 1.0, 1.5])).tolist() == [1.0, 0.0, 0.5]
+
+
+def test_detector_frame_swaps_names_points_and_top_views():
+    import style
+
+    img = np.arange(6.0).reshape(2, 3)  # [i_x, j_y]
+    style.set_frame("analysis")
+    assert style.ax("x") == "x" and style.point(1.0, 2.0) == (1.0, 2.0)
+    data, extent = style.top_view(img, (0, 2), (0, 3))
+    assert data.shape == (3, 2) and extent == [0, 2, 0, 3]
+    style.set_frame("detector")
+    try:
+        assert style.ax("x") == "y" and style.ax("y") == "x" and style.ax("z") == "z"
+        assert style.point(1.0, 2.0) == (2.0, 1.0)
+        data, extent = style.top_view(img, (0, 2), (0, 3))
+        assert data.shape == (2, 3) and extent == [0, 3, 0, 2]
+    finally:
+        style.set_frame("analysis")

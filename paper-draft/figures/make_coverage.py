@@ -34,16 +34,19 @@ def main(argv=None) -> None:
         layout="constrained",
         gridspec_kw={"width_ratios": [1, 1.6, 1]},
     )
+    shown, extent_shown = style.top_view(
+        views[:, :, k], (xc[0] - half, xc[-1] + half), (yc[0] - half, yc[-1] + half)
+    )
     im = ax.imshow(
-        views[:, :, k].T,
+        shown,
         origin="lower",
         cmap=style.SEQUENTIAL,
         vmin=0,
         vmax=views.max(),
-        extent=[xc[0] - half, xc[-1] + half, yc[0] - half, yc[-1] + half],
+        extent=extent_shown,
     )
     for pid, (x, y, _) in cfg.origins().items():
-        ax.plot(x, y, "o", ms=3, color=style.POSITION_COLORS[pid])
+        ax.plot(*style.point(x, y), "o", ms=3, color=style.POSITION_COLORS[pid])
     ax.set(xlabel=r"$x$ (m)", ylabel=r"$y$ (m)")
     fig.colorbar(im, ax=ax, ticks=range(int(views.max()) + 1), label="positions")
     with np.errstate(invalid="ignore", divide="ignore"):
@@ -55,7 +58,7 @@ def main(argv=None) -> None:
         cmap=style.SEQUENTIAL,
         extent=[xc[0] - half, xc[-1] + half, zc[0] - half, zc[-1] + half],
     )
-    bx.set(xlabel=r"$x$ (m)", ylabel=r"$z$ (m)")
+    bx.set(xlabel=rf"${style.ax('x')}$ (m)", ylabel=r"$z$ (m)")
     fig.colorbar(im2, ax=bx, label=r"$\log_{10}$ rows")
     z = np.linspace(zc[0], zc[-1], 200)
     cx.plot(

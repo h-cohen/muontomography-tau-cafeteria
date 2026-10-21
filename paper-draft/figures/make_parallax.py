@@ -30,9 +30,13 @@ def main(argv=None) -> None:
     origins = cfg.origins()
 
     fig, (ax, bx, cx) = plt.subplots(1, 3, figsize=(style.FULL_IN, 2.5), layout="constrained")
-    ax.plot(beams["scan_z"], beams["scan_corr_x"], color=style.INK, label=r"$\rho_x$")
-    ax.plot(beams["scan_z"], beams["scan_corr_y"], color=style.MUTED, label=r"$\rho_y$")
-    ax.axvline(beams["z_x"], color=style.INK, ls="--", lw=0.8, label=r"$z_x$")
+    ax.plot(
+        beams["scan_z"], beams["scan_corr_x"], color=style.INK, label=rf"$\rho_{style.ax('x')}$"
+    )
+    ax.plot(
+        beams["scan_z"], beams["scan_corr_y"], color=style.MUTED, label=rf"$\rho_{style.ax('y')}$"
+    )
+    ax.axvline(beams["z_x"], color=style.INK, ls="--", lw=0.8, label=rf"$z_{style.ax('x')}$")
     ax.axvline(beams["z"], color=style.INK, ls=":", lw=0.8, label=r"joint $z$")
     ax.set(xlabel="trial ceiling height (m)", ylabel="parallax correlation")
     ax.legend(loc="lower center", ncols=2)
@@ -46,7 +50,9 @@ def main(argv=None) -> None:
         bx.plot(grid, p, color=style.POSITION_COLORS[pid], label=pid)
     for x in beams["beams_x"]:
         bx.axvline(x, color=style.GRID, lw=0.8, zorder=0)
-    bx.set(xlabel=r"$x$ at joint $z$ (m)", ylabel=r"opacity $\lambda$ (dimensionless)")
+    bx.set(
+        xlabel=rf"${style.ax('x')}$ at joint $z$ (m)", ylabel=r"opacity $\lambda$ (dimensionless)"
+    )
     bx.legend(loc="upper right")
 
     for pid in data.rows.position_ids:

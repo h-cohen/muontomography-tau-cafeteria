@@ -47,7 +47,7 @@ def main(argv=None) -> None:
         top.set(title=pid, ylabel=r"opacity $\lambda$ (dimensionless)")
         bottom.plot(s, lam - mod, ".", ms=3, color=style.POSITION_COLORS[pid])
         bottom.axhline(0, color=style.MUTED, lw=0.6)
-        bottom.set(xlabel=r"sky tangent $s_x$ (dimensionless)", ylabel="residual")
+        bottom.set(xlabel=rf"sky tangent $s_{style.ax('x')}$ (dimensionless)", ylabel="residual")
     axes[0, 0].legend(loc="upper left")
     style.label_panels(axes[0])
     style.save(fig, a)
