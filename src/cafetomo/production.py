@@ -34,7 +34,9 @@ def _sha(path: Path) -> str:
 
 
 def _results(results: Path) -> dict[str, str]:
-    return {p.name: _sha(p) for p in sorted(results.glob("*.json"))}
+    """Every results JSON, including results/production/ (values only the production
+    paper reads, kept out of the reviewed draft's result set)."""
+    return {p.relative_to(results).as_posix(): _sha(p) for p in sorted(results.rglob("*.json"))}
 
 
 def _files(generated: Path) -> dict[str, str]:

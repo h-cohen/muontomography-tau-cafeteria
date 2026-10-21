@@ -287,3 +287,14 @@ def test_literal_numbers_flags_multidigit_integers_in_math(tmp_path):
         "\\begin{equation*} N=2586 \\end{equation*}\n"
     )
     assert literal_numbers(tmp_path, ["3d.tex"]) == ["3d.tex:1: 840", "3d.tex:2: 2586"]
+
+
+def test_manifest_tracks_production_only_results(tmp_path):
+    gen, results = _tree(tmp_path)
+    (results / "production").mkdir()
+    (results / "production" / "autofocuslayer.json").write_text('{"z": 7.2}')
+    write_manifest(gen, results=results, source_commit="abc")
+    (results / "production" / "autofocuslayer.json").write_text('{"z": 7.3}')
+    assert check(gen, results=results) == [
+        "results/production/autofocuslayer.json changed since the last sync"
+    ]

@@ -238,6 +238,7 @@ production-stage: internal-paper
 	test -d $(PRODRUNS)/opacity -a -d $(PRODRUNS)/bootstrap -a -d $(PRODRUNS)/ingest
 	rm -rf $(PRODSTAGE) && mkdir -p $(PRODSTAGE)/figures
 	$(CLI) numbers --results $(RESULTS) --out $(PRODSTAGE)/numbers.tex
+	$(CLI) numbers --results $(RESULTS)/production --out $(PRODSTAGE)/production-numbers.tex
 	$(CLI) config-numbers --config $(CONFIG) --volume $(PRODRUNS)/voxels/volume_full.npz \
 	  --out $(PRODSTAGE)/config-numbers.tex
 	$(CLI) raw-numbers --rawdata $(RAWRUNS)/results/rawdata.json --config $(CONFIG) \
