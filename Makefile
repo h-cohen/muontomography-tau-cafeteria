@@ -228,7 +228,7 @@ arxiv-internal: arxiv
 PRODUCTION ?= paper-production
 PRODSTAGE  := runs/production-stage
 PRODRUNS   ?= runs/response-aware-2026-10-07
-PRODUCTION_FIGURES := parallax depth opacity setup slices zprofile arrayfit pose coverage
+PRODUCTION_FIGURES := parallax depth opacity setup slices zprofile arrayfit pose coverage autofocus
 # Nominal reconstruction rerun with every iterate's chi2 kept (volume bit-identical to PRODRUNS).
 CONVRUNS   ?= runs/convergence-2026-10-21
 PRODUCTION_RAW_FIGURES := maps2d channelcal

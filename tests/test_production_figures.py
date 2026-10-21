@@ -82,3 +82,9 @@ def test_depth_resolution_grows_with_height_squared():
     z = np.array([1.0, 2.0])
     dz = resolution_curve(z, sigma_t=0.01, baseline=2.0)
     assert np.allclose(dz, np.sqrt(2) * 0.01 * z**2 / 2.0)
+
+
+def test_score_normalized_to_its_minimum():
+    from make_autofocus import relative_score
+
+    assert relative_score(np.array([2.0, 1.0, 1.5])).tolist() == [1.0, 0.0, 0.5]
