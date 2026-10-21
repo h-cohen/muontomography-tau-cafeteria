@@ -80,3 +80,11 @@ def test_recovers_phantom_height(cfg):
     data = phantom_data(fwd, truth, like, np.random.default_rng(0))
     scan = cv_height_scan(data, cfg)
     assert scan.z_best == pytest.approx(7.2, abs=0.25)  # layer centre: z0 + h/2
+
+
+@pytest.mark.parametrize("z", [6.0, 6.8, 7.0, 7.2, 7.3, 8.0])
+def test_layer_has_the_configured_thickness_centred_on_z(cfg, z):
+    g = layer_grid(cfg, 0.9, z)
+    s = cfg.autofocus
+    assert g.shape[2] == round(s.layer_thickness_m / s.spacing_m)
+    assert g.origin[2] + g.shape[2] * g.spacing / 2 == pytest.approx(z, abs=1e-12)

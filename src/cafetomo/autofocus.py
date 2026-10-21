@@ -38,7 +38,14 @@ def layer_grid(cfg: Config, t_reach: float, z: float) -> VoxelGrid:
         z_max_m=z + s.layer_thickness_m / 2,
         spacing_m=s.spacing_m,
     )
-    return auto_grid(vol, cfg.origins(), t_reach, aperture_m=cfg.detector.aperture_m)
+    g = auto_grid(vol, cfg.origins(), t_reach, aperture_m=cfg.detector.aperture_m)
+    # A whole number of cells centred on z: the ceiling of thickness / spacing
+    # rounds 0.3 / 0.1 up to 4 cells and would shift the layer upward.
+    nz = max(1, round(s.layer_thickness_m / s.spacing_m))
+    z0 = z - nz * g.spacing / 2
+    return VoxelGrid(
+        origin=(g.origin[0], g.origin[1], z0), spacing=g.spacing, shape=(*g.shape[:2], nz)
+    )
 
 
 def layer_grids(cfg: Config, t_reach: float, z: float) -> tuple[VoxelGrid, VoxelGrid]:
