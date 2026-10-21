@@ -35,14 +35,20 @@ def measure(
     cache_dir: str | Path | None = None,
     angle_jitter: float = 0.0,
     with_volume: bool = True,
+    autofocus_only: bool = False,
 ) -> Measurement:
     """Autofocus height, triangulated beam heights (joint and x-only, so the
     y family's pull stays visible), pitch, the parametric beam depth and,
     with `with_volume`, the voxel z-profile that cross-checks it.
 
     The beam depth comes from `estimate_beam_depth`, the same path the
-    phantom validation runs, so its validated bias is this estimator's."""
+    phantom validation runs, so its validated bias is this estimator's. With
+    `autofocus_only` only the autofocus scan runs (it feeds no other result)."""
     scan = cv_height_scan(data, cfg, cache_dir=cache_dir)
+    if autofocus_only:
+        return Measurement(
+            values={"autofocus_z": scan.z_best}, volume=None, details={"autofocus": scan}
+        )
     beams, depth = estimate_beam_depth(data, cfg, sky, angle_jitter=angle_jitter)
     values = {
         "autofocus_z": scan.z_best,

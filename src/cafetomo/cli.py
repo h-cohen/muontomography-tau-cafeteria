@@ -549,6 +549,31 @@ def cmd_raw_numbers(args) -> None:
     write_raw_numbers(Path(args.rawdata), Path(args.config), Path(args.out))
 
 
+def cmd_autofocus_study(args) -> None:
+    from cafetomo.autofocusstudy import run_study, write
+
+    cfg = _cfg(args)
+    grid, live = _grid(cfg, Path(args.ingest))
+    maps, sigma, data = _fit_data(cfg, Path(args.opacity))
+    pose_doc = json.loads(Path(args.pose).read_text())
+    doc = run_study(
+        grid,
+        live,
+        cfg,
+        maps,
+        sigma,
+        data,
+        pose_sigma={
+            "x": pose_doc["x_sigma"],
+            "y": pose_doc["y_sigma"],
+            "az_deg": pose_doc["az_sigma"],
+        },
+        nominal_depth=json.loads((Path(args.results) / "beamdepth.json").read_text()),
+        cache_dir=args.cache,
+    )
+    write(doc, Path(args.out))
+
+
 def cmd_production_sync(args) -> None:
     from cafetomo.production import sync
 
@@ -656,6 +681,17 @@ def main(argv: list[str] | None = None) -> None:
     stage("numbers", cmd_numbers, "results", "out")
     stage("config-numbers", cmd_config_numbers, "config", "volume", "out")
     stage("raw-numbers", cmd_raw_numbers, "rawdata", "config", "out")
+    stage(
+        "autofocus-study",
+        cmd_autofocus_study,
+        "config",
+        "pose",
+        "ingest",
+        "opacity",
+        "results",
+        "out",
+        "cache",
+    )
     stage("production-sync", cmd_production_sync, "production", "staged", "results")
     stage("production-check", cmd_production_check, "production", "results", "lint")
     args = ap.parse_args(argv)

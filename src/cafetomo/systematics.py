@@ -101,6 +101,7 @@ def flux_scale_shift(
     *,
     sky: SkyGrid,
     cache_dir: str | Path | None = None,
+    autofocus_only: bool = False,
 ) -> dict[str, float]:
     """Shift when every opacity is scaled by the configured flux fraction. A
     constant lambda offset can be absorbed by the background polynomial, but
@@ -113,6 +114,7 @@ def flux_scale_shift(
         sky,
         cache_dir=cache_dir,
         with_volume=False,
+        autofocus_only=autofocus_only,
     )
     return _delta(m, nominal)
 
@@ -151,6 +153,7 @@ def mcs_shift(
     sky: SkyGrid,
     jitter_tan: float,
     cache_dir: str | Path | None = None,
+    autofocus_only: bool = False,
 ) -> dict[str, float]:
     """Bias multiple scattering causes in the nominal estimator.
 
@@ -164,7 +167,17 @@ def mcs_shift(
     for f in MCS_SCAN:
         dlam = mcs_dlam(data, cfg, nominal.details["depth"], f * jitter_tan)
         blurred = FitData(lam=data.lam + dlam * (data.w > 0), w=data.w, rows=data.rows)
-        d = _delta(measure(blurred, cfg, sky, cache_dir=cache_dir, with_volume=False), nominal)
+        d = _delta(
+            measure(
+                blurred,
+                cfg,
+                sky,
+                cache_dir=cache_dir,
+                with_volume=False,
+                autofocus_only=autofocus_only,
+            ),
+            nominal,
+        )
         worst = _worst(worst, d)
     return worst
 
@@ -176,10 +189,18 @@ def background_shift(
     *,
     sky: SkyGrid,
     cache_dir: str | Path | None = None,
+    autofocus_only: bool = False,
 ) -> dict[str, float]:
     """Shift when the beam-depth background polynomial gains one degree."""
     s = replace(cfg.beamdepth, bg_degree=cfg.beamdepth.bg_degree + 1)
-    m = measure(data, replace(cfg, beamdepth=s), sky, cache_dir=cache_dir, with_volume=False)
+    m = measure(
+        data,
+        replace(cfg, beamdepth=s),
+        sky,
+        cache_dir=cache_dir,
+        with_volume=False,
+        autofocus_only=autofocus_only,
+    )
     return _delta(m, nominal)
 
 
@@ -194,6 +215,7 @@ def pose_shift(
     sky: SkyGrid,
     rows: RowIndex,
     cache_dir: str | Path | None = None,
+    autofocus_only: bool = False,
 ) -> dict[str, float]:
     """Largest refit shift over +/- marginal x, y and azimuth uncertainties.
 
@@ -211,7 +233,17 @@ def pose_shift(
             data = build_fit_data(solve_opacity(grid, c, live_time), c, sigma, rows=rows)
             worst = _worst(
                 worst,
-                _delta(measure(data, c, sky, cache_dir=cache_dir, with_volume=False), nominal),
+                _delta(
+                    measure(
+                        data,
+                        c,
+                        sky,
+                        cache_dir=cache_dir,
+                        with_volume=False,
+                        autofocus_only=autofocus_only,
+                    ),
+                    nominal,
+                ),
             )
     return worst
 
