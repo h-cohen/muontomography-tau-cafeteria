@@ -228,7 +228,9 @@ arxiv-internal: arxiv
 PRODUCTION ?= paper-production
 PRODSTAGE  := runs/production-stage
 PRODRUNS   ?= runs/response-aware-2026-10-07
-PRODUCTION_FIGURES := parallax depth opacity setup slices zprofile arrayfit pose
+PRODUCTION_FIGURES := parallax depth opacity setup slices zprofile arrayfit pose coverage
+# Nominal reconstruction rerun with every iterate's chi2 kept (volume bit-identical to PRODRUNS).
+CONVRUNS   ?= runs/convergence-2026-10-21
 PRODUCTION_RAW_FIGURES := maps2d channelcal
 PRODUCTION_LINT ?= 3d.tex,2d.tex,rawdata.tex
 .PHONY: production-stage production-sync production-check production-push
@@ -246,6 +248,8 @@ production-stage: internal-paper
 	  uv run python paper-draft/figures/make_$$f.py --config $(CONFIG) --pose $(POSE) \
 	    --results $(RESULTS) --runs $(PRODRUNS) --out $(PRODSTAGE)/figures/$$f.pdf || exit 1; \
 	done
+	uv run python paper-draft/figures/make_convergence.py --config $(CONFIG) --pose $(POSE) \
+	  --results $(RESULTS) --runs $(CONVRUNS) --out $(PRODSTAGE)/figures/convergence.pdf
 	for f in $(PRODUCTION_RAW_FIGURES); do \
 	  uv run python paper-draft/figures/make_$$f.py --config $(CONFIG) --pose $(POSE) \
 	    --results $(RESULTS) --runs $(RAWRUNS) --out $(PRODSTAGE)/figures/$$f.pdf || exit 1; \

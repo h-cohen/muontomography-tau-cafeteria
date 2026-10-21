@@ -201,3 +201,10 @@ def test_coverage_damping_removes_the_noise_shell_without_losing_the_fit(cfg):
     assert shell0 > 2.0  # the artifact exists without damping
     assert shell1 < 0.5  # and is gone with it
     assert info1["best_chi2"] <= info0["best_chi2"] + 0.15
+
+
+def test_tv_records_every_scored_iterate():
+    fwd, truth, data = _toy()
+    x, info = sirt_tv(fwd, data, _rc(algorithm="tv", n_iter=40, tv_alpha=0.01), fit_offsets=True)
+    assert len(info["chi2_history"]) == 40
+    assert info["chi2_history"][info["best_iter"]] == info["best_chi2"]

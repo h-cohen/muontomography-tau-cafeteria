@@ -68,3 +68,17 @@ def test_map_extent_crops_to_display_range():
     sub, extent = cropped(img, edges, 0.9)
     assert extent[0] >= -0.9 - 1e-9 and extent[1] <= 0.9 + 1e-9
     assert sub.shape[0] == sub.shape[1] == 72
+
+
+def test_selected_iterate_is_first_minimum():
+    from make_convergence import selected
+
+    assert selected([5.0, 1.0, 0.7, 0.7, 0.9]) == 2
+
+
+def test_depth_resolution_grows_with_height_squared():
+    from make_coverage import resolution_curve
+
+    z = np.array([1.0, 2.0])
+    dz = resolution_curve(z, sigma_t=0.01, baseline=2.0)
+    assert np.allclose(dz, np.sqrt(2) * 0.01 * z**2 / 2.0)

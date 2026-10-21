@@ -187,8 +187,7 @@ def sirt_tv(
         chi2 = float(np.sum(w * resid**2) / n_used)
         if chi2 < best[0]:
             best = (chi2, x.copy(), c.copy(), k)
-        if k % 20 == 0:
-            history.append(chi2)
+        history.append(chi2)
 
         x = x + col_inv * (A.T @ (w * resid * row_inv))
         if rc.nonneg:
@@ -199,7 +198,6 @@ def sirt_tv(
         gamma = rc.tv_alpha * max(scale, 1e-9)
         x = _prox_tv(x.reshape(shape), gamma, rc.tv_z_weight, dual).ravel()
 
-    history.append(best[0])
     return best[1], {
         "offsets": _named(best[2], fwd.rows.position_ids),
         "chi2_history": history,
