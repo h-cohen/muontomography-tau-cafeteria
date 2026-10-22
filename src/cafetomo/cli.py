@@ -574,6 +574,14 @@ def cmd_autofocus_study(args) -> None:
     write(doc, Path(args.out))
 
 
+def cmd_compare_results(args) -> None:
+    from cafetomo.comparison import compare_trees, summary_lines
+
+    report = compare_trees(Path(args.reference), Path(args.candidate))
+    _write_json(Path(args.out), report)
+    print("\n".join(summary_lines(report)))
+
+
 def cmd_production_sync(args) -> None:
     from cafetomo.production import sync
 
@@ -681,6 +689,7 @@ def main(argv: list[str] | None = None) -> None:
     stage("numbers", cmd_numbers, "results", "out")
     stage("config-numbers", cmd_config_numbers, "config", "volume", "out")
     stage("raw-numbers", cmd_raw_numbers, "rawdata", "config", "out")
+    stage("compare-results", cmd_compare_results, "reference", "candidate", "out")
     stage(
         "autofocus-study",
         cmd_autofocus_study,
