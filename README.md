@@ -335,18 +335,46 @@ make production-check
 make production-push                           # only when agreed
 ```
 
-`production-sync` stages the macros from `results/*.json` and the figures from
-`paper-draft/figures/make_*.py` (run against the reviewed baseline archive
-`runs/response-aware-2026-10-07`) into `runs/production-stage/`. It refuses
-when this repository or `paper-production/` has uncommitted changes, pulls
-Overleaf edits by fast-forward only (refusing diverged histories), replaces
-`generated/` and its `MANIFEST.json` (source commit and sha256 of every result
-and file), and commits inside `paper-production/`. It never pushes; the
-submodule pointer here is updated by a normal commit when wanted.
+`production-sync` stages, into `runs/production-stage/`:
 
-`production-check` fails when a generated file was edited or `results/` changed
+| Generated file | Source |
+|---|---|
+| `numbers.tex`, `internal-numbers.tex` | `results/*.json` and the reviewed pilot (as for the draft) |
+| `config-numbers.tex` | `configs/cafeteria.yaml`, named code constants, and the baseline volume's selected iterate |
+| `production-numbers.tex` | `results/production/` (production-only results, e.g. the corrected autofocus) |
+| `raw-numbers.tex` | `runs/raw/results/rawdata.json` and the calibration/view settings — **preliminary**, not yet promoted |
+| `figures/*.pdf` | `paper-draft/figures/make_*.py` with `--frame detector`, from the reviewed baseline archive `runs/response-aware-2026-10-07`, `runs/raw` and `runs/convergence-2026-10-21` |
+
+It refuses when this repository or `paper-production/` has uncommitted changes,
+pulls Overleaf edits by fast-forward only (refusing diverged histories), replaces
+`generated/` and its `MANIFEST.json` (source commit and sha256 of every result,
+including `results/production/`, and of every file), and commits inside
+`paper-production/`. It never pushes; the submodule pointer here is updated by a
+normal commit when wanted.
+
+`production-check` fails when a generated file was edited or a result changed
 since the last sync, and warns about numbers typed into `PRODUCTION_LINT`
-(default `3d.tex`). `make test` runs it whenever the submodule is checked out.
+(`3d.tex,2d.tex,rawdata.tex,sky.tex`). `make test` runs it whenever the
+submodule is checked out.
+
+**Axis naming.** The analysis code and `results/` have the beams along y. The
+production paper follows the detector naming used by the coauthors: beams along
+X, pos1 displaced along Y. Production figures swap axes through
+`paper-draft/figures/frame.py` (`--frame detector`); the draft keeps the
+analysis frame. `paper-draft/figures/style.py` and the set of top-level
+`results/*.json` are inputs of the reviewed draft selection, so production-only
+results go in `results/production/`.
+
+**Corrected autofocus.** The autofocus layer was 0.4 m thick and offset by
++0.05 m (a rounding of thickness/spacing); it is now the configured 0.3 m,
+centred on the trial height. `cafetomo autofocus-study` reruns only autofocus
+(nominal scan, the original bootstrap's 50 replicas, pose/flux/scattering/
+background shifts, phantom check) into `runs/autofocus-study-2026-10-21/`, promoted
+to `results/production/autofocuslayer.json`. The draft keeps the reviewed value.
+
+**Solver history.** `runs/convergence-2026-10-21` reruns the nominal
+reconstruction with every iterate's chi2 kept; its volume is bit-identical to the
+baseline.
 
 Overleaf authenticates git with a personal token (Overleaf account settings,
 Git integration, username `git`). Keep it in a git credential helper, never in
@@ -355,6 +383,27 @@ Git integration, username `git`). Keep it in a git credential helper, never in
 Push `paper-production` (`make production-push`) before pushing a commit of this
 repository that moves its submodule pointer; otherwise other clones cannot
 check out the recorded Overleaf commit.
+
+## Resuming on another machine
+
+Git holds code, configs, `data/` (ROOT histograms), `results/` and the submodule
+pointer. Local-only state:
+
+- `runs/` (baseline archive, pilot archives, reviewed figure selections, raw-chain
+  outputs, autofocus and convergence runs, Tectonic) and `docs/dev/` (handoff,
+  specs, plans): restore from the bundle `cafetomo-local-2026-10-21.tar.gz`
+  by extracting it at the repository root. Caches are left out; they rebuild.
+- Raw DAQ files (~40 GB) at `../../01_data/processed/tau_cafeteria_raw_filtered`
+  (config `raw:`), needed only for `make raw`.
+
+```bash
+git clone https://github.com/h-cohen/muontomography-tau-cafeteria.git
+cd muontomography-tau-cafeteria
+tar -xzf /path/to/cafetomo-local-2026-10-21.tar.gz
+uv sync
+git submodule update --init paper-production && git -C paper-production checkout main
+make test && make -s internal-preflight && make production-check
+```
 
 ## How beam depth is estimated
 
