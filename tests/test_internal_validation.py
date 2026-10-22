@@ -392,3 +392,25 @@ def test_angular_uncertainty_scope_is_declared(cfg):
         == "one Poisson roof draw shared across all room views per replica"
     )
     assert scope["point_score_reference_scope"] == "conditional on observed full roof calibration"
+
+
+@pytest.mark.parametrize(
+    ("relative", "allowed"),
+    [
+        ("runs/internal-validation/pilot", True),
+        ("runs/repro/internal-validation/pilot", True),
+        ("runs/repro/baseline/pilot", False),
+        ("runs/voxels/pilot", False),
+    ],
+)
+def test_campaigns_inside_runs_need_an_internal_validation_folder(tmp_path, relative, allowed):
+    from cafetomo.internal_validation import check_campaign_paths
+
+    root = tmp_path / "checkout"
+    out = root / relative
+    cache = tmp_path / "cache"
+    if allowed:
+        check_campaign_paths(out, cache, {root})
+    else:
+        with pytest.raises(ValueError, match="inside runs must use"):
+            check_campaign_paths(out, cache, {root})

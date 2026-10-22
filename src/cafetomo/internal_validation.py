@@ -319,12 +319,11 @@ def register_fold_inputs(part, index, cfg, settings, out, manifest):
     return registration
 
 
-def run_campaign(grid, live, cfg, document, *, out, cache, provenance=None):
-    settings = settings_document(document)
-    out, cache = Path(out).resolve(), Path(cache).resolve()
-    protected_roots = {Path.cwd().resolve(), Path(__file__).resolve().parents[2]}
-    if provenance and provenance.get("config_path"):
-        protected_roots.add(Path(provenance["config_path"]).resolve().parent.parent)
+def check_campaign_paths(out: Path, cache: Path, protected_roots) -> None:
+    """Campaign output and cache stay out of production artifacts. Inside a
+    checkout's runs/, they must sit under a folder named internal-validation
+    (runs/internal-validation/... or a reproduction's .../internal-validation/...),
+    never beside the baseline run directories."""
     for protected in protected_roots:
         for path in (out, cache):
             if any(
@@ -340,13 +339,21 @@ def run_campaign(grid, live, cfg, document, *, out, cache, provenance=None):
             ):
                 raise ValueError("output/cache overlaps protected production artifacts")
             production_runs = protected / "runs"
-            isolated_runs = production_runs / "internal-validation"
-            if production_runs in path.parents and not (
-                path == isolated_runs or isolated_runs in path.parents
+            if production_runs in path.parents and (
+                "internal-validation" not in path.relative_to(production_runs).parts
             ):
                 raise ValueError("campaign paths inside runs must use runs/internal-validation")
             if path == protected or path in protected.parents:
                 raise ValueError("campaign path cannot contain the repository")
+
+
+def run_campaign(grid, live, cfg, document, *, out, cache, provenance=None):
+    settings = settings_document(document)
+    out, cache = Path(out).resolve(), Path(cache).resolve()
+    protected_roots = {Path.cwd().resolve(), Path(__file__).resolve().parents[2]}
+    if provenance and provenance.get("config_path"):
+        protected_roots.add(Path(provenance["config_path"]).resolve().parent.parent)
+    check_campaign_paths(out, cache, protected_roots)
     if (out / "manifest.json").exists():
         raise ValueError("use a new output root; scientific cache may be reused")
     if "choices" in settings["stability"]:

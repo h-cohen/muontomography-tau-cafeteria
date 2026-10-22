@@ -305,9 +305,15 @@ REPRO_VARS = RUNS=$(REPRO)/baseline RESULTS=$(REPRO)/results GEN=$(REPRO)/draft 
   IVFIGOUT=$(REPRO)/figure-review/selection IVSUMMARY=$(REPRO)/results/internalvalidation.json \
   RAWRUNS=$(REPRO)/raw PRODRUNS=$(REPRO)/baseline CONVRUNS=$(REPRO)/baseline \
   AFRUNS=$(REPRO)/autofocus-study PRODSTAGE=$(REPRO)/production-stage
+# reproduce-stages continues an interrupted reproduction: finished stages are skipped
+# by make, and the studies refuse an existing output directory.
+.PHONY: reproduce-stages
 reproduce:
 	test -n "$(REPRO)"
 	test ! -e $(REPRO)
+	$(MAKE) reproduce-stages REPRO=$(REPRO)
+reproduce-stages:
+	test -n "$(REPRO)"
 	$(MAKE) $(REPRO_VARS) viewer validation depthcheck arraydepth $(REPRO)/results/inputs.json
 	$(MAKE) $(REPRO_VARS) internal-validate
 	$(MAKE) $(REPRO_VARS) weight-correction

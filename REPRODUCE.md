@@ -46,7 +46,9 @@ make reproduce REPRO=runs/repro JOBS=4
 | Production paper macros and figures | `production-stage` | `production-stage/` | minutes |
 
 Each stage can also be run alone with the same variables (see `REPRO_VARS` in
-the Makefile); stages refuse to overwrite an existing output directory.
+the Makefile); stages refuse to overwrite an existing output directory. To
+continue an interrupted reproduction, `make reproduce-stages REPRO=runs/repro`
+(finished stages are skipped; remove a partially written study directory first).
 
 ## Compare with the committed results
 
