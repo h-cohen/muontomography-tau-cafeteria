@@ -71,6 +71,26 @@ therefore expected to differ slightly; differences are reported, never tuned
 away. The corrected-weight comparison reproduces its archive exactly when run on
 the archived pilot.
 
+## Verified on 2026-10-22
+
+`make reproduce` in a fresh clone of commit `ccafaa6` (fixes up to `006aec9`
+applied while it ran), compared with the committed files:
+
+- Identical: every baseline result (`data`, `pose`, `reconstruction`, `beams`,
+  `beamdepth`, `arraydepth`, `depthdiagnostics`, `inputs`), the corrected
+  autofocus `results/production/autofocuslayer.json`, and the production
+  paper's `config-numbers.tex`, `raw-numbers.tex`, `production-numbers.tex`.
+- Identical scalars in `results/internalvalidation.json` (held-out deviances,
+  folds, recovery, replicas, corrected weight objectives); its input list
+  differs only in paths and file sizes.
+- Expected differences, both from bugs fixed in the code: the original
+  autofocus values in `autofocus.json`, `uncertainty.json` (`autofocus_z_*`) and
+  `validation.json` (`focus_*`) — the reproduction gives exactly the corrected
+  autofocus — and `original_weight_objective` (archived 5.04e22, reproduced
+  0.424): the archived value is the numerical failure of the pre-fix opacity
+  weights, which the current code no longer produces. The draft no longer quotes it.
+- Runtime: baseline ~3 h, pilot ~1.3 h, autofocus study ~2 h, the rest minutes.
+
 ## Updating the papers from a reproduction
 
 Results become paper numbers only by explicit promotion: review the comparison,
