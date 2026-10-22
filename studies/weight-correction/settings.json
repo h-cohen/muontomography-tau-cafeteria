@@ -1,0 +1,180 @@
+{
+  "cfg": {
+    "autofocus": {
+      "coarse_m": 0.2,
+      "fine_m": 0.1,
+      "layer_thickness_m": 0.3,
+      "spacing_m": 0.1,
+      "trim_pct": 90.0,
+      "z_max_m": 8.0,
+      "z_min_m": 6.0
+    },
+    "beamdepth": {
+      "band_sy": 0.32,
+      "bg_degree": 2,
+      "h_init_m": 0.6,
+      "h_max_m": 3.0,
+      "h_starts_m": [
+        0.6,
+        1.2,
+        1.8
+      ],
+      "model": "geometry",
+      "n_sub": 4,
+      "w_init_m": 0.3,
+      "y_band_m": [
+        -2.0,
+        2.0
+      ],
+      "y_extent_m": [
+        -5.0,
+        5.0
+      ]
+    },
+    "beams": {
+      "band_x": 0.32,
+      "band_y": 0.45,
+      "gate_max_offset_m": 0.15,
+      "match_tol_m": 0.6,
+      "min_y_corr": 0.5,
+      "n_z": 81,
+      "prominence_sigmas": 0.5,
+      "z_scan_m": [
+        4.0,
+        9.0
+      ]
+    },
+    "binning": {
+      "n_bins": 500,
+      "t_max": 1.25
+    },
+    "data_dir": "/home/hadar/Cloud/Work/Postdoc/03_projects/muontomography-tau-cafeteria/data",
+    "detector": {
+      "active_width_cm": 35.375,
+      "layer_dz_cm": 38.9,
+      "source": "HistsOutSkyRoofRuns37-77.root hit positions and txty acceptance edge"
+    },
+    "exposures": [
+      {
+        "id": "pos0",
+        "pose": {
+          "az_deg": 0.0,
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "root_file": "HistsOutDataCafePos0.root",
+        "root_hist": "txty"
+      },
+      {
+        "id": "pos1",
+        "pose": {
+          "az_deg": 0.0,
+          "x": 1.75,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "root_file": "HistsOutDataCafePos1.root",
+        "root_hist": "txty"
+      }
+    ],
+    "opacity": {
+      "max_tan": 1.25,
+      "min_sky": 25.0,
+      "n_sigma_replicas": 12,
+      "rebin_factor": 10,
+      "sky_n_bins": 100,
+      "sky_t_max": 2.5,
+      "t_floor": 0.05
+    },
+    "physics": {
+      "concrete_density_gcm3": 2.4,
+      "concrete_density_sigma": 0.1,
+      "detector_threshold_gev": 0.03,
+      "flux_model": "guan",
+      "flux_model_alt": "shukla"
+    },
+    "reconstruction": {
+      "algorithm": "tv",
+      "chi2_target": 1.0,
+      "coverage_damping": 0.1,
+      "n_iter": 150,
+      "nonneg": true,
+      "seed": 42,
+      "tv_alpha": 0.03,
+      "tv_z_weight": 0
+    },
+    "selfcal": {
+      "baseline_m": null,
+      "bounds_deg": 10.0,
+      "bounds_m": 1.0,
+      "free_pose": "pos1",
+      "n_bootstrap": 8,
+      "n_iter": 60,
+      "scan_deg": 5.0,
+      "spacing_m": 0.4
+    },
+    "site": "cafeteria",
+    "sky_reference": {
+      "id": "SKY",
+      "root_file": "HistsOutSkyRoofRuns37-77.root",
+      "root_hist": "txty"
+    },
+    "uncertainty": {
+      "flux_scale_frac": 0.03,
+      "mcs_p_min_gev": 0.5,
+      "n_replicas": 50,
+      "seed": 0
+    },
+    "validation": {
+      "depth_h_true_m": [
+        0.6,
+        1.25,
+        2.0
+      ],
+      "focus_heights_m": [
+        6.6,
+        7.0,
+        7.4
+      ],
+      "n_realizations": 8
+    },
+    "volume": {
+      "n_aperture_sub": 4,
+      "spacing_m": 0.2,
+      "viewer_crop_xy_m": [
+        [
+          -5.0,
+          7.0
+        ],
+        [
+          -5.0,
+          5.0
+        ]
+      ],
+      "xy_m": null,
+      "z_max_m": 9.0,
+      "z_min_m": 1.0
+    }
+  },
+  "choices": [
+    {
+      "contrast_threshold": 0.01,
+      "group": "weights",
+      "weight_method": "analytic"
+    },
+    {
+      "contrast_threshold": 0.01,
+      "convergence_evidence": {
+        "comparison": "same-seed n versus 2n on common positive rows",
+        "maximum": 0.1,
+        "metric": "p95_relative_sigma_change"
+      },
+      "group": "weights",
+      "n_sigma_replicas": 256,
+      "weight_method": "poisson"
+    }
+  ],
+  "scope": "All original weight choices and dependent density/beam-excess summaries; frozen archived baseline training/pose/settings. Audit original fold, recovery and count replica seeds before any scientific reassurance. No outcome tuning.",
+  "note": "Settings of the corrected weight comparison. Pilot-specific values (manifest hash, training counts, frozen pose, seed) are read from the pilot the study runs on."
+}

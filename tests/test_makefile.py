@@ -238,3 +238,27 @@ def test_reproduce_writes_only_under_its_root(tmp_path):
     ):
         assert reviewed not in out, reviewed
     assert f"test ! -e {root}" in out
+
+
+def test_tools_refuses_a_download_with_the_wrong_checksum(tmp_path):
+    fake = tmp_path / "tectonic.tar.gz"
+    fake.write_bytes(b"not tectonic")
+    done = subprocess.run(
+        [
+            "make",
+            "--no-print-directory",
+            "tools",
+            f"TOOLS={tmp_path / 'tools'}",
+            f"TECTONIC_URL=file://{fake}",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert done.returncode != 0
+    assert not (tmp_path / "tools" / "tectonic").exists()
+
+
+def test_tools_pins_the_release_checksum():
+    out = _dry("tools", "TOOLS=/tmp/claude-1000/never")
+    assert "8533d07f9ccbd7a65824b9e0459041bca34af1eb33daba48f59215593753a3b7" in out
+    assert "sha256sum -c" in out

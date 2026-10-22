@@ -181,7 +181,8 @@ IVNOMINAL ?= runs/response-aware-2026-10-07/voxels
 IVFIGOUT ?= runs/figure-review/selected-paper-publication-2026-10-18-fix3
 IVTRACE ?= runs/internal-validation/recovery-trace-2026-10-14
 IVSUMMARY ?= results/internalvalidation.json
-TECTONIC ?= runs/tools/tectonic
+TOOLS ?= runs/tools
+TECTONIC ?= $(TOOLS)/tectonic
 IVSELECTED := $(IVFIGOUT)/internal-main.pdf $(IVFIGOUT)/internal-overlay.pdf \
               $(IVFIGOUT)/internal-support-stability.pdf \
               $(IVFIGOUT)/internal-prediction-recovery.pdf $(IVFIGOUT)/internal-numbers.tex
@@ -275,8 +276,12 @@ weight-correction:
 recovery-trace:
 	test ! -e $(IVTRACE)
 	for step in register run compare; do \
-	  uv run python studies/recovery-trace/trace.py $$step --pilot $(IVPAPERARCHIVE) \
+	  OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 uv run python studies/recovery-trace/trace.py $$step --pilot $(IVPAPERARCHIVE) \
 	    --out $(IVTRACE) --ingest $(RUNS)/ingest || exit 1; \
+	done
+	for step in register run; do \
+	  uv run python studies/recovery-trace/support_supplement.py $$step \
+	    --pilot $(IVPAPERARCHIVE) --out $(IVTRACE)/support-supplement || exit 1; \
 	done
 
 # Autofocus with the corrected layer; promoted into results/production/ (production only).
@@ -309,3 +314,14 @@ reproduce:
 	$(MAKE) $(REPRO_VARS) raw
 	$(MAKE) $(REPRO_VARS) autofocus-study
 	$(MAKE) $(REPRO_VARS) production-stage
+
+
+# Pinned Tectonic (LaTeX engine for both papers), verified by checksum.
+TECTONIC_URL ?= https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%400.17.0/tectonic-0.17.0-x86_64-unknown-linux-musl.tar.gz
+TECTONIC_SHA256 := 8533d07f9ccbd7a65824b9e0459041bca34af1eb33daba48f59215593753a3b7
+tools: $(TOOLS)/tectonic
+$(TOOLS)/tectonic:
+	mkdir -p $(TOOLS)
+	curl -fsSL -o $(TOOLS)/tectonic.tar.gz "$(TECTONIC_URL)"
+	echo "$(TECTONIC_SHA256)  $(TOOLS)/tectonic.tar.gz" | sha256sum -c -
+	tar -xzf $(TOOLS)/tectonic.tar.gz -C $(TOOLS) tectonic
