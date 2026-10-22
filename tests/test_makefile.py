@@ -197,3 +197,44 @@ def test_production_check_skipped_without_submodule(tmp_path):
         check=True,
     ).stdout
     assert "absent/generated/MANIFEST.json" in out  # guarded by test -f, so skipped at run time
+
+
+def _dry(*args):
+    return subprocess.run(
+        ["make", "--no-print-directory", "-n", *args], capture_output=True, text=True, check=True
+    ).stdout
+
+
+def test_default_targets_keep_the_reviewed_archives():
+    out = _dry("production-stage")
+    assert "runs/internal-validation/pilot-2026-10-13-a" in out
+    assert "runs/figure-review/selected-paper-publication-2026-10-18-fix3" in out
+    assert "--runs runs/response-aware-2026-10-07" in out
+
+
+def test_reproduce_writes_only_under_its_root(tmp_path):
+    root = tmp_path / "repro"
+    out = _dry("reproduce", f"REPRO={root}")
+    for stage in (
+        "internal-validate",
+        "autofocus-study",
+        "make_internal_paper.py",
+        "rawcheck",
+        "weight-correction",
+        "recovery-trace",
+        "production-stage",
+    ):
+        assert stage in out, stage
+    for reviewed in (
+        "pilot-2026-10-13-a",
+        "weight-correction-2026-10-14",
+        "response-aware-2026-10-07",
+        "-fix3",
+        "convergence-2026-10-21",
+        "autofocus-study-2026-10-21",
+        "--results results ",
+        "--out results/",
+        "paper-draft/generated",
+    ):
+        assert reviewed not in out, reviewed
+    assert f"test ! -e {root}" in out

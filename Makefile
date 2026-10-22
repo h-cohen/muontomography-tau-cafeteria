@@ -171,7 +171,7 @@ IVSETTINGS ?= configs/internal-validation.yaml
 .PHONY: internal-validate
 internal-validate:
 	OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 $(CLI) internal-validate \
-	  --config $(CONFIG) --ingest runs/ingest --settings $(IVSETTINGS) \
+	  --config $(CONFIG) --ingest $(RUNS)/ingest --settings $(IVSETTINGS) \
 	  --out $(IVOUT) --cache $(IVCACHE)
 
 # Reviewed pilot publication: uses archived baseline numbers/figures, never refits them.
@@ -179,12 +179,17 @@ IVPAPERARCHIVE ?= runs/internal-validation/pilot-2026-10-13-a
 IVCORRECTION ?= runs/internal-validation/weight-correction-2026-10-14
 IVNOMINAL ?= runs/response-aware-2026-10-07/voxels
 IVFIGOUT ?= runs/figure-review/selected-paper-publication-2026-10-18-fix3
+IVTRACE ?= runs/internal-validation/recovery-trace-2026-10-14
 IVSUMMARY ?= results/internalvalidation.json
 TECTONIC ?= runs/tools/tectonic
 IVSELECTED := $(IVFIGOUT)/internal-main.pdf $(IVFIGOUT)/internal-overlay.pdf \
               $(IVFIGOUT)/internal-support-stability.pdf \
               $(IVFIGOUT)/internal-prediction-recovery.pdf $(IVFIGOUT)/internal-numbers.tex
 .PHONY: internal-selected internal-preflight internal-paper arxiv-internal
+$(IVPAPERARCHIVE)/manifest.json:
+	@test -f $@ || { echo "missing $@: run make internal-validate IVOUT=$(IVPAPERARCHIVE)" >&2; exit 1; }
+$(IVCORRECTION)/comparison.json:
+	@test -f $@ || { echo "missing $@: run make weight-correction" >&2; exit 1; }
 internal-selected: $(IVSELECTED)
 
 internal-preflight:
@@ -261,3 +266,46 @@ production-check:
 	$(CLI) production-check --production $(PRODUCTION) --results $(RESULTS) --lint $(PRODUCTION_LINT)
 production-push: production-check
 	git -C $(PRODUCTION) push origin HEAD:main
+
+# Registered studies on the internal-validation pilot (scripts tracked in studies/).
+.PHONY: weight-correction recovery-trace autofocus-study tools reproduce
+weight-correction:
+	test ! -e $(IVCORRECTION)
+	uv run python studies/weight-correction/compare.py --pilot $(IVPAPERARCHIVE) --out $(IVCORRECTION)
+recovery-trace:
+	test ! -e $(IVTRACE)
+	for step in register run compare; do \
+	  uv run python studies/recovery-trace/trace.py $$step --pilot $(IVPAPERARCHIVE) \
+	    --out $(IVTRACE) --ingest $(RUNS)/ingest || exit 1; \
+	done
+
+# Autofocus with the corrected layer; promoted into results/production/ (production only).
+AFRUNS ?= runs/autofocus-study-2026-10-21
+autofocus-study:
+	test ! -e $(AFRUNS)
+	OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 $(CLI) autofocus-study --config $(CONFIG) --pose $(POSE) \
+	  --ingest $(RUNS)/ingest --opacity $(RUNS)/opacity --results $(RESULTS) \
+	  --out $(AFRUNS)/autofocuslayer.json --cache $(AFRUNS)/cache
+	mkdir -p $(RESULTS)/production
+	cp $(AFRUNS)/autofocuslayer.json $(RESULTS)/production/autofocuslayer.json
+
+# Everything from the inputs into one fresh root REPRO (never the tracked results/ or the
+# reviewed archives). Compare afterwards with `cafetomo compare-results`. See REPRODUCE.md.
+REPRO_VARS = RUNS=$(REPRO)/baseline RESULTS=$(REPRO)/results GEN=$(REPRO)/draft \
+  IVOUT=$(REPRO)/internal-validation/pilot IVCACHE=$(REPRO)/internal-validation/cache \
+  IVPAPERARCHIVE=$(REPRO)/internal-validation/pilot \
+  IVCORRECTION=$(REPRO)/internal-validation/weight-correction \
+  IVTRACE=$(REPRO)/internal-validation/recovery-trace IVNOMINAL=$(REPRO)/baseline/voxels \
+  IVFIGOUT=$(REPRO)/figure-review/selection IVSUMMARY=$(REPRO)/results/internalvalidation.json \
+  RAWRUNS=$(REPRO)/raw PRODRUNS=$(REPRO)/baseline CONVRUNS=$(REPRO)/baseline \
+  AFRUNS=$(REPRO)/autofocus-study PRODSTAGE=$(REPRO)/production-stage
+reproduce:
+	test -n "$(REPRO)"
+	test ! -e $(REPRO)
+	$(MAKE) $(REPRO_VARS) viewer validation depthcheck arraydepth $(REPRO)/results/inputs.json
+	$(MAKE) $(REPRO_VARS) internal-validate
+	$(MAKE) $(REPRO_VARS) weight-correction
+	$(MAKE) $(REPRO_VARS) recovery-trace
+	$(MAKE) $(REPRO_VARS) raw
+	$(MAKE) $(REPRO_VARS) autofocus-study
+	$(MAKE) $(REPRO_VARS) production-stage
