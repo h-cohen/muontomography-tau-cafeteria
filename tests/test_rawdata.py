@@ -287,6 +287,25 @@ def test_ingest_raw_reads_a_run_subset_of_its_exposure(tmp_path, cfg):
         ingest_raw(replace(cfg, raw=late), "SKY_B", tmp_path / "cache", jobs=1)
 
 
+def test_a_run_whose_clock_restarted_spans_two_segments(tmp_path, cfg):
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    _runs_file(raw / "roof.data")  # run 37 = segments 0 and 1, run 38 = segment 2
+    settings = replace(
+        SETTINGS,
+        exposures={"SKY": str(raw)},
+        first_run={"SKY": 37},
+        restarts={"SKY": (37,)},
+        subsets={"A": RunSubset("SKY", (37, 37), 0.0), "B": RunSubset("SKY", (38, 38), -90.0)},
+    )
+    c = replace(cfg, raw=settings)
+    assert ingest_raw(c, "A", tmp_path / "cache").hist.total == 3
+    assert ingest_raw(c, "B", tmp_path / "cache").hist.total == 3
+    late = replace(settings, subsets={"B": RunSubset("SKY", (38, 39), -90.0)})
+    with pytest.raises(ValueError, match="runs 37-38"):
+        ingest_raw(replace(cfg, raw=late), "B", tmp_path / "cache")
+
+
 def test_a_run_subset_needs_a_single_file(tmp_path, cfg):
     raw = tmp_path / "raw"
     raw.mkdir()

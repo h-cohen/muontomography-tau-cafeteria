@@ -38,7 +38,7 @@ from pathlib import Path
 import numpy as np
 
 from cafetomo.angular import AngularHist
-from cafetomo.config import Config, RawSettings
+from cafetomo.config import Config, RawSettings, RunSubset
 from cafetomo.ingest import crop_counts
 
 N_COLUMNS = 424  # numbers per cluster in the table export
@@ -290,6 +290,7 @@ def _digest(path: Path, settings: RawSettings, segments: tuple[int, int] | None)
     spec = asdict(settings) | {
         "exposures": None,
         "first_run": None,
+        "restarts": None,
         "subsets": None,
         "segments": segments,
         "bytes": path.stat().st_size,
@@ -326,6 +327,15 @@ def _count_job(args) -> FileCounts:
     return count_file(path, settings, TAN_EDGES, segments=segments)
 
 
+def _run_segments(raw: RawSettings, subset: RunSubset) -> tuple[int, int]:
+    """[first, stop) clock segments of a subset's runs; a run that restarted its clock
+    (`raw.restarts`) spans one more segment per restart."""
+    base = raw.first_run[subset.exposure]
+    extra = np.asarray(raw.restarts.get(subset.exposure, ()), dtype=np.int64)
+    first, last = subset.runs
+    return (first - base + int((extra < first).sum()), last - base + 1 + int((extra <= last).sum()))
+
+
 def ingest_raw(cfg: Config, exposure: str, cache_dir: Path, jobs: int = 1) -> RawIngest:
     """Angular counts and live time of `exposure` from every `.data` file of its directory,
     or of a run subset (`raw.subsets`) from the single file of its exposure.
@@ -345,8 +355,7 @@ def ingest_raw(cfg: Config, exposure: str, cache_dir: Path, jobs: int = 1) -> Ra
     if subset:
         if len(paths) != 1:
             raise ValueError(f"{folder}: a run subset needs one .data file, found {len(paths)}")
-        base = raw.first_run[subset.exposure]
-        segments = (subset.runs[0] - base, subset.runs[1] - base + 1)
+        segments = _run_segments(raw, subset)
     cache = Path(cache_dir)
     digests = [_digest(p, raw, segments) for p in paths]
     keys = [cache / f"{exposure}_{d[:16]}.npz" for d in digests]
@@ -364,8 +373,9 @@ def ingest_raw(cfg: Config, exposure: str, cache_dir: Path, jobs: int = 1) -> Ra
     files = tuple(found)
     if subset and files[0].n_segments < segments[1]:
         first = raw.first_run[subset.exposure]
+        held = files[0].n_segments - len(raw.restarts.get(subset.exposure, ()))
         raise ValueError(
-            f"{paths[0].name}: holds runs {first}-{first + files[0].n_segments - 1}, "
+            f"{paths[0].name}: holds runs {first}-{first + held - 1}, "
             f"subset {exposure!r} asks for {subset.runs[0]}-{subset.runs[1]}"
         )
     full = sum(c.values for c in files)

@@ -211,8 +211,15 @@ class RawSettings:
     clock_divisor: float  # run-clock "seconds" per second of data
     first_run: dict = field(default_factory=dict)  # exposure id -> run number of its first run
     subsets: dict = field(default_factory=dict)  # subset id -> RunSubset of one exposure
+    restarts: dict = field(default_factory=dict)  # exposure id -> runs whose clock reset mid-run
 
     def __post_init__(self):
+        for eid, runs in self.restarts.items():
+            if (
+                eid not in self.first_run
+                or min(runs, default=self.first_run[eid]) < self.first_run[eid]
+            ):
+                raise ValueError(f"raw: restarts of {eid!r} need its first run and later runs")
         for sid, s in self.subsets.items():
             if sid in self.exposures:
                 raise ValueError(f"raw: subset {sid!r} names an exposure")
