@@ -3,7 +3,7 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
-from cafetomo.config import RawSettings
+from cafetomo.config import RawSettings, RunSubset
 from cafetomo.rawdata import (
     CHARGE_EDGES,
     cluster_positions,
@@ -247,3 +247,67 @@ def test_truncated_record_is_an_error_naming_the_file(tmp_path):
     (tmp_path / "cut.data").write_text(text + text[: len(text) // 2])
     with pytest.raises(ValueError, match="cut.data"):
         list(read_blocks(tmp_path / "cut.data"))
+
+
+def _runs_file(path):
+    """Three runs back to back: the clock restarts at each, with 1, 2 and 3 clusters."""
+    rows, k = [], 0
+    for n, start in ((1, 100e9), (2, 10e9), (3, 10e9)):
+        for j in range(n):
+            k += 1
+            rows.append(_row(k, start + j * 10e9, (0, 1, 2, 3), _single(5, 5, 5, 5)))
+    _write(path, rows)
+
+
+def test_count_file_keeps_only_the_chosen_runs(tmp_path):
+    _runs_file(tmp_path / "a.data")
+    edges = np.linspace(-2, 2, 801)
+    c = count_file(tmp_path / "a.data", SETTINGS, edges, block_rows=2, segments=(1, 3))
+    assert c.n_tracks == 5 and c.values.sum() == 5 and c.n_rows == 5
+    assert c.live_time_s == pytest.approx((10.0 + 20.0) / 50.0)
+    assert c.n_clock_resets == 2 and c.n_segments == 3
+    whole = count_file(tmp_path / "a.data", SETTINGS, edges, block_rows=2)
+    assert whole.n_tracks == 6 and whole.n_segments == 3
+
+
+def test_ingest_raw_reads_a_run_subset_of_its_exposure(tmp_path, cfg):
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    _runs_file(raw / "roof.data")
+    settings = replace(
+        SETTINGS,
+        exposures={"SKY": str(raw)},
+        first_run={"SKY": 37},
+        subsets={"SKY_B": RunSubset(exposure="SKY", runs=(38, 39), turn_deg=-90.0)},
+    )
+    out = ingest_raw(replace(cfg, raw=settings), "SKY_B", tmp_path / "cache", jobs=1)
+    assert out.hist.total == 5 and out.live_time_s == pytest.approx(30.0 / 50.0)
+    late = replace(settings, subsets={"SKY_B": RunSubset("SKY", (38, 40), -90.0)})
+    with pytest.raises(ValueError, match="runs 37-39"):
+        ingest_raw(replace(cfg, raw=late), "SKY_B", tmp_path / "cache", jobs=1)
+
+
+def test_a_run_subset_needs_a_single_file(tmp_path, cfg):
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    _runs_file(raw / "a.data")
+    _runs_file(raw / "b.data")
+    settings = replace(
+        SETTINGS,
+        exposures={"SKY": str(raw)},
+        first_run={"SKY": 37},
+        subsets={"SKY_B": RunSubset("SKY", (38, 39), -90.0)},
+    )
+    with pytest.raises(ValueError, match="one .data file"):
+        ingest_raw(replace(cfg, raw=settings), "SKY_B", tmp_path / "cache", jobs=1)
+
+
+def test_run_subsets_are_validated():
+    with pytest.raises(ValueError, match="unknown exposure"):
+        replace(SETTINGS, first_run={"pos0": 1}, subsets={"A": RunSubset("SKY", (1, 2), 0.0)})
+    with pytest.raises(ValueError, match="first run"):
+        replace(SETTINGS, subsets={"A": RunSubset("pos0", (1, 2), 0.0)})
+    with pytest.raises(ValueError, match="runs"):
+        replace(SETTINGS, first_run={"pos0": 5}, subsets={"A": RunSubset("pos0", (4, 6), 0.0)})
+    with pytest.raises(ValueError, match="names an exposure"):
+        replace(SETTINGS, first_run={"pos0": 1}, subsets={"pos0": RunSubset("pos0", (1, 2), 0.0)})

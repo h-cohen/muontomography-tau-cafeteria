@@ -184,6 +184,19 @@ class PhysicsSettings:
 
 
 @dataclass(frozen=True)
+class RunSubset:
+    """Consecutive runs of one raw exposure taken as a source of their own. A run is the
+    span between two resets of the run clock; runs are numbered from the exposure's
+    first run."""
+
+    exposure: str
+    runs: tuple  # (first, last) run number, both included
+    turn_deg: (
+        float  # detector turn about the vertical from the exposure's first run, ccw from above
+    )
+
+
+@dataclass(frozen=True)
 class RawSettings:
     """The DAQ's event-level cluster dumps (`.data`), an alternative source of one
     exposure's angular counts. Lengths are centimetres, as measured."""
@@ -196,8 +209,20 @@ class RawSettings:
     bar_pitch_cm: float  # bar centre b sits at pitch * (b + 1)
     pedestal_hg: tuple  # per ASIC: high-gain charge of a channel with no signal
     clock_divisor: float  # run-clock "seconds" per second of data
+    first_run: dict = field(default_factory=dict)  # exposure id -> run number of its first run
+    subsets: dict = field(default_factory=dict)  # subset id -> RunSubset of one exposure
 
     def __post_init__(self):
+        for sid, s in self.subsets.items():
+            if sid in self.exposures:
+                raise ValueError(f"raw: subset {sid!r} names an exposure")
+            if s.exposure not in self.exposures:
+                raise ValueError(f"raw: subset {sid!r} of unknown exposure {s.exposure!r}")
+            if s.exposure not in self.first_run:
+                raise ValueError(f"raw: subset {sid!r} needs the first run of {s.exposure!r}")
+            first, last = s.runs
+            if not self.first_run[s.exposure] <= first <= last:
+                raise ValueError(f"raw: subset {sid!r} runs {s.runs} out of order or too early")
         if len(self.channel_bars) != 4 or any(len(c) != len(set(c)) for c in self.channel_bars):
             raise ValueError("raw: channel_bars needs four lists of distinct channels")
         if len({len(c) for c in self.channel_bars}) != 1:
@@ -315,7 +340,13 @@ def _build(cls, raw: dict | None, section: str):
 def _load_raw(raw: dict | None, base: Path) -> RawSettings | None:
     if raw is None:
         return None
-    settings = _build(RawSettings, raw, "raw")
+    raw = dict(raw)
+    subsets = {
+        k: _build(RunSubset, v, f"raw.subsets.{k}")
+        for k, v in (raw.pop("subsets", None) or {}).items()
+    }
+    settings = _build(RawSettings, raw | {"subsets": {}}, "raw")
+    settings = replace(settings, subsets=subsets)
     dirs = {k: str((base / v).resolve()) for k, v in settings.exposures.items()}
     return replace(settings, exposures=dirs)
 

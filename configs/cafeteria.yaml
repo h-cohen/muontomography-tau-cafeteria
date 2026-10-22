@@ -53,6 +53,16 @@ raw:
   # The run clock reads 50x too long: a daily file spans 4.32e6 clock-seconds, and 50x
   # fewer gives 86 404 s per file and the ROOT track rate (7.2 Hz).
   clock_divisor: 50.0
+  # The roof file holds runs 37-77 back to back, one per span between run-clock resets
+  # (41 runs). From run 58 the detector was turned by 90 deg about the vertical to gauge
+  # the azimuthal asymmetry of its response; the detector-frame mean tan(theta_y) changes
+  # sign there and nowhere else. The turn direction (clockwise from above) is assumed,
+  # not yet verified.
+  first_run:
+    SKY: 37
+  subsets:
+    SKY_A: {exposure: SKY, runs: [37, 57], turn_deg: 0.0}
+    SKY_B: {exposure: SKY, runs: [58, 77], turn_deg: -90.0}
 
 binning:          # the ROOT bins (0.005 tan), cropped to +-1.25
   t_max: 1.25

@@ -137,10 +137,12 @@ def test_ingest_with_raw_counts_replaces_only_those_exposures(cfg, tmp_path):
     hist = AngularHist(np.full((500, 500), 5, dtype=np.int64), cut, cut, "txty")
     z = np.zeros((4, 32, 1), np.int64)
     file = FileCounts(
-        "f.data", np.zeros((800, 800), np.int64), 10, 9, 1, 0, 0, 12.5, 10, z, z, z[..., 0]
+        "f.data", np.zeros((800, 800), np.int64), 10, 9, 1, 0, 0, 12.5, 10, z, z, z[..., 0], 1
     )
     raw = {"pos0": RawIngest(hist, 9 * 500 * 500, 12.5, (file,), 0)}
-    c = replace(cfg, data_dir=data, raw=replace(cfg.raw, exposures={"pos0": str(tmp_path)}))
+    c = replace(
+        cfg, data_dir=data, raw=replace(cfg.raw, exposures={"pos0": str(tmp_path)}, subsets={})
+    )
     res = ingest(c, tmp_path / "out", raw)
     assert (load_counts(tmp_path / "out" / "counts_pos0.npz").values == 5).all()
     assert (load_counts(tmp_path / "out" / "counts_pos1.npz").values == 2).all()
@@ -166,7 +168,7 @@ def test_raw_counts_may_replace_the_sky_reference_too(cfg, tmp_path):
     cut = cfg.binning.edges()
     z = np.zeros((4, 32, 1), np.int64)
     file = FileCounts(
-        "s.data", np.zeros((800, 800), np.int64), 10, 9, 1, 0, 0, 99.0, 10, z, z, z[..., 0]
+        "s.data", np.zeros((800, 800), np.int64), 10, 9, 1, 0, 0, 99.0, 10, z, z, z[..., 0], 1
     )
     sky = RawIngest(
         AngularHist(np.full((500, 500), 7, dtype=np.int64), cut, cut, "txty"), 1, 99.0, (file,), 0

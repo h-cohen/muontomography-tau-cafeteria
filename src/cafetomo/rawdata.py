@@ -23,7 +23,7 @@ marginals. Tangents are histogrammed on the ROOT binning.
 The run clock counts `clock_divisor` run-seconds per second of data: a file of one
 day's data spans 50 days of clock. Live time is the summed clock gaps between
 consecutive clusters, as for the ROOT `dT` histogram; a backwards step is a new run and
-contributes no gap.
+contributes no gap. Runs held back to back in one file can thus be counted on their own.
 """
 
 from __future__ import annotations
@@ -62,7 +62,7 @@ _HEADER = b"ID_CLUSTER"
 TAN_EDGES = np.linspace(-2.0, 2.0, 801)  # the ROOT txty binning
 CHARGE_EDGES = np.arange(0.0, 16001.0, 50.0)  # high-gain ADC of a channel that fired alone
 PEDESTAL_EDGES = np.arange(0.0, 4001.0, 10.0)  # high-gain ADC of a channel with no hit flag
-_SCHEMA = 2  # bumped whenever the cached per-file counts gain or change a field
+_SCHEMA = 3  # bumped whenever the cached per-file counts gain or change a field
 
 
 @dataclass(frozen=True)
@@ -142,6 +142,10 @@ def read_blocks(path: Path, rows: int = 50_000, chunk_bytes: int = 1 << 25) -> I
         yield from _table_blocks(path, rows)
 
 
+def _select(blk: RawBlock, keep: np.ndarray) -> RawBlock:
+    return RawBlock(blk.timecode_ns[keep], blk.hit[keep], blk.charge[keep], blk.asics_ok[keep])
+
+
 def cluster_positions(
     hit: np.ndarray, charge: np.ndarray, bars: tuple, pedestal: float, pitch_cm: float
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -182,6 +186,7 @@ class FileCounts:
     hit_hist: np.ndarray  # (ASIC, channel, charge bin): high-gain charge when it fired alone
     ped_hist: np.ndarray  # (ASIC, channel, pedestal bin): charge with no hit flag
     n_flagged: np.ndarray  # (ASIC, channel): rows with the hit flag, alone or not
+    n_segments: int  # runs in the file, kept or not
 
 
 def _charge_counts(mask: np.ndarray, charge: np.ndarray, edges: np.ndarray) -> np.ndarray:
@@ -196,8 +201,14 @@ def _charge_counts(mask: np.ndarray, charge: np.ndarray, edges: np.ndarray) -> n
 
 
 def count_file(
-    path: Path, settings: RawSettings, edges: np.ndarray, block_rows: int = 50_000
+    path: Path,
+    settings: RawSettings,
+    edges: np.ndarray,
+    block_rows: int = 50_000,
+    segments: tuple[int, int] | None = None,
 ) -> FileCounts:
+    """Counts of the clusters in runs `segments` = [first, stop) of the file, all by default;
+    run k follows the k-th reset of the run clock."""
     values = np.zeros((edges.size - 1,) * 2, dtype=np.int64)
     n_rows = n_tracks = n_no_cluster = n_bad = n_resets = n_valid = 0
     hit_hist = np.zeros((N_ASICS, N_CHANNELS, CHARGE_EDGES.size - 1), dtype=np.int64)
@@ -205,7 +216,22 @@ def count_file(
     n_flagged = np.zeros((N_ASICS, N_CHANNELS), dtype=np.int64)
     clock_ns = 0.0
     last = None
-    for blk in read_blocks(path, block_rows):
+    run = 0
+    for whole in read_blocks(path, block_rows):
+        t = whole.timecode_ns if last is None else np.concatenate([[last], whole.timecode_ns])
+        gap = np.diff(t)
+        # run of every cluster in t; a gap belongs to the run of the cluster closing it
+        runs = run + np.r_[0, np.cumsum(gap < 0)]
+        run = int(runs[-1])
+        last = float(t[-1])
+        n_resets += int((gap < 0).sum())
+        lo, hi = (0, np.inf) if segments is None else segments
+        kept = (runs >= lo) & (runs < hi)
+        clock_ns += float(gap[(gap >= 0) & kept[1:]].sum())
+        keep = kept[t.size - whole.timecode_ns.size :]
+        if not keep.any():
+            continue
+        blk = _select(whole, keep)
         n = blk.timecode_ns.size
         pos = np.empty((n, N_ASICS))
         ok = np.ones(n, bool)
@@ -221,11 +247,6 @@ def count_file(
         tx, ty = tracks_from_positions(pos[ok], settings)
         values += np.histogram2d(tx, ty, [edges, edges])[0].astype(np.int64)
 
-        t = blk.timecode_ns if last is None else np.concatenate([[last], blk.timecode_ns])
-        gap = np.diff(t)
-        n_resets += int((gap < 0).sum())
-        clock_ns += float(gap[gap >= 0].sum())
-        last = float(blk.timecode_ns[-1])
         n_rows += n
         n_tracks += int(ok.sum())
         n_no_cluster += int((~ok).sum())
@@ -250,6 +271,7 @@ def count_file(
         hit_hist,
         ped_hist,
         n_flagged,
+        run + 1,
     )
 
 
@@ -262,9 +284,17 @@ class RawIngest:
     cached: int  # files read back from the cache instead of recounted
 
 
-def _digest(path: Path, settings: RawSettings) -> str:
-    """Identity of one file's counts: its size and name plus every setting that shapes them."""
-    spec = asdict(settings) | {"exposures": None, "bytes": path.stat().st_size, "schema": _SCHEMA}
+def _digest(path: Path, settings: RawSettings, segments: tuple[int, int] | None) -> str:
+    """Identity of one file's counts: its size and name, the runs kept and every setting
+    that shapes them."""
+    spec = asdict(settings) | {
+        "exposures": None,
+        "first_run": None,
+        "subsets": None,
+        "segments": segments,
+        "bytes": path.stat().st_size,
+        "schema": _SCHEMA,
+    }
     return hashlib.sha256(json.dumps([path.name, spec], sort_keys=True).encode()).hexdigest()
 
 
@@ -292,29 +322,37 @@ def _store(cache: Path, digest: str, c: FileCounts) -> None:
 
 
 def _count_job(args) -> FileCounts:
-    path, settings = args
-    return count_file(path, settings, TAN_EDGES)
+    path, settings, segments = args
+    return count_file(path, settings, TAN_EDGES, segments=segments)
 
 
 def ingest_raw(cfg: Config, exposure: str, cache_dir: Path, jobs: int = 1) -> RawIngest:
-    """Angular counts and live time of `exposure` from every `.data` file of its directory.
+    """Angular counts and live time of `exposure` from every `.data` file of its directory,
+    or of a run subset (`raw.subsets`) from the single file of its exposure.
 
     Files are counted independently (in `jobs` processes) and each result is cached under
     `cache_dir`, keyed by the file and the settings, so an interrupted or repeated run
     only recounts what changed."""
     raw = cfg.raw
-    if raw is None or exposure not in raw.exposures:
+    if raw is None or exposure not in {*raw.exposures, *raw.subsets}:
         raise ValueError(f"config has no raw data for exposure {exposure!r}")
-    folder = Path(raw.exposures[exposure])
+    subset = raw.subsets.get(exposure)
+    folder = Path(raw.exposures[subset.exposure if subset else exposure])
     paths = sorted(folder.glob("*.data"))
     if not paths:
         raise ValueError(f"{folder}: no .data files")
+    segments = None
+    if subset:
+        if len(paths) != 1:
+            raise ValueError(f"{folder}: a run subset needs one .data file, found {len(paths)}")
+        base = raw.first_run[subset.exposure]
+        segments = (subset.runs[0] - base, subset.runs[1] - base + 1)
     cache = Path(cache_dir)
-    digests = [_digest(p, raw) for p in paths]
+    digests = [_digest(p, raw, segments) for p in paths]
     keys = [cache / f"{exposure}_{d[:16]}.npz" for d in digests]
     found = [_load(k, d) for k, d in zip(keys, digests, strict=True)]
     todo = [i for i, c in enumerate(found) if c is None]
-    work = [(paths[i], raw) for i in todo]
+    work = [(paths[i], raw, segments) for i in todo]
     if jobs > 1 and len(work) > 1:
         with ProcessPoolExecutor(jobs) as pool:
             done = list(pool.map(_count_job, work))
@@ -324,6 +362,12 @@ def ingest_raw(cfg: Config, exposure: str, cache_dir: Path, jobs: int = 1) -> Ra
         _store(keys[i], digests[i], c)
         found[i] = c
     files = tuple(found)
+    if subset and files[0].n_segments < segments[1]:
+        first = raw.first_run[subset.exposure]
+        raise ValueError(
+            f"{paths[0].name}: holds runs {first}-{first + files[0].n_segments - 1}, "
+            f"subset {exposure!r} asks for {subset.runs[0]}-{subset.runs[1]}"
+        )
     full = sum(c.values for c in files)
     return RawIngest(
         hist=crop_counts(full, TAN_EDGES, TAN_EDGES, "txty", cfg.binning.edges()),
