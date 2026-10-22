@@ -24,12 +24,11 @@ review records: `docs/dev/reports/`. Specs/plans: `docs/dev/{specs,plans}/` (old
   pose offset, empty `\label{}`s in setup.tex.
 
 ## Resume on another machine
-- `git clone` + `git submodule update --init paper-production && git -C paper-production checkout main`;
-  `uv sync`; Overleaf git token in a credential helper (username `git`; never in URLs). Overleaf is
-  intermittently unreachable from some networks — retry or switch network.
-- Local-only state is NOT in git: restore `runs/` and `docs/dev/` from the bundle
-  (`cafetomo-local-2026-10-21.tar.gz`, extract at the repo root). Raw DAQ files (~40 GB) live outside the
-  repo at `../../01_data/processed/tau_cafeteria_raw_filtered` (config `raw:` paths); needed only for `make raw`.
+- Nothing is copied: `REPRODUCE.md` (clone, `uv sync`, `make tools`, submodule; then `make reproduce
+  REPRO=<fresh>` regenerates everything, `cafetomo compare-results` compares with `results/`). Raw DAQ
+  files (~40 GB) live outside the repo at `../../01_data/processed/tau_cafeteria_raw_filtered` (`raw:`).
+  Overleaf git token in a credential helper (username `git`); Overleaf is intermittently unreachable.
+- Studies once run from gitignored dirs are tracked in `studies/` (weight correction, recovery trace).
 - Check: `make test`, `make -s internal-preflight`, `make production-check`.
 
 ## Paper framing (user priorities)

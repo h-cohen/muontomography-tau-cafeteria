@@ -45,7 +45,7 @@ Run commands from the repository root. Requirements:
 - Python >= 3.12, managed by [uv](https://docs.astral.sh/uv/).
 - GNU make >= 4.3.
 - Node >= 24 for viewer unit tests.
-- For full `make paper`/`make arxiv`/`make all`: Tectonic at `runs/tools/tectonic`
+- For full `make paper`/`make arxiv`/`make all`: Tectonic at `runs/tools/tectonic` (`make tools`)
   (or set `TECTONIC` to its executable path) and the reviewed pilot,
   correction, nominal volume, and baseline inputs described below.
 
@@ -386,24 +386,9 @@ check out the recorded Overleaf commit.
 
 ## Resuming on another machine
 
-Git holds code, configs, `data/` (ROOT histograms), `results/` and the submodule
-pointer. Local-only state:
-
-- `runs/` (baseline archive, pilot archives, reviewed figure selections, raw-chain
-  outputs, autofocus and convergence runs, Tectonic) and `docs/dev/` (handoff,
-  specs, plans): restore from the bundle `cafetomo-local-2026-10-21.tar.gz`
-  by extracting it at the repository root. Caches are left out; they rebuild.
-- Raw DAQ files (~40 GB) at `../../01_data/processed/tau_cafeteria_raw_filtered`
-  (config `raw:`), needed only for `make raw`.
-
-```bash
-git clone https://github.com/h-cohen/muontomography-tau-cafeteria.git
-cd muontomography-tau-cafeteria
-tar -xzf /path/to/cafetomo-local-2026-10-21.tar.gz
-uv sync
-git submodule update --init paper-production && git -C paper-production checkout main
-make test && make -s internal-preflight && make production-check
-```
+Everything is reproducible from the repository and its input data; see
+[REPRODUCE.md](REPRODUCE.md) for the environment, `make reproduce` and the
+comparison with the committed results.
 
 ## How beam depth is estimated
 

@@ -1,4 +1,5 @@
-# Reproduce every result, figure and the paper:  make all
+# Reproduce everything into a fresh root:       make reproduce REPRO=runs/repro (REPRODUCE.md)
+# Baseline chain into runs/ and results/:        make all
 # Cheap analysis/viewer smoke run (CI):          make all FAST=1
 #                                               (writes only runs/fast/)
 CONFIG  := configs/cafeteria.yaml
