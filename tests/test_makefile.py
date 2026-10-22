@@ -262,3 +262,11 @@ def test_tools_pins_the_release_checksum():
     out = _dry("tools", "TOOLS=/tmp/claude-1000/never")
     assert "8533d07f9ccbd7a65824b9e0459041bca34af1eb33daba48f59215593753a3b7" in out
     assert "sha256sum -c" in out
+
+
+def test_draft_build_regenerates_every_scripted_figure_and_finds_its_macros(tmp_path):
+    root = tmp_path / "repro"
+    out = _dry("internal-paper", f"GEN={root}/draft/generated", "RESULTS=results")
+    assert "for f in height setup opacity; do" in out
+    assert f"--out {root}/draft/generated/figures/$f.pdf" in out
+    assert f"-Z search-path={root}/draft" in out

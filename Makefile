@@ -181,6 +181,8 @@ IVCORRECTION ?= runs/internal-validation/weight-correction-2026-10-14
 IVNOMINAL ?= runs/response-aware-2026-10-07/voxels
 IVFIGOUT ?= runs/figure-review/selected-paper-publication-2026-10-18-fix3
 IVTRACE ?= runs/internal-validation/recovery-trace-2026-10-14
+# Scripted figures of the draft besides the reviewed internal panels.
+DRAFT_FIGURES := height setup opacity
 IVSUMMARY ?= results/internalvalidation.json
 TOOLS ?= runs/tools
 TECTONIC ?= $(TOOLS)/tectonic
@@ -219,12 +221,15 @@ internal-paper: internal-selected
 	  --overlay paper-draft/figures/voxels.png --summary $(IVSUMMARY) \
 	  --baseline-results $(RESULTS)
 	mkdir -p $(GEN)/figures
-	uv run python paper-draft/figures/make_height.py --config $(CONFIG) --pose $(POSE) \
-	  --results $(RESULTS) --runs $(dir $(IVNOMINAL)) --out $(GEN)/figures/height.pdf
+	for f in $(DRAFT_FIGURES); do \
+	  uv run python paper-draft/figures/make_$$f.py --config $(CONFIG) --pose $(POSE) \
+	    --results $(RESULTS) --runs $(dir $(IVNOMINAL)) --out $(GEN)/figures/$$f.pdf || exit 1; \
+	done
 	cp $(IVFIGOUT)/internal-*.pdf $(IVFIGOUT)/internal-numbers.tex $(GEN)/figures/
 	cp $(IVFIGOUT)/display-settings.json $(GEN)/figures/internal-display-settings.json
 	uv run python -c "from pathlib import Path; from cafetomo.numbers import write_numbers; write_numbers(Path('$(RESULTS)'), Path('$(GEN)/numbers.tex'))"
-	cd paper-draft && $(abspath $(TECTONIC)) --keep-logs --keep-intermediates -o $(abspath $(GEN)) main.tex
+	cd paper-draft && $(abspath $(TECTONIC)) --keep-logs --keep-intermediates \
+	  -Z search-path=$(TEXROOT) -o $(abspath $(GEN)) main.tex
 	mv $(GEN)/main.pdf $(GEN)/paper.pdf
 
 arxiv-internal: arxiv
@@ -297,7 +302,7 @@ autofocus-study:
 
 # Everything from the inputs into one fresh root REPRO (never the tracked results/ or the
 # reviewed archives). Compare afterwards with `cafetomo compare-results`. See REPRODUCE.md.
-REPRO_VARS = RUNS=$(REPRO)/baseline RESULTS=$(REPRO)/results GEN=$(REPRO)/draft \
+REPRO_VARS = RUNS=$(REPRO)/baseline RESULTS=$(REPRO)/results GEN=$(REPRO)/draft/generated \
   IVOUT=$(REPRO)/internal-validation/pilot IVCACHE=$(REPRO)/internal-validation/cache \
   IVPAPERARCHIVE=$(REPRO)/internal-validation/pilot \
   IVCORRECTION=$(REPRO)/internal-validation/weight-correction \
