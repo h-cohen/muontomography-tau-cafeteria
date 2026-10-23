@@ -21,6 +21,12 @@ CONFIG = Path("configs/cafeteria.yaml")
 ROOT = PILOT = INGEST = None
 
 
+def set_paths(root, pilot, ingest):
+    # Workers are not forked on every platform, so they receive the paths explicitly.
+    global ROOT, PILOT, INGEST
+    ROOT, PILOT, INGEST = root, pilot, ingest
+
+
 def sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
@@ -138,7 +144,9 @@ def run():
     assert os.environ.get("OPENBLAS_NUM_THREADS") == "1"
     assert os.environ.get("OMP_NUM_THREADS") == "1"
     jobs = [*reg["cases"], None]
-    with ProcessPoolExecutor(max_workers=3) as pool:
+    with ProcessPoolExecutor(
+        max_workers=3, initializer=set_paths, initargs=(ROOT, PILOT, INGEST)
+    ) as pool:
         pending = {
             pool.submit(controls if job is None else one, *([] if job is None else [job])): job
             for job in jobs

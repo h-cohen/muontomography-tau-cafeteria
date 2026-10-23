@@ -311,7 +311,7 @@ REPRO_VARS = RUNS=$(REPRO)/baseline RESULTS=$(REPRO)/results GEN=$(REPRO)/draft/
   RAWRUNS=$(REPRO)/raw PRODRUNS=$(REPRO)/baseline CONVRUNS=$(REPRO)/baseline \
   AFRUNS=$(REPRO)/autofocus-study PRODSTAGE=$(REPRO)/production-stage
 # reproduce-stages continues an interrupted reproduction: finished stages are skipped
-# by make, and the studies refuse an existing output directory.
+# (by make, or by the study's last output), and the studies refuse an existing output directory.
 .PHONY: reproduce-stages
 reproduce:
 	test -n "$(REPRO)"
@@ -320,11 +320,13 @@ reproduce:
 reproduce-stages:
 	test -n "$(REPRO)"
 	$(MAKE) $(REPRO_VARS) viewer validation depthcheck arraydepth $(REPRO)/results/inputs.json
-	$(MAKE) $(REPRO_VARS) internal-validate
-	$(MAKE) $(REPRO_VARS) weight-correction
-	$(MAKE) $(REPRO_VARS) recovery-trace
+	test -d $(REPRO)/internal-validation/pilot/results || $(MAKE) $(REPRO_VARS) internal-validate
+	test -e $(REPRO)/internal-validation/weight-correction/comparison.json || \
+	  $(MAKE) $(REPRO_VARS) weight-correction
+	test -e $(REPRO)/internal-validation/recovery-trace/support-supplement/comparison.json || \
+	  $(MAKE) $(REPRO_VARS) recovery-trace
 	$(MAKE) $(REPRO_VARS) raw
-	$(MAKE) $(REPRO_VARS) autofocus-study
+	test -e $(REPRO)/results/production/autofocuslayer.json || $(MAKE) $(REPRO_VARS) autofocus-study
 	$(MAKE) $(REPRO_VARS) production-stage
 
 
