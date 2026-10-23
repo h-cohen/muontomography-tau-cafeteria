@@ -143,13 +143,13 @@ The top row of `beams2d` is round, not square, by choice: the `view:` count floo
 position and 100 sky counts per 0.025 bin) drop the low-acceptance corners, which are too
 noisy to read. The bottom row shows the same counts with no floor over the whole square.
 
-The raw roof files cover runs DET200037-57 (21 days, 51% of the ROOT sky's live time; the
-ROOT sky spans runs 37-77). Those days are self-consistent (shape scatter between their
-halves at the Poisson level), but the later runs differ from them by a smooth ~+-10%
-gradient along tan theta_y (`sky_late_shape_scatter` against `sky_late_shape_noise`), and
-pos0's opacity against the two skies differs by more than counting noise. **Open check:**
-the roof detector is reported not to have moved; that, its levelling and any change in
-conditions between runs 37-57 and 58-77 are to be verified before the sky choice is final.
+The raw roof file holds runs 37-77 (981 h). From run 58 the detector was turned 90 deg
+clockwise about the vertical, so `raw.subsets` splits the roof into `SKY_A` (runs 37-57,
+502 h) and `SKY_B` (runs 58-77, 479 h); `raw.restarts` maps runs to clock segments (run 37
+spans two). `cafetomo ingest-raw --sky SKY_A|SKY_B` takes the sky reference from one
+part. The parts differ by more than counting noise as a smooth dipole: the sky's own
+azimuthal structure, which turns with the world, not the detector (see Joint open-sky
+reference below).
 
 ### Channel calibration
 
@@ -343,7 +343,7 @@ make production-push                           # only when agreed
 | `config-numbers.tex` | `configs/cafeteria.yaml`, named code constants, and the baseline volume's selected iterate |
 | `production-numbers.tex` | `results/production/` (production-only results, e.g. the corrected autofocus) |
 | `raw-numbers.tex` | `runs/raw/results/rawdata.json` and the calibration/view settings — **preliminary**, not yet promoted |
-| `figures/*.pdf` | `paper-draft/figures/make_*.py` with `--frame detector`, from the reviewed baseline archive `runs/response-aware-2026-10-07`, `runs/raw` and `runs/convergence-2026-10-21` |
+| `figures/*.pdf` | `paper-draft/figures/make_*.py` with `--frame detector`, from the reviewed baseline archive `runs/response-aware-2026-10-07`, `runs/raw`, `runs/convergence-2026-10-21` and `runs/skyswap/joint` (`skyroof`, `skyjoint`) |
 
 It refuses when this repository or `paper-production/` has uncommitted changes,
 pulls Overleaf edits by fast-forward only (refusing diverged histories), replaces
@@ -371,6 +371,21 @@ centred on the trial height. `cafetomo autofocus-study` reruns only autofocus
 (nominal scan, the original bootstrap's 50 replicas, pose/flux/scattering/
 background shifts, phantom check) into `runs/autofocus-study-2026-10-21/`, promoted
 to `results/production/autofocuslayer.json`. The draft keeps the reviewed value.
+
+**Joint open-sky reference.** `make sky-joint` (preregistered,
+`studies/sky-orientation/PREREG-joint-sky.md`) fits ln S, the sky's azimuthal structure
+(harmonics m = 1-3, 18 parameters), plus an epoch rate ratio c to the binomial split of
+each fine bin's roof tracks between `SKY_A` and `SKY_B`; the detector response cancels.
+chi2/dof 1.06 (pull width 2.03 before), no detector-frame residual structure (no gain
+change), c = 1.0010 +- 0.0004. The reference for a room position uses all roof tracks with
+the sky term turned to the room orientation. Roof A is assumed to share the room's
+detector axes (not recorded); a 180 deg flip shifts lambda by up to 0.09 at the most
+inclined bins (mean < 0.002), a smooth gradient that leaves the beam contrast unchanged.
+Outputs `runs/skyswap/` (ingest per part, `joint/` with reference ingest dirs per
+orientation hypothesis and their `beams2d`), promoted to
+`results/production/skyjoint.json`; production figures `skyroof` (Fig. 5, roof rates)
+and `skyjoint` (2D maps of pos0 and pos1). The 3D analysis still uses the DAQ sky
+histogram; its rerun with the joint reference is next.
 
 **Solver history.** `runs/convergence-2026-10-21` reruns the nominal
 reconstruction with every iterate's chi2 kept; its volume is bit-identical to the

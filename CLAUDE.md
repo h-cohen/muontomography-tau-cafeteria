@@ -6,20 +6,29 @@ Paper-companion repo: two-position muon tomography of the TAU cafeteria ceiling 
 Handoff / current state: `docs/dev/handoff-2026-10-14.md` (gitignored; read first). Completion report and
 review records: `docs/dev/reports/`. Specs/plans: `docs/dev/{specs,plans}/` (old checkboxes ≠ open work).
 
-## Status (2026-10-21)
+## Status (2026-10-23)
 - Internal-validation pilot (7 tasks), weight correction, trace replay and the short draft paper
   (`paper-draft/`) are COMPLETE and reviewed. Do not rerun or redispatch them. Scientific validation is
   NOT complete (depth, calibrated uncertainty, null/misspecification controls open — handoff "Next
   scientific work").
 - Production paper (`paper-production/`, Overleaf, pushed): user owns `3d.tex`; we also wrote `2d.tex`,
   `rawdata.tex`, `sky.tex` and edited coauthors' `setup.tex` (8.5 m = roof-slab top above floor; live times;
-  open-sky role without simulation). Coauthors edit in Overleaf. Fig. 5 (nominal voxel
-  field) is a placeholder: the user will supply the image.
+  open-sky role without simulation). Coauthors edit in Overleaf. The 3D nominal voxel-field figure is
+  a placeholder: the user will supply the image.
 - Done in production: corrected autofocus (layer bug fixed; `results/production/autofocuslayer.json`,
   7.21 ± 0.35 m; draft keeps 7.18 m), solver-convergence and coverage/resolution figures, raw-chain 2D maps
   and Landau⊗Gauss MPV (PRELIMINARY macros from `runs/raw/results/rawdata.json`, not promoted).
-- Open next (user's list): sky-sensitivity study and one-command sky swap for the complete roof data;
-  continued-array depth systematics and null/misspecification controls (preregister first); review and
+- Done (2D, 2026-10-23): roof split into its two orientations (`raw.subsets` SKY_A runs 37-57,
+  SKY_B runs 58-77 turned 90 deg cw, user-confirmed); `ingest-raw --sky`; preregistered joint
+  open-sky reference (`make sky-joint`, `studies/sky-orientation/`, `results/production/skyjoint.json`):
+  sky azimuthal harmonics fitted from the A/B split, chi2/dof 1.06, no gain change. Assumption: roof A
+  shares the room's detector axes (not recorded; 180 deg flip = smooth shift ≤ 0.09 in λ, a systematic).
+  Production `sky.tex` (subsection "Two roof orientations", Fig. 5 = roof rates `skyroof`) and `2d.tex`
+  (λ maps of pos0/pos1 vs joint reference, `skyjoint`) are written and pushed.
+- Open next (user's list): 3D analysis rerun with the joint sky reference (the 3D still uses the DAQ
+  sky histogram); then fix the reproduction (`runs/repro` failed at raw stage, `rawdata.json`
+  AttributeError) and run a full `make production-sync` (last syncs staged by hand, MANIFEST credits the
+  whole `generated/` to the latest commit); continued-array depth systematics and null/misspecification controls (preregister first); review and
   promote `rawdata.json`; coauthor items: beam spacing 1.2 m (clear gap?) vs pitch 1.59 m, 0.6 m sideways
   pose offset, empty `\label{}`s in setup.tex.
 
