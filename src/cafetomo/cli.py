@@ -79,22 +79,39 @@ def cmd_ingest(args) -> None:
     _write_json(Path(args.results) / "data.json", doc)
 
 
+def raw_sources(cfg, cache: Path, jobs: int = 1, sky: str | None = None) -> dict:
+    """Raw counts of every raw exposure; with `sky`, a run subset of the sky reference's
+    raw exposure stands in for the whole sky run."""
+    from cafetomo.rawdata import ingest_raw
+
+    sky_id = cfg.sky_reference.id
+    if sky is not None:
+        subset = cfg.raw.subsets.get(sky)
+        if subset is None or subset.exposure != sky_id:
+            raise ValueError(f"sky {sky!r} is not a run subset of {sky_id!r}")
+    return {
+        pid: ingest_raw(cfg, sky if pid == sky_id and sky else pid, cache, jobs=jobs)
+        for pid in cfg.raw.exposures
+    }
+
+
 def cmd_ingest_raw(args) -> None:
     """An ingest directory in which each exposure with raw files takes its counts and
-    live time from them (see `rawdata`); the other sources keep their ROOT histograms."""
+    live time from them (see `rawdata`); the other sources keep their ROOT histograms.
+    `--sky <subset>` takes the sky reference from a run subset of its raw exposure."""
     from cafetomo.ingest import ingest
     from cafetomo.provenance import write_meta
-    from cafetomo.rawdata import ingest_raw
 
     cfg = _cfg(args)
     if cfg.raw is None:
         raise SystemExit(f"{args.config}: no raw section")
     out = Path(args.out)
     cache = Path(args.cache or out.parent / "cache")
-    raw = {pid: ingest_raw(cfg, pid, cache, jobs=int(args.jobs or 1)) for pid in cfg.raw.exposures}
+    raw = raw_sources(cfg, cache, int(args.jobs or 1), args.sky)
     ingest(cfg, out, raw)
     exposures = json.loads((out / "meta.json").read_text())["exposures"]
-    write_meta(out, config_path=args.config, stage="ingest-raw", extra={"exposures": exposures})
+    extra = {"exposures": exposures, "sky_source": args.sky or cfg.sky_reference.id}
+    write_meta(out, config_path=args.config, stage="ingest-raw", extra=extra)
 
 
 def cmd_channelcal(args) -> None:
@@ -646,13 +663,13 @@ def main(argv: list[str] | None = None) -> None:
         # Without --pose a stage runs on the config's prior pose; the Makefile
         # passes the fitted one to every stage after selfcal.
         for o in opts:
-            p.add_argument(f"--{o}", required=o not in {"cache", "pose", "jobs", "exposure"})
+            p.add_argument(f"--{o}", required=o not in {"cache", "pose", "jobs", "exposure", "sky"})
 
     stage(
         "internal-validate", cmd_internal_validate, "config", "ingest", "settings", "out", "cache"
     )
     stage("ingest", cmd_ingest, "config", "out", "results")
-    stage("ingest-raw", cmd_ingest_raw, "config", "out", "cache", "jobs")
+    stage("ingest-raw", cmd_ingest_raw, "config", "out", "cache", "jobs", "sky")
     stage(
         "rawcheck",
         cmd_rawcheck,

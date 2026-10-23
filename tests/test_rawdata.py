@@ -306,6 +306,25 @@ def test_a_run_whose_clock_restarted_spans_two_segments(tmp_path, cfg):
         ingest_raw(replace(cfg, raw=late), "B", tmp_path / "cache")
 
 
+def test_a_sky_subset_stands_in_for_the_whole_sky_run(tmp_path, cfg):
+    from cafetomo.cli import raw_sources
+
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    _runs_file(raw / "roof.data")
+    settings = replace(
+        SETTINGS,
+        exposures={"SKY": str(raw)},
+        first_run={"SKY": 37},
+        subsets={"B": RunSubset("SKY", (38, 39), -90.0)},
+    )
+    c = replace(cfg, raw=settings)
+    assert raw_sources(c, tmp_path / "cache")["SKY"].hist.total == 6
+    assert raw_sources(c, tmp_path / "cache", sky="B")["SKY"].hist.total == 5
+    with pytest.raises(ValueError, match="not a run subset"):
+        raw_sources(c, tmp_path / "cache", sky="SKY")
+
+
 def test_a_run_subset_needs_a_single_file(tmp_path, cfg):
     raw = tmp_path / "raw"
     raw.mkdir()
