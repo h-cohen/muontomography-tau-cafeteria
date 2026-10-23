@@ -57,8 +57,7 @@ raw:
   # except run 37, whose clock reset once after its first 1.2 h (42 spans for 41 runs).
   # From run 58 the detector was turned by 90 deg about the vertical to gauge
   # the azimuthal asymmetry of its response; the detector-frame mean tan(theta_y) changes
-  # sign there and nowhere else. The turn direction (clockwise from above) is assumed,
-  # not yet verified.
+  # sign there and nowhere else. The turn was clockwise from above (operator record).
   first_run:
     SKY: 37
   restarts:
