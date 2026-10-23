@@ -29,6 +29,7 @@ def worst(name: str, key: str) -> float:
 doc = {
     "a_hours": fit["live_h"]["SKY_A"],
     "b_hours": fit["live_h"]["SKY_B"],
+    "hours": fit["live_h"]["SKY_A"] + fit["live_h"]["SKY_B"],
     "a_tracks": tracks("SKY_A"),
     "b_tracks": tracks("SKY_B"),
     "turn_deg": abs(fit["turn_deg"]),
