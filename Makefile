@@ -240,7 +240,7 @@ arxiv-internal: arxiv
 PRODUCTION ?= paper-production
 PRODSTAGE  := runs/production-stage
 PRODRUNS   ?= runs/response-aware-2026-10-07
-PRODUCTION_FIGURES := parallax depth opacity setup slices zprofile arrayfit pose coverage autofocus
+PRODUCTION_FIGURES := parallax depth setup slices zprofile arrayfit pose coverage autofocus
 # Nominal reconstruction rerun with every iterate's chi2 kept (volume bit-identical to PRODRUNS).
 CONVRUNS   ?= runs/convergence-2026-10-21
 PRODUCTION_RAW_FIGURES := maps2d channelcal
@@ -268,8 +268,10 @@ production-stage: internal-paper
 	  uv run python paper-draft/figures/make_$$f.py --config $(CONFIG) --pose $(POSE) \
 	    --results $(RESULTS) --runs $(RAWRUNS) --frame detector --out $(PRODSTAGE)/figures/$$f.pdf || exit 1; \
 	done
-	uv run python paper-draft/figures/make_skyjoint.py --config $(CONFIG) --pose $(POSE) \
-	  --results $(RESULTS) --runs $(SKYRUNS)/joint --frame detector --out $(PRODSTAGE)/figures/skyjoint.pdf
+	for f in skyjoint skyroof; do \
+	  uv run python paper-draft/figures/make_$$f.py --config $(CONFIG) --pose $(POSE) \
+	    --results $(RESULTS) --runs $(SKYRUNS)/joint --frame detector --out $(PRODSTAGE)/figures/$$f.pdf || exit 1; \
+	done
 production-sync: production-stage
 	$(CLI) production-sync --production $(PRODUCTION) --staged $(PRODSTAGE) --results $(RESULTS)
 production-check:

@@ -101,6 +101,7 @@ def checks(f: dict) -> dict:
         "projection": rows,
         "projection_pass": bool(rows_pass),
         "pull_map": pull,
+        "split": {"n": coarse(n), "observed_a": o, "expected_a": e, "used": ok},
     }
 
 
@@ -134,11 +135,12 @@ def write_ingest(ref: np.ndarray, name: str) -> Path:
 
 out.mkdir(parents=True, exist_ok=False)
 summary = {"turn_deg": TURN, "live_h": {s: t / 3600 for s, t in T.items()}, "fits": {}}
-pulls = {}
+pulls, split = {}, {}
 for m_max in (2, 3):
     f = fit(m_max)
     ch = checks(f)
     pulls[m_max] = ch.pop("pull_map")
+    split[m_max] = ch.pop("split")
     err = np.sqrt(np.diag(f["cov"]))
     c_err = f["c"] * err[0]
     summary["fits"][f"m{m_max}"] = {
@@ -154,5 +156,17 @@ for m_max in (2, 3):
         np.save(out / f"ref_m{m_max}_{name}.npy", ref)
         write_ingest(ref, f"m{m_max}_{name}")
 np.savez_compressed(out / "pulls.npz", **{f"m{k}": v for k, v in pulls.items()})
+# Per view bin, nominal fit: roof tracks, roof-A share observed and fitted, live times.
+np.savez_compressed(
+    out / "split.npz",
+    edges=rebin(AngularHist(n_a, hist["SKY_A"].xedges, hist["SKY_A"].yedges), REBIN).xedges,
+    t_a=T["SKY_A"],
+    t_b=T["SKY_B"],
+    pull=pulls[3],
+    reference=rebin(
+        AngularHist(reference(f, 0.0), hist["SKY_A"].xedges, hist["SKY_A"].yedges), REBIN
+    ).values,
+    **split[3],
+)
 (out / "joint_sky.json").write_text(json.dumps(summary, indent=1))
 print(json.dumps(summary, indent=1))
