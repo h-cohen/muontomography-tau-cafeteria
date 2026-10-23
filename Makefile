@@ -244,6 +244,7 @@ PRODUCTION_FIGURES := parallax depth opacity setup slices zprofile arrayfit pose
 # Nominal reconstruction rerun with every iterate's chi2 kept (volume bit-identical to PRODRUNS).
 CONVRUNS   ?= runs/convergence-2026-10-21
 PRODUCTION_RAW_FIGURES := maps2d channelcal
+SKYRUNS    ?= runs/skyswap
 PRODUCTION_LINT ?= 3d.tex,2d.tex,rawdata.tex,sky.tex
 .PHONY: production-stage production-sync production-check production-push
 production-stage: internal-paper
@@ -267,6 +268,8 @@ production-stage: internal-paper
 	  uv run python paper-draft/figures/make_$$f.py --config $(CONFIG) --pose $(POSE) \
 	    --results $(RESULTS) --runs $(RAWRUNS) --frame detector --out $(PRODSTAGE)/figures/$$f.pdf || exit 1; \
 	done
+	uv run python paper-draft/figures/make_skyjoint.py --config $(CONFIG) --pose $(POSE) \
+	  --results $(RESULTS) --runs $(SKYRUNS)/joint --frame detector --out $(PRODSTAGE)/figures/skyjoint.pdf
 production-sync: production-stage
 	$(CLI) production-sync --production $(PRODUCTION) --staged $(PRODSTAGE) --results $(RESULTS)
 production-check:
@@ -275,7 +278,7 @@ production-push: production-check
 	git -C $(PRODUCTION) push origin HEAD:main
 
 # Registered studies on the internal-validation pilot (scripts tracked in studies/).
-.PHONY: weight-correction recovery-trace autofocus-study tools reproduce
+.PHONY: weight-correction recovery-trace autofocus-study sky-joint tools reproduce
 weight-correction:
 	test ! -e $(IVCORRECTION)
 	uv run python studies/weight-correction/compare.py --pilot $(IVPAPERARCHIVE) --out $(IVCORRECTION)
@@ -300,6 +303,29 @@ autofocus-study:
 	mkdir -p $(RESULTS)/production
 	cp $(AFRUNS)/autofocuslayer.json $(RESULTS)/production/autofocuslayer.json
 
+# Open-sky reference from both roof orientations (studies/sky-orientation, preregistered);
+# promoted into results/production/skyjoint.json (production only).
+sky-joint:
+	test ! -e $(SKYRUNS)
+	mkdir -p $(SKYRUNS) && cp $(CONFIG) $(SKYRUNS)/config.yaml
+	for s in SKY_A SKY_B SKY; do \
+	  arg=$$(test $$s = SKY || echo "--sky $$s"); \
+	  $(CLI) ingest-raw --config $(CONFIG) --out $(SKYRUNS)/ingest_$$s --cache $(SKYRUNS)/cache \
+	    --jobs $(or $(JOBS),4) $$arg || exit 1; \
+	  $(CLI) opacity --config $(CONFIG) --pose $(POSE) --ingest $(SKYRUNS)/ingest_$$s \
+	    --out $(SKYRUNS)/opacity_$$s || exit 1; \
+	  $(CLI) beams2d --config $(CONFIG) --ingest $(SKYRUNS)/ingest_$$s --out $(SKYRUNS)/beams2d_$$s || exit 1; \
+	done
+	uv run python studies/sky-orientation/compare.py $(SKYRUNS)
+	uv run python studies/sky-orientation/joint_sky.py $(SKYRUNS) $(SKYRUNS)/joint
+	cp $(CONFIG) $(SKYRUNS)/joint/config.yaml
+	for d in $(SKYRUNS)/joint/ingest_*; do \
+	  $(CLI) beams2d --config $(CONFIG) --ingest $$d --out $(SKYRUNS)/joint/beams2d_$${d##*/ingest_} || exit 1; \
+	done
+	uv run python studies/sky-orientation/compare_joint.py $(SKYRUNS) $(SKYRUNS)/joint $(SKYRUNS)/joint/compare.png
+	mkdir -p $(RESULTS)/production
+	uv run python studies/sky-orientation/promote.py $(SKYRUNS) $(SKYRUNS)/joint $(RESULTS)/production/skyjoint.json
+
 # Everything from the inputs into one fresh root REPRO (never the tracked results/ or the
 # reviewed archives). Compare afterwards with `cafetomo compare-results`. See REPRODUCE.md.
 REPRO_VARS = RUNS=$(REPRO)/baseline RESULTS=$(REPRO)/results GEN=$(REPRO)/draft/generated \
@@ -309,7 +335,7 @@ REPRO_VARS = RUNS=$(REPRO)/baseline RESULTS=$(REPRO)/results GEN=$(REPRO)/draft/
   IVTRACE=$(REPRO)/internal-validation/recovery-trace IVNOMINAL=$(REPRO)/baseline/voxels \
   IVFIGOUT=$(REPRO)/figure-review/selection IVSUMMARY=$(REPRO)/results/internalvalidation.json \
   RAWRUNS=$(REPRO)/raw PRODRUNS=$(REPRO)/baseline CONVRUNS=$(REPRO)/baseline \
-  AFRUNS=$(REPRO)/autofocus-study PRODSTAGE=$(REPRO)/production-stage
+  AFRUNS=$(REPRO)/autofocus-study SKYRUNS=$(REPRO)/skyswap PRODSTAGE=$(REPRO)/production-stage
 # reproduce-stages continues an interrupted reproduction: finished stages are skipped
 # (by make, or by the study's last output), and the studies refuse an existing output directory.
 .PHONY: reproduce-stages
@@ -327,6 +353,7 @@ reproduce-stages:
 	  $(MAKE) $(REPRO_VARS) recovery-trace
 	$(MAKE) $(REPRO_VARS) raw
 	test -e $(REPRO)/results/production/autofocuslayer.json || $(MAKE) $(REPRO_VARS) autofocus-study
+	test -e $(REPRO)/results/production/skyjoint.json || $(MAKE) $(REPRO_VARS) sky-joint
 	$(MAKE) $(REPRO_VARS) production-stage
 
 
