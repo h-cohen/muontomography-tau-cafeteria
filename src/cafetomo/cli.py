@@ -8,6 +8,8 @@ contain digits. Nested values (lists, per-position dicts) are kept for figures.
 import argparse
 import json
 import sys
+from concurrent.futures import ProcessPoolExecutor
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -17,6 +19,7 @@ from cafetomo.config import Config, load_config
 
 # Position ids carry digits (pos0, pos1); data.json names them by their order
 # in the config instead, so the keys stay valid macro names.
+LATE_MIN_FRACTION = 0.01  # later ROOT runs below this share of the sky are not a sample
 _ORDINALS = ("first", "second", "third", "fourth")
 
 # The quantities the paper quotes with a full error budget.
@@ -146,6 +149,16 @@ def cmd_channelcal(args) -> None:
     )
 
 
+def _subset_hist(args):
+    """Counts of one raw run subset on the analysis binning (a process-pool job)."""
+    from cafetomo.ingest import crop_counts
+    from cafetomo.rawdata import TAN_EDGES, ingest_raw
+
+    cfg, subset, cache = args
+    (counts,) = ingest_raw(cfg, subset, cache).files
+    return crop_counts(counts.values, TAN_EDGES, TAN_EDGES, "txty", cfg.binning.edges())
+
+
 def cmd_rawcheck(args) -> None:
     """rawdata.json: the raw build against the ROOT histograms (counts, live time, opacity),
     the sky's stability across its days and later runs, and the channel calibration of
@@ -153,7 +166,7 @@ def cmd_rawcheck(args) -> None:
     from cafetomo.angular import AngularHist, load_counts
     from cafetomo.ingest import crop_counts, read_live_time
     from cafetomo.opacity import poisson_sigma, solve_opacity
-    from cafetomo.rawcheck import count_match, epoch_scatter, lambda_shift
+    from cafetomo.rawcheck import count_match, epoch_scatter, lambda_shift, run_halves
     from cafetomo.rawdata import TAN_EDGES, ingest_raw
 
     cfg = _cfg(args)
@@ -211,20 +224,46 @@ def cmd_rawcheck(args) -> None:
 
     sky = cfg.sky_reference.id
     if sky in cfg.raw.exposures:
-        days = [
-            crop_counts(f.values, TAN_EDGES, TAN_EDGES, "txty", cfg.binning.edges())
-            for f in ingest_raw(cfg, sky, Path(args.cache or raw_dir.parent / "cache")).files
-        ]
-        half = len(days) // 2
-        doc["sky_halves_shape_scatter"], doc["sky_halves_shape_noise"] = epoch_scatter(
-            days[:half], days[half:]
-        )
+        cache = Path(args.cache or raw_dir.parent / "cache")
+        turns = {k: v for k, v in cfg.raw.subsets.items() if v.exposure == sky}
+        if turns:
+            # One file holds every run: the halves are the earlier and later runs of each
+            # detector orientation, so a turn is never read as an epoch change.
+            halves = {f"{k}_h{i}": h for k, v in turns.items() for i, h in enumerate(run_halves(v))}
+            hcfg = replace(cfg, raw=replace(cfg.raw, subsets=cfg.raw.subsets | halves))
+            with ProcessPoolExecutor(len(halves)) as pool:
+                counts = dict(
+                    zip(
+                        halves,
+                        pool.map(_subset_hist, [(hcfg, k, cache) for k in halves]),
+                        strict=True,
+                    )
+                )
+            for k in turns:
+                o = k.removeprefix(f"{sky}_").lower()
+                doc[f"sky_{o}_halves_shape_scatter"], doc[f"sky_{o}_halves_shape_noise"] = (
+                    epoch_scatter([counts[f"{k}_h0"]], [counts[f"{k}_h1"]])
+                )
+        else:
+            days = [
+                crop_counts(f.values, TAN_EDGES, TAN_EDGES, "txty", cfg.binning.edges())
+                for f in ingest_raw(cfg, sky, cache).files
+            ]
+            if len(days) < 2:
+                raise ValueError(f"{sky}: sky halves need two files or raw.subsets of the sky")
+            half = len(days) // 2
+            doc["sky_halves_shape_scatter"], doc["sky_halves_shape_noise"] = epoch_scatter(
+                days[:half], days[half:]
+            )
         raw_sky, root_sky = (load_counts(d / f"counts_{sky}.npz") for d in (raw_dir, root_dir))
         later = AngularHist(
             root_sky.values - raw_sky.values, root_sky.xedges, root_sky.yedges, "txty"
         )
-        doc["sky_late_shape_scatter"], doc["sky_late_shape_noise"] = epoch_scatter(
-            [raw_sky], [later]
+        # Raw files covering every ROOT run leave no later runs: not measured.
+        doc["sky_late_shape_scatter"], doc["sky_late_shape_noise"] = (
+            epoch_scatter([raw_sky], [later])
+            if later.values.sum() > LATE_MIN_FRACTION * root_sky.values.sum()
+            else (float("nan"), float("nan"))
         )
         doc["sky_raw_live_fraction"] = meta[sky]["live_time_s"] / read_live_time(
             cfg.data_dir / cfg.sky_reference.root_file, interpolate=True

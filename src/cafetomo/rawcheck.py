@@ -11,13 +11,24 @@ distributions are compared on 0.05-tan bins against the Poisson scatter of the r
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import replace
 
 import numpy as np
 
 from cafetomo.angular import AngularHist, rebin
+from cafetomo.config import RunSubset
 
 _SHAPE_REBIN = 10  # 0.05 tan bins
 _SHAPE_MIN_COUNTS = 400
+
+
+def run_halves(subset: RunSubset) -> tuple[RunSubset, RunSubset]:
+    """The earlier and later runs of one orientation; an odd run goes to the later half."""
+    first, last = subset.runs
+    if last <= first:
+        raise ValueError(f"run halves need at least two runs, got {subset.runs}")
+    mid = first + (last - first + 1) // 2
+    return replace(subset, runs=(first, mid - 1)), replace(subset, runs=(mid, last))
 
 
 def count_match(raw: AngularHist, root: AngularHist) -> tuple[float, float]:

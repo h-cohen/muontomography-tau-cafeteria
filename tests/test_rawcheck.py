@@ -48,3 +48,16 @@ def test_lambda_shift_over_bins_measured_in_both():
     b = np.array([0.12, 0.18, 0.3, np.nan])
     mean, std, n = lambda_shift(a, b)
     assert n == 2 and mean == pytest.approx(0.0) and std == pytest.approx(0.02)
+
+
+def test_run_halves_split_one_orientation_and_keep_its_turn():
+    from cafetomo.config import RunSubset
+    from cafetomo.rawcheck import run_halves
+
+    early, late = run_halves(RunSubset("SKY", (58, 77), -90.0))
+    assert early == RunSubset("SKY", (58, 67), -90.0)
+    assert late == RunSubset("SKY", (68, 77), -90.0)
+    early, late = run_halves(RunSubset("SKY", (37, 57), 0.0))
+    assert (early.runs, late.runs) == ((37, 46), (47, 57))
+    with pytest.raises(ValueError, match="two runs"):
+        run_halves(RunSubset("SKY", (40, 40), 0.0))
