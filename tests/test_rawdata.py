@@ -6,8 +6,10 @@ import pytest
 from cafetomo.config import RawSettings, RunSubset
 from cafetomo.rawdata import (
     CHARGE_EDGES,
+    PEDESTAL_EDGES,
     cluster_positions,
     count_file,
+    fit_pedestals,
     ingest_raw,
     read_blocks,
     tracks_from_positions,
@@ -349,3 +351,75 @@ def test_run_subsets_are_validated():
         replace(SETTINGS, first_run={"pos0": 5}, subsets={"A": RunSubset("pos0", (4, 6), 0.0)})
     with pytest.raises(ValueError, match="names an exposure"):
         replace(SETTINGS, first_run={"pos0": 1}, subsets={"pos0": RunSubset("pos0", (1, 2), 0.0)})
+
+
+def test_a_lone_flagged_bar_takes_a_neighbour_above_its_pedestal_threshold():
+    hit = np.zeros((3, 23), bool)
+    q = np.full((3, 23), PED)
+    threshold = np.full(23, PED + 90.0)
+    hit[:, 4], q[:, 4] = True, PED + 3000
+    q[0, 5] = PED + 1000  # unflagged, above threshold: joins the cluster
+    q[1, 5] = PED + 50  # below threshold: left out
+    hit[2, 9], q[2, [5, 9]] = True, PED + 1000  # two flagged bars: the flag rule stays
+    centre = lambda b: 1.6 * (b + 1)  # noqa: E731
+    pos, ok = cluster_positions(hit, q, SETTINGS.channel_bars[0], PED, 1.6, threshold)
+    assert ok.all()
+    assert pos[0] == pytest.approx(0.75 * centre(4) + 0.25 * centre(5))
+    assert pos[1] == pytest.approx(centre(4))
+    assert pos[2] == pytest.approx(centre(4))
+    flag_only, _ = cluster_positions(hit, q, SETTINGS.channel_bars[0], PED, 1.6)
+    assert flag_only[0] == pytest.approx(centre(4))
+
+
+def test_cluster_weights_take_a_pedestal_per_channel():
+    hit = np.zeros((1, 23), bool)
+    q = np.full((1, 23), PED)
+    hit[0, 4:6], q[0, 4:6] = True, PED + 1000
+    ped = np.full(23, PED)
+    ped[5] = PED + 500  # channel 5 sits higher: half the net charge of channel 4
+    pos, _ = cluster_positions(hit, q, SETTINGS.channel_bars[0], ped, 1.6)
+    assert pos[0] == pytest.approx((2 * 1.6 * 5 + 1.6 * 6) / 3)
+
+
+def test_pedestal_fit_recovers_the_gaussian_core_under_a_signal_tail():
+    rng = np.random.default_rng(0)
+    core = rng.normal(2230.0, 27.0, 400_000)
+    tail = 2230.0 + rng.exponential(400.0, 40_000)
+    hist = np.zeros((4, 32, PEDESTAL_EDGES.size - 1), np.int64)
+    hist[1, 7] = np.histogram(np.r_[core, tail], PEDESTAL_EDGES)[0]
+    mean, width = fit_pedestals(hist)
+    assert mean[1, 7] == pytest.approx(2230.0, abs=1.0)
+    assert width[1, 7] == pytest.approx(27.0, rel=0.03)
+    assert np.isnan(mean[0, 0]) and np.isnan(width[0, 0])
+
+
+def test_count_file_with_neighbour_selection_counts_lone_layers_and_recoveries(tmp_path):
+    hits = _single(5, 5, 5, 5)
+    rows = [_row(1, 1e9, (0, 1, 2, 3), hits)]
+    _write(tmp_path / "a.data", rows)
+    mean = np.full((4, 32), PED)
+    width = np.full((4, 32), 10.0)
+    sel = replace(SETTINGS, neighbour_sigmas=3.0)
+    c = count_file(tmp_path / "a.data", sel, np.linspace(-2, 2, 801), pedestals=(mean, width))
+    assert c.n_lone_layers == 4 and c.n_recovered_layers == 0
+    mean[3, 6] = PED - 1000  # bar 6 of ASIC 3 now reads 1000 above its pedestal
+    c = count_file(tmp_path / "a.data", sel, np.linspace(-2, 2, 801), pedestals=(mean, width))
+    assert c.n_recovered_layers == 1
+    with pytest.raises(ValueError, match="pedestals"):
+        count_file(tmp_path / "a.data", sel, np.linspace(-2, 2, 801))
+    mean[0, 5] = np.nan  # a bar without a measured pedestal is an error, not a lost track
+    with pytest.raises(ValueError, match="ASIC 0 bar 5"):
+        count_file(tmp_path / "a.data", sel, np.linspace(-2, 2, 801), pedestals=(mean, width))
+
+
+def test_neighbour_selection_fits_pedestals_from_the_flag_pass_and_keys_its_cache(tmp_path, cfg):
+    rows = [_row(i, i * 1e9, (0, 1, 2, 3), _single(*(4 + i % 2,) * 4)) for i in range(1, 4)]
+    _write(tmp_path / "a.data", rows)
+    raw = replace(SETTINGS, exposures={"pos0": str(tmp_path)})
+    flag = ingest_raw(replace(cfg, raw=raw), "pos0", tmp_path / "cache")
+    sel = ingest_raw(
+        replace(cfg, raw=replace(raw, neighbour_sigmas=3.0)), "pos0", tmp_path / "cache"
+    )
+    assert sel.hist.values.sum() == flag.hist.values.sum()
+    assert sel.files[0].n_lone_layers == 12
+    assert len(list((tmp_path / "cache").glob("*.npz"))) == 2

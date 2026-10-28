@@ -212,6 +212,9 @@ class RawSettings:
     first_run: dict = field(default_factory=dict)  # exposure id -> run number of its first run
     subsets: dict = field(default_factory=dict)  # subset id -> RunSubset of one exposure
     restarts: dict = field(default_factory=dict)  # exposure id -> runs whose clock reset mid-run
+    # > 0: a lone flagged bar also takes a neighbour this many pedestal widths above its
+    # channel's pedestal (`rawdata`); 0 keeps the DAQ's hit flag alone
+    neighbour_sigmas: float = 0.0
 
     def __post_init__(self):
         for eid, runs in self.restarts.items():

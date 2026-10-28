@@ -15,7 +15,13 @@ open-sky division stays like for like. The bars read out by one ASIC are triangu
 share light between neighbours. A layer's position is the charge centroid of its
 strongest bar and the bars beside it that fired, with the pedestal removed; one bar
 alone gives its centre. This reproduces the per-layer hit-position histograms of the
-ROOT files. The DAQ's tan(theta_x) is the ASIC 1 - ASIC 0 pair and tan(theta_y) the
+ROOT files. The DAQ's hit flag is no charge threshold, so a neighbour can carry a real
+deposit without its flag: with `neighbour_sigmas` > 0, a layer with a single flagged bar
+also takes a neighbour whose charge exceeds that channel's pedestal by as many pedestal
+widths. The pedestals are Gaussian fits to each channel's unflagged charge, from a first
+pass with the flag alone, and every charge is then net of its own channel's pedestal.
+
+The DAQ's tan(theta_x) is the ASIC 1 - ASIC 0 pair and tan(theta_y) the
 ASIC 2 - ASIC 3 pair, each as (upper - lower) / layer gap; the gaps (37.00 and 36.80 cm)
 and the pairing are those whose tangent combs coincide bin for bin with the ROOT
 marginals. Tangents are histogrammed on the ROOT binning.
@@ -32,7 +38,7 @@ import hashlib
 import json
 from collections.abc import Iterator
 from concurrent.futures import ProcessPoolExecutor
-from dataclasses import asdict, dataclass, fields
+from dataclasses import asdict, dataclass, fields, replace
 from pathlib import Path
 
 import numpy as np
@@ -146,15 +152,41 @@ def _select(blk: RawBlock, keep: np.ndarray) -> RawBlock:
     return RawBlock(blk.timecode_ns[keep], blk.hit[keep], blk.charge[keep], blk.asics_ok[keep])
 
 
+def fired_bars(
+    hit: np.ndarray, charge: np.ndarray, bars: tuple, threshold: np.ndarray | None = None
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Bars of one layer taken into its cluster (n, bar), the rows with a single flagged
+    bar, and the rows among those that took a neighbour above its `threshold` (per
+    channel); without `threshold` only flagged bars are taken."""
+    chan = np.asarray(bars)
+    fired = hit[:, chan]
+    lone = fired.sum(axis=1) == 1
+    if threshold is None:
+        return fired, lone, np.zeros_like(lone)
+    bar = np.arange(chan.size)
+    beside = np.abs(bar[None, :] - fired.argmax(axis=1)[:, None]) == 1
+    extra = lone[:, None] & beside & (charge[:, chan] > np.asarray(threshold)[chan])
+    return fired | extra, lone, extra.any(axis=1)
+
+
 def cluster_positions(
-    hit: np.ndarray, charge: np.ndarray, bars: tuple, pedestal: float, pitch_cm: float
+    hit: np.ndarray,
+    charge: np.ndarray,
+    bars: tuple,
+    pedestal: float | np.ndarray,
+    pitch_cm: float,
+    threshold: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Position (cm) of one layer's cluster per row, and whether the row has one.
 
     `hit` and `charge` are (n, channel); `bars[b]` is the channel of bar b. Channels
-    that no bar reads are ignored."""
+    that no bar reads are ignored. `pedestal` is one value or one per channel;
+    `threshold` (per channel) admits neighbours of a lone flagged bar (`fired_bars`)."""
     chan = np.asarray(bars)
-    weight = np.where(hit[:, chan], np.clip(charge[:, chan] - pedestal, 0.0, None), 0.0)
+    ped = np.asarray(pedestal, dtype=float)
+    ped = ped[chan] if ped.ndim else ped
+    fired, *_ = fired_bars(hit, charge, bars, threshold)
+    weight = np.where(fired, np.clip(charge[:, chan] - ped, 0.0, None), 0.0)
     peak = weight.argmax(axis=1)
     bar = np.arange(chan.size)
     near = np.abs(bar[None, :] - peak[:, None]) <= 1
@@ -163,6 +195,39 @@ def cluster_positions(
     ok = total > 0
     centre = pitch_cm * (bar + 1.0)
     return (w * centre).sum(axis=1) / np.where(ok, total, 1.0), ok
+
+
+def fit_pedestals(ped_hist: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Mean and width (ADC) of a Gaussian fitted to the core of each channel's unflagged
+    charge (`ped_hist`, (ASIC, channel, bin)); NaN for a channel without entries.
+
+    Deposits without a flag form a tail above the pedestal, so the fit takes the bins from
+    two widths below the peak to one above it, the width first estimated from the half
+    maximum on the low side; the fit is a parabola in log counts weighted by the counts.
+    A peak narrower than three bins takes its bin centre and the bin's rms width."""
+    centres = 0.5 * (PEDESTAL_EDGES[:-1] + PEDESTAL_EDGES[1:])
+    step = PEDESTAL_EDGES[1] - PEDESTAL_EDGES[0]
+    mean = np.full(ped_hist.shape[:2], np.nan)
+    width = np.full(ped_hist.shape[:2], np.nan)
+    for a, c in np.ndindex(*ped_hist.shape[:2]):
+        h = ped_hist[a, c].astype(float)
+        if h.sum() == 0:
+            continue
+        k = int(h.argmax())
+        low = np.nonzero(h[:k] < 0.5 * h[k])[0]
+        half = (k - low[-1] if low.size else 1) * step
+        s0 = max(half / np.sqrt(2.0 * np.log(2.0)), step)
+        win = (centres >= centres[k] - 2.0 * s0) & (centres <= centres[k] + s0) & (h > 0)
+        if win.sum() < 3:
+            mean[a, c], width[a, c] = centres[k], step / np.sqrt(12.0)
+            continue
+        x = centres[win] - centres[k]
+        c2, c1, _ = np.polyfit(x, np.log(h[win]), 2, w=np.sqrt(h[win]))
+        if c2 >= 0:
+            raise ValueError(f"ASIC {a} channel {c}: pedestal has no Gaussian core")
+        width[a, c] = np.sqrt(-0.5 / c2)
+        mean[a, c] = centres[k] + c1 * width[a, c] ** 2
+    return mean, width
 
 
 def tracks_from_positions(pos: np.ndarray, settings: RawSettings) -> tuple[np.ndarray, np.ndarray]:
@@ -187,6 +252,10 @@ class FileCounts:
     ped_hist: np.ndarray  # (ASIC, channel, pedestal bin): charge with no hit flag
     n_flagged: np.ndarray  # (ASIC, channel): rows with the hit flag, alone or not
     n_segments: int  # runs in the file, kept or not
+    # layers with a single flagged bar, and those of them that took a neighbour
+    # (counted with `neighbour_sigmas` > 0; zero otherwise)
+    n_lone_layers: int = 0
+    n_recovered_layers: int = 0
 
 
 def _charge_counts(mask: np.ndarray, charge: np.ndarray, edges: np.ndarray) -> np.ndarray:
@@ -206,9 +275,21 @@ def count_file(
     edges: np.ndarray,
     block_rows: int = 50_000,
     segments: tuple[int, int] | None = None,
+    pedestals: tuple[np.ndarray, np.ndarray] | None = None,
 ) -> FileCounts:
     """Counts of the clusters in runs `segments` = [first, stop) of the file, all by default;
-    run k follows the k-th reset of the run clock."""
+    run k follows the k-th reset of the run clock. With `settings.neighbour_sigmas` > 0,
+    `pedestals` (mean, width per (ASIC, channel), `fit_pedestals`) set the neighbour
+    thresholds and the charge baselines."""
+    select = settings.neighbour_sigmas > 0
+    if select and pedestals is None:
+        raise ValueError("neighbour selection needs the channel pedestals")
+    if select:
+        for a, bars in enumerate(settings.channel_bars):
+            bad = [b for b, c in enumerate(bars) if not np.isfinite(pedestals[0][a][c])]
+            if bad:
+                raise ValueError(f"ASIC {a} bar {bad[0]}: no pedestal measured")
+    n_lone = n_recovered = 0
     values = np.zeros((edges.size - 1,) * 2, dtype=np.int64)
     n_rows = n_tracks = n_no_cluster = n_bad = n_resets = n_valid = 0
     hit_hist = np.zeros((N_ASICS, N_CHANNELS, CHARGE_EDGES.size - 1), dtype=np.int64)
@@ -236,12 +317,17 @@ def count_file(
         pos = np.empty((n, N_ASICS))
         ok = np.ones(n, bool)
         for a in range(N_ASICS):
+            bars = settings.channel_bars[a]
+            if select:
+                mean, width = pedestals[0][a], pedestals[1][a]
+                threshold = mean + settings.neighbour_sigmas * width
+                _, lone, took = fired_bars(blk.hit[:, a], blk.charge[:, a], bars, threshold)
+                n_lone += int(lone.sum())
+                n_recovered += int(took.sum())
+            else:
+                mean, threshold = settings.pedestal_hg[a], None
             pos[:, a], good = cluster_positions(
-                blk.hit[:, a],
-                blk.charge[:, a],
-                settings.channel_bars[a],
-                settings.pedestal_hg[a],
-                settings.bar_pitch_cm,
+                blk.hit[:, a], blk.charge[:, a], bars, mean, settings.bar_pitch_cm, threshold
             )
             ok &= good
         tx, ty = tracks_from_positions(pos[ok], settings)
@@ -272,6 +358,8 @@ def count_file(
         ped_hist,
         n_flagged,
         run + 1,
+        n_lone,
+        n_recovered,
     )
 
 
@@ -282,11 +370,18 @@ class RawIngest:
     live_time_s: float
     files: tuple[FileCounts, ...]
     cached: int  # files read back from the cache instead of recounted
+    pedestals: tuple[np.ndarray, np.ndarray] | None = None  # (mean, width) with neighbours
 
 
-def _digest(path: Path, settings: RawSettings, segments: tuple[int, int] | None) -> str:
+def _digest(
+    path: Path,
+    settings: RawSettings,
+    segments: tuple[int, int] | None,
+    pedestals: tuple[np.ndarray, np.ndarray] | None = None,
+) -> str:
     """Identity of one file's counts: its size and name, the runs kept and every setting
-    that shapes them."""
+    that shapes them. The flag-only selection keeps the identity it had before neighbour
+    selection existed; neighbour selection adds its pedestals."""
     spec = asdict(settings) | {
         "exposures": None,
         "first_run": None,
@@ -296,6 +391,10 @@ def _digest(path: Path, settings: RawSettings, segments: tuple[int, int] | None)
         "bytes": path.stat().st_size,
         "schema": _SCHEMA,
     }
+    if settings.neighbour_sigmas > 0:
+        spec["pedestals"] = hashlib.sha256(np.asarray(pedestals).tobytes()).hexdigest()
+    else:
+        del spec["neighbour_sigmas"]
     return hashlib.sha256(json.dumps([path.name, spec], sort_keys=True).encode()).hexdigest()
 
 
@@ -323,8 +422,8 @@ def _store(cache: Path, digest: str, c: FileCounts) -> None:
 
 
 def _count_job(args) -> FileCounts:
-    path, settings, segments = args
-    return count_file(path, settings, TAN_EDGES, segments=segments)
+    path, settings, segments, pedestals = args
+    return count_file(path, settings, TAN_EDGES, segments=segments, pedestals=pedestals)
 
 
 def _run_segments(raw: RawSettings, subset: RunSubset) -> tuple[int, int]:
@@ -357,11 +456,17 @@ def ingest_raw(cfg: Config, exposure: str, cache_dir: Path, jobs: int = 1) -> Ra
             raise ValueError(f"{folder}: a run subset needs one .data file, found {len(paths)}")
         segments = _run_segments(raw, subset)
     cache = Path(cache_dir)
-    digests = [_digest(p, raw, segments) for p in paths]
+    pedestals = None
+    if raw.neighbour_sigmas > 0:
+        flag = replace(cfg, raw=replace(raw, neighbour_sigmas=0.0))
+        pedestals = fit_pedestals(
+            sum(f.ped_hist for f in ingest_raw(flag, exposure, cache, jobs).files)
+        )
+    digests = [_digest(p, raw, segments, pedestals) for p in paths]
     keys = [cache / f"{exposure}_{d[:16]}.npz" for d in digests]
     found = [_load(k, d) for k, d in zip(keys, digests, strict=True)]
     todo = [i for i, c in enumerate(found) if c is None]
-    work = [(paths[i], raw, segments) for i in todo]
+    work = [(paths[i], raw, segments, pedestals) for i in todo]
     if jobs > 1 and len(work) > 1:
         with ProcessPoolExecutor(jobs) as pool:
             done = list(pool.map(_count_job, work))
@@ -385,4 +490,5 @@ def ingest_raw(cfg: Config, exposure: str, cache_dir: Path, jobs: int = 1) -> Ra
         live_time_s=float(sum(c.live_time_s for c in files)),
         files=files,
         cached=len(files) - len(todo),
+        pedestals=pedestals,
     )

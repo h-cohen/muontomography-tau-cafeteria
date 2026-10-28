@@ -50,6 +50,9 @@ raw:
   gap_cm: [37.0, 36.8]
   bar_pitch_cm: 1.6     # bar centre b at 1.6 (b + 1); matches the ROOT hit-position peaks
   pedestal_hg: [2207, 2210, 2232, 2224]   # median high-gain charge of channels with no hit flag
+  # The hit flag is no charge threshold: a layer with one flagged bar also takes a
+  # neighbour 3 pedestal widths above its channel's own (Gaussian) pedestal.
+  neighbour_sigmas: 3.0
   # The run clock reads 50x too long: a daily file spans 4.32e6 clock-seconds, and 50x
   # fewer gives 86 404 s per file and the ROOT track rate (7.2 Hz).
   clock_divisor: 50.0

@@ -177,11 +177,25 @@ def cmd_rawcheck(args) -> None:
         cfg.sky_reference.id: cfg.sky_reference.root_file
     }
     doc: dict = {"clock_divisor": cfg.raw.clock_divisor}
+    cache = Path(args.cache or raw_dir.parent / "cache")
+    # The DAQ reproduction is judged on the DAQ's own hit flag; neighbour selection
+    # (`raw.neighbour_sigmas`) is reported as its change to the flag-only counts.
+    flag_cfg = replace(cfg, raw=replace(cfg.raw, neighbour_sigmas=0.0))
     cal = {}
     for sid in cfg.raw.exposures:
         o = names[sid]
         raw, root = (load_counts(d / f"counts_{sid}.npz") for d in (raw_dir, root_dir))
-        chi2, scale = count_match(raw, root)
+        flag = ingest_raw(flag_cfg, sid, cache).hist
+        chi2, scale = count_match(flag, root)
+        if cfg.raw.neighbour_sigmas > 0:
+            files = ingest_raw(cfg, sid, cache).files
+            lone = sum(f.n_lone_layers for f in files)
+            doc |= {
+                f"{o}_lone_layers": lone,
+                f"{o}_lone_layer_frac": lone / (4 * sum(f.n_rows for f in files)),
+                f"{o}_recovered_frac": sum(f.n_recovered_layers for f in files) / lone,
+                f"{o}_select_chi": count_match(raw, flag)[0],
+            }
         root_live = read_live_time(cfg.data_dir / roots[sid], interpolate=True)
         doc |= {
             f"{o}_raw_files": len(meta[sid]["raw_files"]),
@@ -224,7 +238,6 @@ def cmd_rawcheck(args) -> None:
 
     sky = cfg.sky_reference.id
     if sky in cfg.raw.exposures:
-        cache = Path(args.cache or raw_dir.parent / "cache")
         turns = {k: v for k, v in cfg.raw.subsets.items() if v.exposure == sky}
         if turns:
             # One file holds every run: the halves are the earlier and later runs of each
