@@ -62,3 +62,24 @@ is not given a significance: it is reported as the two values with their own err
 to `results/production/maps2d.json` (macros `Maps2d...`) only after review. Figure: beam
 profiles of both positions (points with errors, fitted stripes), pos1 shifted by s*; a
 panel with the transverse profiles.
+
+## Amendment 1 (2026-10-28, after the first run on the flag-only maps, before any run on the neighbour-selection maps)
+
+The first run (`runs/maps2d-flag`) showed two defects of the summary rules above, not of
+the measurement: (i) the prominence threshold, set from the *median* σ of a profile,
+admits maxima at the profile ends where σ is several times larger; their fits have
+centre errors of 0.03–0.08 tan and FWHM or contrast errors larger than the values, and
+they enter the means; (ii) the transverse profile has several maxima, so the rule
+"exactly one" gives NaN. Amended rules, applied identically to both selections:
+
+- A stripe is **resolved** if its fit is not flagged and its replica centre error is
+  ≤ 0.01 tan (a quarter of the narrowest FWHM bound's scale, well below the period).
+  Only resolved stripes enter means, the period and the pairing; every stripe stays in
+  the per-stripe table with its errors.
+- The **transverse member** is the resolved transverse stripe of largest contrast over
+  its error.
+- The **period** is the mean spacing of consecutive resolved stripes whose spacing is
+  below 1.5 times their median spacing.
+
+The flag-only outcome under the original rules stays in `runs/maps2d-flag` and is
+reported alongside. Unchanged: profiles, fits, windows, shift search, replicas.
