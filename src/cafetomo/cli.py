@@ -101,19 +101,26 @@ def raw_sources(cfg, cache: Path, jobs: int = 1, sky: str | None = None) -> dict
 def cmd_ingest_raw(args) -> None:
     """An ingest directory in which each exposure with raw files takes its counts and
     live time from them (see `rawdata`); the other sources keep their ROOT histograms.
-    `--sky <subset>` takes the sky reference from a run subset of its raw exposure."""
+    `--sky <subset>` takes the sky reference from a run subset of its raw exposure;
+    `--neighbour-sigmas` overrides the config's hit selection (0: the DAQ flag alone)."""
     from cafetomo.ingest import ingest
     from cafetomo.provenance import write_meta
 
     cfg = _cfg(args)
     if cfg.raw is None:
         raise SystemExit(f"{args.config}: no raw section")
+    if args.neighbour_sigmas is not None:
+        cfg = replace(cfg, raw=replace(cfg.raw, neighbour_sigmas=float(args.neighbour_sigmas)))
     out = Path(args.out)
     cache = Path(args.cache or out.parent / "cache")
     raw = raw_sources(cfg, cache, int(args.jobs or 1), args.sky)
     ingest(cfg, out, raw)
     exposures = json.loads((out / "meta.json").read_text())["exposures"]
-    extra = {"exposures": exposures, "sky_source": args.sky or cfg.sky_reference.id}
+    extra = {
+        "exposures": exposures,
+        "sky_source": args.sky or cfg.sky_reference.id,
+        "neighbour_sigmas": cfg.raw.neighbour_sigmas,
+    }
     write_meta(out, config_path=args.config, stage="ingest-raw", extra=extra)
 
 
@@ -715,13 +722,14 @@ def main(argv: list[str] | None = None) -> None:
         # Without --pose a stage runs on the config's prior pose; the Makefile
         # passes the fitted one to every stage after selfcal.
         for o in opts:
-            p.add_argument(f"--{o}", required=o not in {"cache", "pose", "jobs", "exposure", "sky"})
+            optional = {"cache", "pose", "jobs", "exposure", "sky", "neighbour-sigmas"}
+            p.add_argument(f"--{o}", required=o not in optional)
 
     stage(
         "internal-validate", cmd_internal_validate, "config", "ingest", "settings", "out", "cache"
     )
     stage("ingest", cmd_ingest, "config", "out", "results")
-    stage("ingest-raw", cmd_ingest_raw, "config", "out", "cache", "jobs", "sky")
+    stage("ingest-raw", cmd_ingest_raw, "config", "out", "cache", "jobs", "sky", "neighbour-sigmas")
     stage(
         "rawcheck",
         cmd_rawcheck,

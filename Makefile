@@ -273,6 +273,8 @@ production-stage: internal-paper
 	  uv run python paper-draft/figures/make_$$f.py --config $(CONFIG) --pose $(POSE) \
 	    --results $(RESULTS) --runs $(SKYRUNS)/joint --frame detector --out $(PRODSTAGE)/figures/$$f.pdf || exit 1; \
 	done
+	uv run python paper-draft/figures/make_stripes.py --config $(CONFIG) --pose $(POSE) \
+	  --results $(RESULTS) --runs $(STRIPERUNS)/maps2d --frame detector --out $(PRODSTAGE)/figures/stripes.pdf
 production-sync: production-stage
 	$(CLI) production-sync --production $(PRODUCTION) --staged $(PRODSTAGE) --results $(RESULTS)
 production-check:
@@ -281,7 +283,7 @@ production-push: production-check
 	git -C $(PRODUCTION) push origin HEAD:main
 
 # Registered studies on the internal-validation pilot (scripts tracked in studies/).
-.PHONY: weight-correction recovery-trace autofocus-study sky-joint tools reproduce
+.PHONY: weight-correction recovery-trace autofocus-study sky-joint stripes tools reproduce
 weight-correction:
 	test ! -e $(IVCORRECTION)
 	uv run python studies/weight-correction/compare.py --pilot $(IVPAPERARCHIVE) --out $(IVCORRECTION)
@@ -314,7 +316,8 @@ sky-joint:
 	for s in SKY_A SKY_B SKY; do \
 	  arg=$$(test $$s = SKY || echo "--sky $$s"); \
 	  $(CLI) ingest-raw --config $(CONFIG) --out $(SKYRUNS)/ingest_$$s --cache $(SKYCACHE) \
-	    --jobs $(or $(JOBS),4) $$arg || exit 1; \
+	    --jobs $(or $(JOBS),4) $(if $(NEIGHBOUR_SIGMAS),--neighbour-sigmas $(NEIGHBOUR_SIGMAS)) \
+	    $$arg || exit 1; \
 	  $(CLI) opacity --config $(CONFIG) --pose $(POSE) --ingest $(SKYRUNS)/ingest_$$s \
 	    --out $(SKYRUNS)/opacity_$$s || exit 1; \
 	  $(CLI) beams2d --config $(CONFIG) --ingest $(SKYRUNS)/ingest_$$s --out $(SKYRUNS)/beams2d_$$s || exit 1; \
@@ -329,6 +332,19 @@ sky-joint:
 	mkdir -p $(RESULTS)/production
 	uv run python studies/sky-orientation/promote.py $(SKYRUNS) $(SKYRUNS)/joint $(RESULTS)/production/skyjoint.json
 
+# Stripe measurements on the 2D maps with both hit selections (studies/maps2d,
+# preregistered); the flag-only joint reference reads the flag pass that the pedestal
+# selection already cached. Promoted into results/production/stripes.json.
+STRIPERUNS ?= runs/stripes
+stripes:
+	test ! -e $(STRIPERUNS)
+	$(MAKE) sky-joint SKYRUNS=$(STRIPERUNS)/skyswap-flag SKYCACHE=$(SKYCACHE) NEIGHBOUR_SIGMAS=0 \
+	  RESULTS=$(STRIPERUNS)/flag-results
+	uv run python studies/maps2d/maps2d.py $(STRIPERUNS)/maps2d \
+	  pedestal=$(SKYRUNS)/joint/ingest_m3_phi0 flag=$(STRIPERUNS)/skyswap-flag/joint/ingest_m3_phi0
+	mkdir -p $(RESULTS)/production
+	uv run python studies/maps2d/promote.py $(STRIPERUNS)/maps2d $(RESULTS)/production/stripes.json
+
 # Everything from the inputs into one fresh root REPRO (never the tracked results/ or the
 # reviewed archives). Compare afterwards with `cafetomo compare-results`. See REPRODUCE.md.
 REPRO_VARS = RUNS=$(REPRO)/baseline RESULTS=$(REPRO)/results GEN=$(REPRO)/draft/generated \
@@ -338,7 +354,8 @@ REPRO_VARS = RUNS=$(REPRO)/baseline RESULTS=$(REPRO)/results GEN=$(REPRO)/draft/
   IVTRACE=$(REPRO)/internal-validation/recovery-trace IVNOMINAL=$(REPRO)/baseline/voxels \
   IVFIGOUT=$(REPRO)/figure-review/selection IVSUMMARY=$(REPRO)/results/internalvalidation.json \
   RAWRUNS=$(REPRO)/raw PRODRUNS=$(REPRO)/baseline CONVRUNS=$(REPRO)/baseline \
-  AFRUNS=$(REPRO)/autofocus-study SKYRUNS=$(REPRO)/skyswap PRODSTAGE=$(REPRO)/production-stage
+  AFRUNS=$(REPRO)/autofocus-study SKYRUNS=$(REPRO)/skyswap STRIPERUNS=$(REPRO)/stripes \
+  PRODSTAGE=$(REPRO)/production-stage
 # reproduce-stages continues an interrupted reproduction: finished stages are skipped
 # (by make, or by the study's last output), and the studies refuse an existing output directory.
 .PHONY: reproduce-stages
@@ -357,6 +374,7 @@ reproduce-stages:
 	$(MAKE) $(REPRO_VARS) raw
 	test -e $(REPRO)/results/production/autofocuslayer.json || $(MAKE) $(REPRO_VARS) autofocus-study
 	test -e $(REPRO)/results/production/skyjoint.json || $(MAKE) $(REPRO_VARS) sky-joint
+	test -e $(REPRO)/results/production/stripes.json || $(MAKE) $(REPRO_VARS) stripes
 	$(MAKE) $(REPRO_VARS) production-stage
 
 

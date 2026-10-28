@@ -222,6 +222,8 @@ def test_reproduce_writes_only_under_its_root(tmp_path):
         "rawcheck",
         "weight-correction",
         "recovery-trace",
+        "maps2d.py",
+        "make_stripes.py",
         "production-stage",
     ):
         assert stage in out, stage
@@ -270,3 +272,11 @@ def test_draft_build_regenerates_every_scripted_figure_and_finds_its_macros(tmp_
     assert "for f in height setup opacity; do" in out
     assert f"--out {root}/draft/generated/figures/$f.pdf" in out
     assert f"-Z search-path={root}/draft" in out
+
+
+def test_stripes_builds_the_flag_only_reference_from_the_shared_sky_cache(tmp_path):
+    out = _dry("stripes", f"STRIPERUNS={tmp_path}/s", f"SKYRUNS={tmp_path}/sky")
+    assert f"--cache {tmp_path}/sky/cache" in out
+    assert "--neighbour-sigmas 0" in out
+    assert f"pedestal={tmp_path}/sky/joint/ingest_m3_phi0" in out
+    assert f"flag={tmp_path}/s/skyswap-flag/joint/ingest_m3_phi0" in out
