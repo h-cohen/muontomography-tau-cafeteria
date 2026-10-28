@@ -47,3 +47,12 @@ same acceptance as `opacity`. No change after seeing the fit.
 `runs/skyjoint/` (gitignored): fit json, synthetic ingest dirs per φ hypothesis with
 `counts_SKY.npz` = N_ref, then `cafetomo beams2d` on each; summary figure. Script:
 `studies/sky-orientation/joint_sky.py`.
+
+## Erratum (2026-10-28)
+
+The goodness-of-fit checks summed fitted expectations n·p onto view bins with
+`angular.rebin`, which keeps integer counts and so truncated them: every pull was biased
+up by about +0.02 (mean pull 0.035). The block sum is now in floating point. On the
+flag-only data χ²/dof of the nominal fit moves from 1.055 to 1.049 (m ≤ 2: 1.058 to
+1.054), both inside the registered pass band; the fitted coefficients, the reference and
+every opacity shift are unchanged (they never passed through the truncation).

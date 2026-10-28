@@ -35,6 +35,13 @@ tx, ty = np.meshgrid(xc, yc, indexing="ij")
 use = (cfg.detector.acceptance(tx, ty) > 0) & (n_a + n_b >= 1)
 
 
+def block_sum(v: np.ndarray) -> np.ndarray:
+    """Sum over each view bin's REBIN x REBIN fine bins, in floating point (`rebin` keeps
+    integer counts and would truncate expected values)."""
+    m = v.shape[0] // REBIN
+    return np.asarray(v, dtype=np.float64).reshape(m, REBIN, m, REBIN).sum(axis=(1, 3))
+
+
 def features(az_deg: float, m_max: int) -> np.ndarray:
     """Columns tau^(m+k) cos/sin(m psi), m = 1..m_max, k = 0..2, at the world direction
     of every fine detector bin for a detector at azimuth `az_deg`."""
@@ -77,9 +84,7 @@ def checks(f: dict) -> dict:
     n = np.where(use, n_a + n_b, 0.0)
     obs = np.where(use, n_a, 0.0)
 
-    def coarse(v):
-        return rebin(AngularHist(v, hist["SKY_A"].xedges, hist["SKY_A"].yedges), REBIN).values
-
+    coarse = block_sum
     o, e, var = coarse(obs), coarse(n * p), coarse(n * p * (1 - p))
     ok = (coarse(n) >= cfg.view.min_sky_counts) & (var > 0)
     pull = np.where(ok, (o - e) / np.sqrt(np.where(ok, var, 1.0)), np.nan)
@@ -174,21 +179,14 @@ def write_ingest(ref: np.ndarray, name: str) -> Path:
 
 def coarse_mean(v: np.ndarray) -> np.ndarray:
     """Mean of a fine-bin map over each view bin's used fine bins (NaN where none)."""
-    grid = hist["SKY_A"]
-    w = rebin(AngularHist(use.astype(np.float64), grid.xedges, grid.yedges), REBIN).values
-    tot = rebin(AngularHist(np.where(use, v, 0.0), grid.xedges, grid.yedges), REBIN).values
+    w, tot = block_sum(use), block_sum(np.where(use, v, 0.0))
     return np.where(w > 0, tot / np.where(w > 0, w, 1.0), np.nan)
 
 
 def uniform_pull() -> np.ndarray:
     """Pulls of the roof-A share per view bin for a sky without azimuthal structure
     (one common share), on the view bins of `checks`."""
-    grid = hist["SKY_A"]
-
-    def coarse(v):
-        return rebin(AngularHist(np.where(use, v, 0.0), grid.xedges, grid.yedges), REBIN).values
-
-    o, n = coarse(n_a), coarse(n_a + n_b)
+    o, n = block_sum(np.where(use, n_a, 0.0)), block_sum(np.where(use, n_a + n_b, 0.0))
     p0 = o.sum() / n.sum()
     ok = n >= cfg.view.min_sky_counts
     var = np.where(ok, n * p0 * (1 - p0), 1.0)
@@ -234,9 +232,7 @@ np.savez_compressed(
     pull=pulls[3],
     pull_uniform=uniform_pull(),
     sky_log=coarse_mean(features(0.0, 3) @ f["beta"][1:]),
-    reference=rebin(
-        AngularHist(reference(f, 0.0), hist["SKY_A"].xedges, hist["SKY_A"].yedges), REBIN
-    ).values,
+    reference=block_sum(reference(f, 0.0)),
     **split[3],
 )
 (out / "joint_sky.json").write_text(json.dumps(summary, indent=1))
