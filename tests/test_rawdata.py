@@ -381,6 +381,16 @@ def test_cluster_weights_take_a_pedestal_per_channel():
     assert pos[0] == pytest.approx((2 * 1.6 * 5 + 1.6 * 6) / 3)
 
 
+def test_cluster_weights_divide_the_net_charge_by_each_channel_gain():
+    hit = np.zeros((1, 23), bool)
+    q = np.full((1, 23), PED)
+    hit[0, 4:6], q[0, 4:6] = True, PED + 1000
+    gain = np.ones(23)
+    gain[5] = 2.0  # channel 5 reads twice the charge: half its weight
+    pos, _ = cluster_positions(hit, q, SETTINGS.channel_bars[0], PED, 1.6, gain=gain)
+    assert pos[0] == pytest.approx((2 * 1.6 * 5 + 1.6 * 6) / 3)
+
+
 def test_pedestal_fit_recovers_the_gaussian_core_under_a_signal_tail():
     rng = np.random.default_rng(0)
     core = rng.normal(2230.0, 27.0, 400_000)
@@ -423,3 +433,42 @@ def test_neighbour_selection_fits_pedestals_from_the_flag_pass_and_keys_its_cach
     assert sel.hist.values.sum() == flag.hist.values.sum()
     assert sel.files[0].n_lone_layers == 12
     assert len(list((tmp_path / "cache").glob("*.npz"))) == 2
+
+
+def test_gain_corrected_counts_are_cached_apart_from_the_uncorrected(tmp_path, cfg):
+    hits = _single(4, 4, 4, 4)
+    hits[3][5] = PED + 1000.0  # a two-bar cluster: its centroid depends on the gains
+    rows = [_row(i, i * 1e9, (0, 1, 2, 3), hits) for i in range(1, 4)]
+    _write(tmp_path / "a.data", rows)
+    c = replace(cfg, raw=replace(SETTINGS, exposures={"pos0": str(tmp_path)}))
+    gains = np.ones((4, 32))
+    gains[3, 5] = 4.0
+    plain = ingest_raw(c, "pos0", tmp_path / "cache")
+    gained = ingest_raw(c, "pos0", tmp_path / "cache", gains=gains)
+    assert gained.hist.values.sum() == plain.hist.values.sum()
+    assert not np.array_equal(gained.files[0].values, plain.files[0].values)
+    assert len(list((tmp_path / "cache").glob("*.npz"))) == 2
+    assert ingest_raw(c, "pos0", tmp_path / "cache", gains=gains).cached == 1
+
+
+def test_gain_correction_divides_by_the_exposures_own_calibration(tmp_path, cfg, monkeypatch):
+    hits = _single(4, 4, 4, 4)
+    hits[3][5] = PED + 1000.0
+    rows = [_row(i, i * 1e9, (0, 1, 2, 3), hits) for i in range(1, 4)]
+    _write(tmp_path / "a.data", rows)
+    c = replace(cfg, raw=replace(SETTINGS, exposures={"pos0": str(tmp_path)}))
+    gains = np.ones((4, 32))
+    gains[3, 5] = 4.0
+    seen = []
+
+    def calibrated(files, channel_bars, settings):
+        seen.append(len(files))
+        return gains
+
+    monkeypatch.setattr("cafetomo.channelcal.exposure_gains", calibrated)
+    explicit = ingest_raw(c, "pos0", tmp_path / "cache", gains=gains)
+    on = replace(c, raw=replace(c.raw, gain_correction=True))
+    corrected = ingest_raw(on, "pos0", tmp_path / "cache")
+    assert seen == [1]
+    assert np.array_equal(corrected.files[0].values, explicit.files[0].values)
+    assert corrected.cached == 1

@@ -215,6 +215,9 @@ class RawSettings:
     # > 0: a lone flagged bar also takes a neighbour this many pedestal widths above its
     # channel's pedestal (`rawdata`); 0 keeps the DAQ's hit flag alone
     neighbour_sigmas: float = 0.0
+    # each cluster charge divided by its channel's relative gain from the exposure's own
+    # Landau x Gauss calibration (`channelcal.exposure_gains`); False keeps the DAQ's charges
+    gain_correction: bool = False
 
     def __post_init__(self):
         for eid, runs in self.restarts.items():

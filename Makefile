@@ -28,7 +28,7 @@ FIGS    := setup opacity height depth
 FIGPDF  := $(FIGS:%=$(GEN)/figures/%.pdf)
 AUTHORFIG := $(wildcard paper-draft/figures/voxels.png paper-draft/figures/room_voxels.pdf paper-draft/figures/room_voxels.png)
 
-.PHONY: all ingest ingest-raw beams2d channelcal rawcheck raw selfcal opacity reconstruct analysis depthcheck arraydepth validation uncertainty export figures numbers paper viewer test clean arxiv
+.PHONY: all ingest ingest-raw beams2d channelcal rawcheck raw rawdata-promote selfcal opacity reconstruct analysis depthcheck arraydepth validation uncertainty export figures numbers paper viewer test clean arxiv
 .DELETE_ON_ERROR:
 
 all: viewer
@@ -66,9 +66,15 @@ rawcheck: $(RAWRUNS)/results/rawdata.json
 $(RAWRUNS)/results/rawdata.json: $(RAWRUNS)/ingest/meta.json $(RAWRUNS)/channelcal/meta.json $(CODE)
 	$(CLI) rawcheck --config $(CONFIG) --pose $(POSE) --ingest $(RAWRUNS)/ingest \
 	  --root-ingest $(RUNS)/ingest --channelcal $(RAWRUNS)/channelcal --cache $(RAWRUNS)/cache \
-	  --out $@
+	  --jobs $(or $(JOBS),4) --out $@
 
 raw: beams2d channelcal rawcheck
+
+# Reviewed raw-chain values, the source of the production paper's raw macros.
+RAWDATA = $(RESULTS)/production/raw/rawdata.json
+rawdata-promote:
+	mkdir -p $(dir $(RAWDATA))
+	cp $(RAWRUNS)/results/rawdata.json $(RAWDATA)
 
 selfcal: $(POSE)
 $(POSE): $(INGEST) $(CODE)
@@ -255,7 +261,7 @@ production-stage: internal-paper
 	$(CLI) numbers --results $(RESULTS)/production --out $(PRODSTAGE)/production-numbers.tex
 	$(CLI) config-numbers --config $(CONFIG) --volume $(PRODRUNS)/voxels/volume_full.npz \
 	  --out $(PRODSTAGE)/config-numbers.tex
-	$(CLI) raw-numbers --rawdata $(RAWRUNS)/results/rawdata.json --config $(CONFIG) \
+	$(CLI) raw-numbers --rawdata $(RAWDATA) --config $(CONFIG) \
 	  --out $(PRODSTAGE)/raw-numbers.tex
 	cp $(IVFIGOUT)/internal-numbers.tex $(IVFIGOUT)/internal-main.pdf $(PRODSTAGE)/
 	mv $(PRODSTAGE)/internal-main.pdf $(PRODSTAGE)/figures/
@@ -372,6 +378,7 @@ reproduce-stages:
 	test -e $(REPRO)/internal-validation/recovery-trace/support-supplement/comparison.json || \
 	  $(MAKE) $(REPRO_VARS) recovery-trace
 	$(MAKE) $(REPRO_VARS) raw
+	test -e $(REPRO)/results/production/raw/rawdata.json || $(MAKE) $(REPRO_VARS) rawdata-promote
 	test -e $(REPRO)/results/production/autofocuslayer.json || $(MAKE) $(REPRO_VARS) autofocus-study
 	test -e $(REPRO)/results/production/skyjoint.json || $(MAKE) $(REPRO_VARS) sky-joint
 	test -e $(REPRO)/results/production/stripes.json || $(MAKE) $(REPRO_VARS) stripes

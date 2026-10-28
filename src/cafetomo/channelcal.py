@@ -176,6 +176,32 @@ def _pedestal_width(ped_hist: np.ndarray) -> float:
     return float(0.5 * (hi - lo))
 
 
+def exposure_gains(files, channel_bars: tuple, settings: CalibrationSettings) -> np.ndarray:
+    """`relative_gains` of the calibration fitted on the summed spectra of `files`."""
+    doc = summarize(
+        [sum(f.hit_hist for f in files)],
+        [sum(f.ped_hist for f in files)],
+        n_flagged=sum(f.n_flagged for f in files),
+        n_valid_rows=sum(f.n_valid_rows for f in files),
+        channel_bars=channel_bars,
+        settings=settings,
+    )
+    return relative_gains(doc)
+
+
+def relative_gains(doc: dict) -> np.ndarray:
+    """Gain of every (ASIC, channel) relative to its ASIC: the MPV over the median MPV of
+    the ASIC's good channels; 1 where a channel has no good calibration."""
+    gains = np.ones((N_ASICS, N_CHANNELS))
+    ok = [r for r in doc["channels"] if r["status"] == "ok"]
+    for a in {r["asic"] for r in ok}:
+        rows = [r for r in ok if r["asic"] == a]
+        median = np.median([r["mpv_adc"] for r in rows])
+        for r in rows:
+            gains[a, r["channel"]] = r["mpv_adc"] / median
+    return gains
+
+
 def summarize(
     hit_hists: list[np.ndarray],
     ped_hists: list[np.ndarray],

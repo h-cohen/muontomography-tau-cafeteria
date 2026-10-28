@@ -282,3 +282,11 @@ def test_stripes_builds_the_flag_only_reference_from_the_shared_sky_cache(tmp_pa
     assert f"flag={tmp_path}/s/skyswap-flag/joint/ingest_m3_phi0" in out
     assert "--pose results/pose.json" in out
     assert "flag-results/pose.json" not in out
+
+
+def test_raw_macros_come_from_the_promoted_rawdata(tmp_path):
+    out = _dry("rawdata-promote", f"RAWRUNS={tmp_path}/raw", f"RESULTS={tmp_path}/res")
+    promoted = f"{tmp_path}/res/production/raw/rawdata.json"
+    assert f"cp {tmp_path}/raw/results/rawdata.json {promoted}" in out
+    out = _dry("reproduce-stages", f"REPRO={tmp_path}/r")
+    assert f"{tmp_path}/r/results/production/raw/rawdata.json" in out

@@ -342,7 +342,7 @@ make production-push                           # only when agreed
 | `numbers.tex`, `internal-numbers.tex` | `results/*.json` and the reviewed pilot (as for the draft) |
 | `config-numbers.tex` | `configs/cafeteria.yaml`, named code constants, and the baseline volume's selected iterate |
 | `production-numbers.tex` | `results/production/` (production-only results, e.g. the corrected autofocus) |
-| `raw-numbers.tex` | `runs/raw/results/rawdata.json` and the calibration/view settings — **preliminary**, not yet promoted |
+| `raw-numbers.tex` | `results/production/raw/rawdata.json` (reviewed copy of `runs/raw/results/rawdata.json`, `make rawdata-promote`) and the calibration/view settings |
 | `figures/*.pdf` | `paper-draft/figures/make_*.py` with `--frame detector`, from the reviewed baseline archive `runs/response-aware-2026-10-07`, `runs/raw`, `runs/convergence-2026-10-21` and `runs/skyswap/joint` (`skyroof`, `skyjoint`) |
 
 It refuses when this repository or `paper-production/` has uncommitted changes,

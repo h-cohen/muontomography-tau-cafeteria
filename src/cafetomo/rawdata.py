@@ -176,17 +176,20 @@ def cluster_positions(
     pedestal: float | np.ndarray,
     pitch_cm: float,
     threshold: np.ndarray | None = None,
+    gain: float | np.ndarray = 1.0,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Position (cm) of one layer's cluster per row, and whether the row has one.
 
     `hit` and `charge` are (n, channel); `bars[b]` is the channel of bar b. Channels
-    that no bar reads are ignored. `pedestal` is one value or one per channel;
-    `threshold` (per channel) admits neighbours of a lone flagged bar (`fired_bars`)."""
+    that no bar reads are ignored. `pedestal` and `gain` (dividing the net charge) are
+    one value or one per channel; `threshold` (per channel) admits neighbours of a lone
+    flagged bar (`fired_bars`)."""
     chan = np.asarray(bars)
-    ped = np.asarray(pedestal, dtype=float)
+    ped, g = (np.asarray(v, dtype=float) for v in (pedestal, gain))
     ped = ped[chan] if ped.ndim else ped
+    g = g[chan] if g.ndim else g
     fired, *_ = fired_bars(hit, charge, bars, threshold)
-    weight = np.where(fired, np.clip(charge[:, chan] - ped, 0.0, None), 0.0)
+    weight = np.where(fired, np.clip(charge[:, chan] - ped, 0.0, None) / g, 0.0)
     peak = weight.argmax(axis=1)
     bar = np.arange(chan.size)
     near = np.abs(bar[None, :] - peak[:, None]) <= 1
@@ -276,11 +279,13 @@ def count_file(
     block_rows: int = 50_000,
     segments: tuple[int, int] | None = None,
     pedestals: tuple[np.ndarray, np.ndarray] | None = None,
+    gains: np.ndarray | None = None,
 ) -> FileCounts:
     """Counts of the clusters in runs `segments` = [first, stop) of the file, all by default;
     run k follows the k-th reset of the run clock. With `settings.neighbour_sigmas` > 0,
     `pedestals` (mean, width per (ASIC, channel), `fit_pedestals`) set the neighbour
-    thresholds and the charge baselines."""
+    thresholds and the charge baselines. `gains` (per (ASIC, channel),
+    `channelcal.relative_gains`) divide the net charges that weight the cluster centroid."""
     select = settings.neighbour_sigmas > 0
     if select and pedestals is None:
         raise ValueError("neighbour selection needs the channel pedestals")
@@ -327,7 +332,13 @@ def count_file(
             else:
                 mean, threshold = settings.pedestal_hg[a], None
             pos[:, a], good = cluster_positions(
-                blk.hit[:, a], blk.charge[:, a], bars, mean, settings.bar_pitch_cm, threshold
+                blk.hit[:, a],
+                blk.charge[:, a],
+                bars,
+                mean,
+                settings.bar_pitch_cm,
+                threshold,
+                1.0 if gains is None else gains[a],
             )
             ok &= good
         tx, ty = tracks_from_positions(pos[ok], settings)
@@ -378,10 +389,11 @@ def _digest(
     settings: RawSettings,
     segments: tuple[int, int] | None,
     pedestals: tuple[np.ndarray, np.ndarray] | None = None,
+    gains: np.ndarray | None = None,
 ) -> str:
     """Identity of one file's counts: its size and name, the runs kept and every setting
     that shapes them. The flag-only selection keeps the identity it had before neighbour
-    selection existed; neighbour selection adds its pedestals."""
+    selection existed; neighbour selection adds its pedestals, gain correction its gains."""
     spec = asdict(settings) | {
         "exposures": None,
         "first_run": None,
@@ -391,10 +403,13 @@ def _digest(
         "bytes": path.stat().st_size,
         "schema": _SCHEMA,
     }
+    del spec["gain_correction"]  # the gains themselves enter below
     if settings.neighbour_sigmas > 0:
         spec["pedestals"] = hashlib.sha256(np.asarray(pedestals).tobytes()).hexdigest()
     else:
         del spec["neighbour_sigmas"]
+    if gains is not None:
+        spec["gains"] = hashlib.sha256(np.asarray(gains, dtype=float).tobytes()).hexdigest()
     return hashlib.sha256(json.dumps([path.name, spec], sort_keys=True).encode()).hexdigest()
 
 
@@ -422,8 +437,10 @@ def _store(cache: Path, digest: str, c: FileCounts) -> None:
 
 
 def _count_job(args) -> FileCounts:
-    path, settings, segments, pedestals = args
-    return count_file(path, settings, TAN_EDGES, segments=segments, pedestals=pedestals)
+    path, settings, segments, pedestals, gains = args
+    return count_file(
+        path, settings, TAN_EDGES, segments=segments, pedestals=pedestals, gains=gains
+    )
 
 
 def _run_segments(raw: RawSettings, subset: RunSubset) -> tuple[int, int]:
@@ -435,9 +452,13 @@ def _run_segments(raw: RawSettings, subset: RunSubset) -> tuple[int, int]:
     return (first - base + int((extra < first).sum()), last - base + 1 + int((extra <= last).sum()))
 
 
-def ingest_raw(cfg: Config, exposure: str, cache_dir: Path, jobs: int = 1) -> RawIngest:
+def ingest_raw(
+    cfg: Config, exposure: str, cache_dir: Path, jobs: int = 1, gains: np.ndarray | None = None
+) -> RawIngest:
     """Angular counts and live time of `exposure` from every `.data` file of its directory,
-    or of a run subset (`raw.subsets`) from the single file of its exposure.
+    or of a run subset (`raw.subsets`) from the single file of its exposure, with the
+    cluster charges optionally divided by channel `gains` (`count_file`); with
+    `raw.gain_correction` and no `gains`, by those of the exposure's own calibration.
 
     Files are counted independently (in `jobs` processes) and each result is cached under
     `cache_dir`, keyed by the file and the settings, so an interrupted or repeated run
@@ -457,16 +478,22 @@ def ingest_raw(cfg: Config, exposure: str, cache_dir: Path, jobs: int = 1) -> Ra
         segments = _run_segments(raw, subset)
     cache = Path(cache_dir)
     pedestals = None
+    if raw.gain_correction and gains is None:
+        from cafetomo.channelcal import exposure_gains
+
+        plain = replace(cfg, raw=replace(raw, gain_correction=False))
+        files = ingest_raw(plain, exposure, cache_dir, jobs).files
+        gains = exposure_gains(files, raw.channel_bars, cfg.calibration)
     if raw.neighbour_sigmas > 0:
-        flag = replace(cfg, raw=replace(raw, neighbour_sigmas=0.0))
+        flag = replace(cfg, raw=replace(raw, neighbour_sigmas=0.0, gain_correction=False))
         pedestals = fit_pedestals(
             sum(f.ped_hist for f in ingest_raw(flag, exposure, cache, jobs).files)
         )
-    digests = [_digest(p, raw, segments, pedestals) for p in paths]
+    digests = [_digest(p, raw, segments, pedestals, gains) for p in paths]
     keys = [cache / f"{exposure}_{d[:16]}.npz" for d in digests]
     found = [_load(k, d) for k, d in zip(keys, digests, strict=True)]
     todo = [i for i, c in enumerate(found) if c is None]
-    work = [(paths[i], raw, segments, pedestals) for i in todo]
+    work = [(paths[i], raw, segments, pedestals, gains) for i in todo]
     if jobs > 1 and len(work) > 1:
         with ProcessPoolExecutor(jobs) as pool:
             done = list(pool.map(_count_job, work))

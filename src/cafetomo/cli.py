@@ -135,8 +135,10 @@ def cmd_channelcal(args) -> None:
         raise SystemExit(f"{args.config}: no raw section")
     out = Path(args.out)
     cache = Path(args.cache or out.parent / "cache")
+    # the calibration reads the charges as recorded
+    plain = replace(cfg, raw=replace(cfg.raw, gain_correction=False))
     for pid in cfg.raw.exposures:
-        files = ingest_raw(cfg, pid, cache, jobs=int(args.jobs or 1)).files
+        files = ingest_raw(plain, pid, cache, jobs=int(args.jobs or 1)).files
         hit = [f.hit_hist for f in files]
         ped = [f.ped_hist for f in files]
         doc = summarize(
@@ -168,9 +170,11 @@ def _subset_hist(args):
 
 def cmd_rawcheck(args) -> None:
     """rawdata.json: the raw build against the ROOT histograms (counts, live time, opacity),
-    the sky's stability across its days and later runs, and the channel calibration of
-    every raw source. Keys are `<ordinal>_...` as in data.json."""
-    from cafetomo.angular import AngularHist, load_counts
+    the sky's stability across its days and later runs, the channel calibration of every
+    raw source and the opacity change when it corrects the cluster charges. Keys are
+    `<ordinal>_...` as in data.json."""
+    from cafetomo.angular import AnalysisGrid, AngularHist, load_counts, rebin
+    from cafetomo.channelcal import relative_gains
     from cafetomo.ingest import crop_counts, read_live_time
     from cafetomo.opacity import poisson_sigma, solve_opacity
     from cafetomo.rawcheck import count_match, epoch_scatter, lambda_shift, run_halves
@@ -187,7 +191,8 @@ def cmd_rawcheck(args) -> None:
     cache = Path(args.cache or raw_dir.parent / "cache")
     # The DAQ reproduction is judged on the DAQ's own hit flag; neighbour selection
     # (`raw.neighbour_sigmas`) is reported as its change to the flag-only counts.
-    flag_cfg = replace(cfg, raw=replace(cfg.raw, neighbour_sigmas=0.0))
+    flag_cfg = replace(cfg, raw=replace(cfg.raw, neighbour_sigmas=0.0, gain_correction=False))
+    plain_cfg = replace(cfg, raw=replace(cfg.raw, gain_correction=False))
     cal = {}
     for sid in cfg.raw.exposures:
         o = names[sid]
@@ -325,14 +330,33 @@ def cmd_rawcheck(args) -> None:
     noise = poisson_sigma(grid, cfg, live)
     root_grid, root_live = _grid(cfg, root_dir)
     root_lam = solve_opacity(root_grid, cfg, root_live).lam
+    # The opacity with each source's cluster charges divided by its own channel gains,
+    # against the charges as recorded.
+    jobs = int(args.jobs or 1)
+
+    def raw_lam(gains: dict) -> dict:
+        counts = {
+            sid: rebin(
+                ingest_raw(plain_cfg, sid, cache, jobs, gains=gains.get(sid)).hist,
+                cfg.opacity.rebin_factor,
+            ).values
+            for sid in grid.counts
+        }
+        return solve_opacity(AnalysisGrid(edges=grid.edges, counts=counts), cfg, live).lam
+
+    plain_lam = raw_lam({})
+    gain_lam = raw_lam({sid: relative_gains(cal[sid]) for sid in grid.counts})
     for pid in cfg.position_ids:
         o = names[pid]
         shift, scatter, n = lambda_shift(lam[pid], root_lam[pid])
+        gain_shift, gain_scatter, _ = lambda_shift(gain_lam[pid], plain_lam[pid])
         doc |= {
             f"{o}_lam_shift": shift,
             f"{o}_lam_scatter": scatter,
             f"{o}_lam_noise": float(np.nanmedian(noise[pid])),
             f"{o}_lam_bins": n,
+            f"{o}_gain_lam_shift": gain_shift,
+            f"{o}_gain_lam_scatter": gain_scatter,
         }
     _write_json(Path(args.out), doc)
 
@@ -747,6 +771,7 @@ def main(argv: list[str] | None = None) -> None:
         "root-ingest",
         "channelcal",
         "cache",
+        "jobs",
         "out",
     )
     stage("channelcal", cmd_channelcal, "config", "out", "cache", "jobs")

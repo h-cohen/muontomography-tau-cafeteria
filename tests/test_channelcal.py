@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 from scipy.stats import landau
 
-from cafetomo.channelcal import _mode, fit_channel, langau, render, summarize
+from cafetomo.channelcal import _mode, fit_channel, langau, relative_gains, render, summarize
 from cafetomo.config import CalibrationSettings
 from cafetomo.rawdata import CHARGE_EDGES, PEDESTAL_EDGES
 
@@ -128,3 +128,19 @@ def test_fit_far_from_the_empirical_peak_is_flagged_poor_fit():
     good = {(r["asic"], r["channel"]): r for r in doc["channels"]}[(2, 5)]
     assert good["peak_adc"] == pytest.approx(good["mpv_adc"], rel=0.05)
     assert 0 <= good["above_window_fraction"] < 0.2
+
+
+def test_relative_gains_are_mpv_over_the_asic_median_and_one_where_not_calibrated():
+    doc = {
+        "channels": [
+            {"asic": 0, "channel": 0, "status": "ok", "mpv_adc": 4000.0},
+            {"asic": 0, "channel": 1, "status": "ok", "mpv_adc": 5000.0},
+            {"asic": 0, "channel": 2, "status": "ok", "mpv_adc": 6000.0},
+            {"asic": 0, "channel": 3, "status": "mpv_outlier", "mpv_adc": 9000.0},
+            {"asic": 1, "channel": 0, "status": "inactive", "mpv_adc": float("nan")},
+        ]
+    }
+    g = relative_gains(doc)
+    assert g.shape == (4, 32)
+    assert g[0, :3] == pytest.approx([0.8, 1.0, 1.2])
+    assert g[0, 3] == 1.0 and g[1, 0] == 1.0 and g[2, 9] == 1.0
