@@ -245,6 +245,7 @@ PRODUCTION_FIGURES := parallax depth setup slices zprofile arrayfit pose coverag
 CONVRUNS   ?= runs/convergence-2026-10-21
 PRODUCTION_RAW_FIGURES := maps2d channelcal
 SKYRUNS    ?= runs/skyswap
+SKYCACHE   ?= $(SKYRUNS)/cache
 PRODUCTION_LINT ?= 3d.tex,2d.tex,rawdata.tex,sky.tex
 .PHONY: production-stage production-sync production-check production-push
 production-stage: internal-paper
@@ -312,7 +313,7 @@ sky-joint:
 	mkdir -p $(SKYRUNS) && cp $(CONFIG) $(SKYRUNS)/config.yaml
 	for s in SKY_A SKY_B SKY; do \
 	  arg=$$(test $$s = SKY || echo "--sky $$s"); \
-	  $(CLI) ingest-raw --config $(CONFIG) --out $(SKYRUNS)/ingest_$$s --cache $(SKYRUNS)/cache \
+	  $(CLI) ingest-raw --config $(CONFIG) --out $(SKYRUNS)/ingest_$$s --cache $(SKYCACHE) \
 	    --jobs $(or $(JOBS),4) $$arg || exit 1; \
 	  $(CLI) opacity --config $(CONFIG) --pose $(POSE) --ingest $(SKYRUNS)/ingest_$$s \
 	    --out $(SKYRUNS)/opacity_$$s || exit 1; \
