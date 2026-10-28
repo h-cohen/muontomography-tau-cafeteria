@@ -280,3 +280,5 @@ def test_stripes_builds_the_flag_only_reference_from_the_shared_sky_cache(tmp_pa
     assert "--neighbour-sigmas 0" in out
     assert f"pedestal={tmp_path}/sky/joint/ingest_m3_phi0" in out
     assert f"flag={tmp_path}/s/skyswap-flag/joint/ingest_m3_phi0" in out
+    assert "--pose results/pose.json" in out
+    assert "flag-results/pose.json" not in out

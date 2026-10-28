@@ -339,7 +339,7 @@ STRIPERUNS ?= runs/stripes
 stripes:
 	test ! -e $(STRIPERUNS)
 	$(MAKE) sky-joint SKYRUNS=$(STRIPERUNS)/skyswap-flag SKYCACHE=$(SKYCACHE) NEIGHBOUR_SIGMAS=0 \
-	  RESULTS=$(STRIPERUNS)/flag-results
+	  RESULTS=$(STRIPERUNS)/flag-results POSE=$(POSE)
 	uv run python studies/maps2d/maps2d.py $(STRIPERUNS)/maps2d \
 	  pedestal=$(SKYRUNS)/joint/ingest_m3_phi0 flag=$(STRIPERUNS)/skyswap-flag/joint/ingest_m3_phi0
 	mkdir -p $(RESULTS)/production
