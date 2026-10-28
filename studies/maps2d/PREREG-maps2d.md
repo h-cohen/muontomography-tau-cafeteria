@@ -41,7 +41,7 @@ relative to the DAQ's hit flag alone?
    A fit whose centre leaves its window or whose width hits 0.01 / 0.30 is kept and flagged.
 4. **Matching across positions:** pos1's beam profile is shifted by s and correlated with
    pos0's (Pearson, on common points); the shift s* maximizing it in
-   s ∈ [0.15, 0.40] (heights 4.7–12.6 m for a 1.9 m baseline: a range wide enough to
+   |s| ∈ [0.15, 0.40], either sign (the sign only follows the direction convention; heights 4.7–12.6 m for a 1.9 m baseline: a range wide enough to
    contain every candidate, and excluding the one-period aliases) pairs stripes k of
    pos0 with the pos1 stripe nearest t_k − s*. Paired shifts Δt_k = t_k(pos0) − t_k(pos1).
 5. **Summary:** per position the mean period (mean spacing of consecutive matched
