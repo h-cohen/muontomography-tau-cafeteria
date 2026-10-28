@@ -31,6 +31,7 @@ WIDTH_BOUNDS = (0.01, 0.30)  # FWHM bounds of a stripe fit
 SHIFT_RANGE = (0.15, 0.40)  # pos1 shift searched for the beam matching
 SHIFT_STEP = 0.001
 N_REPLICAS = 200
+RESOLVED_CENTRE_SIGMA = 0.01  # tan; Amendment 1
 FWHM = 2.0 * np.sqrt(2.0 * np.log(2.0))
 
 
@@ -140,32 +141,43 @@ def measure(vs, nominal=None) -> dict:
     return out
 
 
-def summary(m: dict, pids) -> dict:
-    """Scalars of one measurement (nominal or replica), with stripe pairing by the shift."""
+def summary(m: dict, pids, resolved: dict) -> dict:
+    """Scalars of one measurement (nominal or replica) over the stripes `resolved` at the
+    nominal fit (Amendment 1), with stripe pairing by the shift."""
     doc = {"shift": m["shift"], "shift_corr": m["shift_corr"]}
+    keep = {
+        pid: {
+            part: [
+                s for s, ok in zip(m[pid][part]["stripes"], resolved[pid][part], strict=True) if ok
+            ]
+            for part in ("beam", "transverse")
+        }
+        for pid in pids
+    }
     for pid in pids:
-        b = m[pid]["beam"]["stripes"]
-        good = [s for s in b if not s.flagged]
-        doc[f"{pid}_n_stripes"] = len(b)
-        doc[f"{pid}_n_flagged"] = len(b) - len(good)
+        good = keep[pid]["beam"]
+        doc[f"{pid}_n_stripes"] = len(m[pid]["beam"]["stripes"])
+        doc[f"{pid}_n_resolved"] = len(good)
         doc[f"{pid}_fwhm"] = float(np.mean([s.fwhm for s in good]))
         doc[f"{pid}_contrast"] = float(np.mean([s.contrast for s in good]))
-        cs = np.sort([s.centre for s in good])
-        doc[f"{pid}_period"] = float(np.mean(np.diff(cs))) if cs.size > 1 else np.nan
-        tr = m[pid]["transverse"]["stripes"]
-        doc[f"{pid}_transverse_centre"] = tr[0].centre if len(tr) == 1 else np.nan
-        doc[f"{pid}_transverse_fwhm"] = tr[0].fwhm if len(tr) == 1 else np.nan
-        doc[f"{pid}_transverse_contrast"] = tr[0].contrast if len(tr) == 1 else np.nan
-    a, b = (m[p]["beam"]["stripes"] for p in pids)
+        gaps = np.diff(np.sort([s.centre for s in good]))
+        near = gaps[gaps < 1.5 * np.median(gaps)] if gaps.size else gaps
+        doc[f"{pid}_period"] = float(near.mean()) if near.size else np.nan
+        tr = m[pid]["transverse"]
+        member = transverse_member(m, resolved, pid)
+        for k in ("centre", "fwhm", "contrast"):
+            doc[f"{pid}_transverse_{k}"] = (
+                getattr(tr["stripes"][member], k) if member is not None else np.nan
+            )
+    a, b = (keep[p]["beam"] for p in pids)
     pairs = []
     for s0 in a:
-        if s0.flagged or not b:
-            continue
+        if not b:
+            break
         s1 = min(b, key=lambda s: abs(s.centre + m["shift"] - s0.centre))
-        if not s1.flagged and abs(s1.centre + m["shift"] - s0.centre) < 0.5 * HALF_WINDOW:
+        if abs(s1.centre + m["shift"] - s0.centre) < 0.5 * HALF_WINDOW:
             pairs.append(s0.centre - s1.centre)
     doc["n_pairs"] = len(pairs)
-    doc["pair_shifts"] = pairs
     doc["pair_shift_mean"] = float(np.mean(pairs)) if pairs else np.nan
     doc["pair_shift_scatter"] = float(np.std(pairs, ddof=1)) if len(pairs) > 1 else np.nan
     doc["transverse_shift"] = (
@@ -174,18 +186,18 @@ def summary(m: dict, pids) -> dict:
     return doc
 
 
+def transverse_member(m: dict, resolved: dict, pid: str):
+    """Index of the resolved transverse stripe of largest contrast over its error."""
+    snr = m["_snr"][pid]
+    ok = [i for i, r in enumerate(resolved[pid]["transverse"]) if r]
+    return max(ok, key=lambda i: snr[i]) if ok else None
+
+
 def run(name: str, ingest: Path, cfg, index: int) -> dict:
     pids = list(cfg.position_ids)
     nominal = measure(views(ingest, cfg))
-    nom = summary(nominal, pids)
     rng = np.random.default_rng(np.random.SeedSequence(cfg.uncertainty.seed, spawn_key=(3, index)))
     raw = [measure(views(ingest, cfg, rng), nominal) for _ in range(N_REPLICAS)]
-    reps = [summary(r, pids) for r in raw]
-    sig = {
-        k: float(np.nanstd([r[k] for r in reps], ddof=1))
-        for k, v in nom.items()
-        if isinstance(v, float)
-    }
     stripes = {
         pid: {
             part: [
@@ -201,6 +213,33 @@ def run(name: str, ingest: Path, cfg, index: int) -> dict:
             for part in ("beam", "transverse")
         }
         for pid in pids
+    }
+    resolved = {
+        pid: {
+            part: [
+                not s["flagged"] and s["centre_sigma"] <= RESOLVED_CENTRE_SIGMA
+                for s in stripes[pid][part]
+            ]
+            for part in ("beam", "transverse")
+        }
+        for pid in pids
+    }
+    for pid in pids:
+        for part in ("beam", "transverse"):
+            for s, ok in zip(stripes[pid][part], resolved[pid][part], strict=True):
+                s["resolved"] = ok
+    snr = {
+        pid: [s["contrast"] / s["contrast_sigma"] for s in stripes[pid]["transverse"]]
+        for pid in pids
+    }
+    for m in (nominal, *raw):
+        m["_snr"] = snr
+    nom = summary(nominal, pids, resolved)
+    reps = [summary(r, pids, resolved) for r in raw]
+    sig = {
+        k: float(np.nanstd([r[k] for r in reps], ddof=1))
+        for k, v in nom.items()
+        if isinstance(v, float)
     }
     profiles = {
         pid: {part: {q: nominal[pid][part][q].tolist() for q in ("t", "lam", "sigma")}
