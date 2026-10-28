@@ -41,6 +41,8 @@ class Stripe:
     fwhm: float
     contrast: float
     flagged: bool
+    background: float  # local line at the centre, and its slope per unit tan
+    slope: float
 
 
 def profile(lam, sigma, centres, along_axis: int):
@@ -79,7 +81,7 @@ def fit_stripe(t, y, e, t0) -> Stripe:
         np.isclose(c, t0 - HALF_WINDOW) or np.isclose(c, t0 + HALF_WINDOW)
         or np.isclose(s, lo_s, rtol=1e-3) or np.isclose(s, hi_s, rtol=1e-3)
     )  # fmt: skip
-    return Stripe(float(c), float(s * FWHM), float(a), bool(at_bound))
+    return Stripe(float(c), float(s * FWHM), float(a), bool(at_bound), float(p[3]), float(p[4]))
 
 
 def stripe_maxima(t, y, e) -> np.ndarray:

@@ -30,8 +30,8 @@ def main(argv=None) -> None:
         )
         axis.set(
             title=pid,
-            xlabel=rf"$\tan\theta_{frame.ax('x')}$",
-            ylabel=rf"$\tan\theta_{frame.ax('y')}$",
+            xlabel=r"$\tan\theta_x$",
+            ylabel=r"$\tan\theta_y$",
         )
     fig.colorbar(im, ax=axes, label=r"$\lambda$")
     style.label_panels(axes)
