@@ -186,4 +186,6 @@ def test_raw_macros_cover_rawdata_and_settings(tmp_path, cfg):
     assert m["RawX"] == "--"
     assert m["RawCalibrationOutlierFrac"] == "0.15"
     assert any(k.startswith("RawView") for k in m)
+    assert m["RawNeighbourSigmas"] == "3"  # numeric raw settings: the hit selection
+    assert m["RawBarPitchCm"] == "1.6"
     assert not set(m) & set(flatten(Path("results")))

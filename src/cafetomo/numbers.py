@@ -174,14 +174,19 @@ def write_config_numbers(config: Path, volume_npz: Path, out: Path) -> Path:
 
 
 def raw_macros(rawdata: Path, cfg) -> dict[str, str]:
-    """Preliminary raw-chain macros: rawdata.json scalars and the calibration and 2D-view
-    settings, as `\\Raw...`. Not reviewed into results/; the text marks them preliminary."""
+    """Preliminary raw-chain macros: rawdata.json scalars and the numeric raw, calibration
+    and 2D-view settings, as `\\Raw...`. Not reviewed into results/; the text marks them
+    preliminary."""
     import dataclasses
 
     out: dict[str, str] = {}
     for key, value in json.loads(Path(rawdata).read_text()).items():
         if _is_number(value):
             out[macro_name("raw", key)] = format_value(value)
+    for f in dataclasses.fields(cfg.raw):
+        value = getattr(cfg.raw, f.name)
+        if _is_number(value):
+            out.setdefault(macro_name("raw", f.name), format_value(value))
     for section in ("calibration", "view"):
         settings = getattr(cfg, section)
         for f in dataclasses.fields(settings):
