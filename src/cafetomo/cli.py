@@ -174,7 +174,7 @@ def cmd_rawcheck(args) -> None:
     from cafetomo.ingest import crop_counts, read_live_time
     from cafetomo.opacity import poisson_sigma, solve_opacity
     from cafetomo.rawcheck import count_match, epoch_scatter, lambda_shift, run_halves
-    from cafetomo.rawdata import TAN_EDGES, ingest_raw
+    from cafetomo.rawdata import TAN_EDGES, fit_pedestals, ingest_raw
 
     cfg = _cfg(args)
     raw_dir, root_dir, cal_dir = Path(args.ingest), Path(args.root_ingest), Path(args.channelcal)
@@ -192,8 +192,16 @@ def cmd_rawcheck(args) -> None:
     for sid in cfg.raw.exposures:
         o = names[sid]
         raw, root = (load_counts(d / f"counts_{sid}.npz") for d in (raw_dir, root_dir))
-        flag = ingest_raw(flag_cfg, sid, cache).hist
-        chi2, scale = count_match(flag, root)
+        flag = ingest_raw(flag_cfg, sid, cache)
+        chi2, scale = count_match(flag.hist, root)
+        mean, width = fit_pedestals(sum(f.ped_hist for f in flag.files))
+        bars = [(a, c) for a, chans in enumerate(cfg.raw.channel_bars) for c in chans]
+        doc |= {
+            f"{o}_pedestal_width": float(np.median([width[b] for b in bars])),
+            f"{o}_pedestal_width_min": float(np.min([width[b] for b in bars])),
+            f"{o}_pedestal_width_max": float(np.max([width[b] for b in bars])),
+            f"{o}_pedestal_mean_spread": float(np.std([mean[b] for b in bars])),
+        }
         if cfg.raw.neighbour_sigmas > 0:
             files = ingest_raw(cfg, sid, cache).files
             lone = sum(f.n_lone_layers for f in files)
@@ -201,7 +209,7 @@ def cmd_rawcheck(args) -> None:
                 f"{o}_lone_layers": lone,
                 f"{o}_lone_layer_frac": lone / (4 * sum(f.n_rows for f in files)),
                 f"{o}_recovered_frac": sum(f.n_recovered_layers for f in files) / lone,
-                f"{o}_select_chi": count_match(raw, flag)[0],
+                f"{o}_select_chi": count_match(raw, flag.hist)[0],
             }
         root_live = read_live_time(cfg.data_dir / roots[sid], interpolate=True)
         doc |= {
