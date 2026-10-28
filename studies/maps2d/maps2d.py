@@ -248,8 +248,18 @@ def run(name: str, ingest: Path, cfg, index: int) -> dict:
               for part in ("beam", "transverse")}
         for pid in pids
     }  # fmt: skip
+    settings = {
+        "band": BAND,
+        "reach": REACH,
+        "prominence": PROMINENCE,
+        "half_window": HALF_WINDOW,
+        "shift_min": SHIFT_RANGE[0],
+        "shift_max": SHIFT_RANGE[1],
+        "resolved_centre_max": RESOLVED_CENTRE_SIGMA,
+    }
     return {"selection": name, "ingest": str(ingest), "nominal": nom, "sigma": sig,
-            "stripes": stripes, "profiles": profiles, "n_replicas": N_REPLICAS}  # fmt: skip
+            "stripes": stripes, "profiles": profiles, "n_replicas": N_REPLICAS,
+            "settings": settings}  # fmt: skip
 
 
 def main(argv) -> None:

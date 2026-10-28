@@ -31,9 +31,9 @@ def scalars(sel: str, prefix: str = "") -> dict:
     return doc
 
 
-def matched_ratio(key: str) -> tuple[float, float]:
-    """Mean over resolved stripes present in both selections of pedestal / flag `key`, and
-    the spread of that ratio over the stripes divided by sqrt(count)."""
+def matched_ratio(key: str) -> tuple[float, float, int]:
+    """Mean over resolved stripes present in both selections of pedestal / flag `key`, the
+    spread of that ratio over the stripes divided by sqrt(count), and the count."""
     ratios = []
     for p in PIDS:
         flag = [s for s in docs["flag"]["stripes"][p]["beam"] if s["resolved"]]
@@ -43,7 +43,7 @@ def matched_ratio(key: str) -> tuple[float, float]:
                 f = min(near, key=lambda f: abs(f["centre"] - n["centre"]))
                 ratios.append(n[key] / f[key])
     r = np.asarray(ratios)
-    return float(r.mean()), float(r.std(ddof=1) / np.sqrt(r.size))
+    return float(r.mean()), float(r.std(ddof=1) / np.sqrt(r.size)), int(r.size)
 
 
 nom = docs["pedestal"]["nominal"]
@@ -57,9 +57,9 @@ doc |= {
     "contrast_snr_pos0": nom["pos0_contrast"] / docs["pedestal"]["sigma"]["pos0_contrast"],
     "contrast_snr_pos1": nom["pos1_contrast"] / docs["pedestal"]["sigma"]["pos1_contrast"],
     "replicas": docs["pedestal"]["n_replicas"],
-}
-doc["fwhm_ratio"], doc["fwhm_ratio_sigma"] = matched_ratio("fwhm")
-doc["contrast_ratio"], doc["contrast_ratio_sigma"] = matched_ratio("contrast")
+} | docs["pedestal"]["settings"]
+doc["fwhm_ratio"], doc["fwhm_ratio_sigma"], doc["n_matched"] = matched_ratio("fwhm")
+doc["contrast_ratio"], doc["contrast_ratio_sigma"], _ = matched_ratio("contrast")
 out.parent.mkdir(parents=True, exist_ok=True)
 out.write_text(json.dumps(doc, indent=1, sort_keys=True) + "\n")
 print(json.dumps(doc, indent=1))
