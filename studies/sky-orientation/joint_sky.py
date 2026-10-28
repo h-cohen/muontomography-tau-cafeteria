@@ -105,6 +105,45 @@ def checks(f: dict) -> dict:
     }
 
 
+MOD_TAU = 0.5  # sky tangent of the circle on which the modulation is quoted
+MOD_DRAWS = 2000
+
+
+def modulation(f: dict, rng: np.random.Generator) -> dict:
+    """Azimuthal modulation of the sky flux on the circle tau = MOD_TAU, in percent of its
+    azimuthal mean (m = 0 is not identified): peak-to-peak of exp(s) and the amplitude of
+    each harmonic, with errors from Gaussian draws of the fitted coefficients."""
+    m_max = f["m_max"]
+    psi = np.linspace(-np.pi, np.pi, 721)[:-1]
+    cols = np.stack(
+        [
+            MOD_TAU ** (m + k) * fn(m * psi)
+            for m in range(1, m_max + 1)
+            for k in range(3)
+            for fn in (np.cos, np.sin)
+        ],
+        axis=-1,
+    )
+    draws = rng.multivariate_normal(f["beta"][1:], f["cov"][1:, 1:], MOD_DRAWS)
+
+    def stats(beta):
+        s = cols @ beta
+        e = np.exp(s - np.log(np.mean(np.exp(s))))
+        amps = []
+        for m in range(1, m_max + 1):
+            a = np.mean(s * np.cos(m * psi)) * 2
+            b = np.mean(s * np.sin(m * psi)) * 2
+            amps.append(100 * np.hypot(a, b))
+        return [100 * (e.max() - e.min()), *amps]
+
+    nominal = stats(f["beta"][1:])
+    spread = np.std([stats(b) for b in draws], axis=0, ddof=1)
+    doc = {"tau": MOD_TAU, "peak_to_peak_pct": nominal[0], "peak_to_peak_pct_err": spread[0]}
+    for m in range(1, m_max + 1):
+        doc[f"m{m}_pct"], doc[f"m{m}_pct_err"] = nominal[m], spread[m]
+    return doc
+
+
 def reference(f: dict, phi: float) -> np.ndarray:
     m = f["m_max"]
     s = {k: features(a, m) @ f["beta"][1:] for k, a in (("a", 0.0), ("b", TURN), ("p", phi))}
@@ -133,6 +172,29 @@ def write_ingest(ref: np.ndarray, name: str) -> Path:
     return d
 
 
+def coarse_mean(v: np.ndarray) -> np.ndarray:
+    """Mean of a fine-bin map over each view bin's used fine bins (NaN where none)."""
+    grid = hist["SKY_A"]
+    w = rebin(AngularHist(use.astype(np.float64), grid.xedges, grid.yedges), REBIN).values
+    tot = rebin(AngularHist(np.where(use, v, 0.0), grid.xedges, grid.yedges), REBIN).values
+    return np.where(w > 0, tot / np.where(w > 0, w, 1.0), np.nan)
+
+
+def uniform_pull() -> np.ndarray:
+    """Pulls of the roof-A share per view bin for a sky without azimuthal structure
+    (one common share), on the view bins of `checks`."""
+    grid = hist["SKY_A"]
+
+    def coarse(v):
+        return rebin(AngularHist(np.where(use, v, 0.0), grid.xedges, grid.yedges), REBIN).values
+
+    o, n = coarse(n_a), coarse(n_a + n_b)
+    p0 = o.sum() / n.sum()
+    ok = n >= cfg.view.min_sky_counts
+    var = np.where(ok, n * p0 * (1 - p0), 1.0)
+    return np.where(ok, (o - n * p0) / np.sqrt(var), np.nan)
+
+
 out.mkdir(parents=True, exist_ok=False)
 summary = {"turn_deg": TURN, "live_h": {s: t / 3600 for s, t in T.items()}, "fits": {}}
 pulls, split = {}, {}
@@ -149,6 +211,13 @@ for m_max in (2, 3):
         "c_flag": bool(abs(f["c"] - 1) > 0.02),
         "coefficients": f["beta"][1:].tolist(),
         "coefficient_errors": err[1:].tolist(),
+        "covariance": f["cov"].tolist(),
+        "modulation": modulation(
+            f,
+            np.random.default_rng(
+                np.random.SeedSequence(cfg.uncertainty.seed, spawn_key=(4, m_max))
+            ),
+        ),
         **ch,
     }
     for name, phi in PHIS.items():
@@ -163,6 +232,8 @@ np.savez_compressed(
     t_a=T["SKY_A"],
     t_b=T["SKY_B"],
     pull=pulls[3],
+    pull_uniform=uniform_pull(),
+    sky_log=coarse_mean(features(0.0, 3) @ f["beta"][1:]),
     reference=rebin(
         AngularHist(reference(f, 0.0), hist["SKY_A"].xedges, hist["SKY_A"].yedges), REBIN
     ).values,

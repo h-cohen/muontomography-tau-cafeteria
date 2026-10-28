@@ -9,6 +9,8 @@ import json
 import sys
 from pathlib import Path
 
+import numpy as np
+
 swap, joint, out = (Path(a) for a in sys.argv[1:4])
 fit = json.loads((joint / "joint_sky.json").read_text())
 nominal = fit["fits"]["m3"]
@@ -20,6 +22,12 @@ pids = [k for k in cmp]
 def tracks(sky: str) -> int:
     meta = json.loads((swap / f"ingest_{sky}" / "meta.json").read_text())
     return meta["exposures"]["SKY"]["total_counts"]
+
+
+def split_width(key: str) -> float:
+    """Standard deviation of the roof-A share pulls per view bin (split.npz)."""
+    v = np.load(joint / "split.npz")[key]
+    return float(np.std(v[np.isfinite(v)]))
 
 
 def worst(name: str, key: str) -> float:
@@ -48,6 +56,15 @@ doc = {
     ),
     "model_max": worst("model_m2", "max_abs_smoothed"),
     "whole_run_max": worst("single_whole_run", "max_abs_smoothed"),
+    "pull_width_split_uniform": split_width("pull_uniform"),
+    "pull_width_split": split_width("pull"),
+    "modulation_tau": nominal["modulation"]["tau"],
+    "modulation_peak_pct": nominal["modulation"]["peak_to_peak_pct"],
+    "modulation_peak_pct_sigma": nominal["modulation"]["peak_to_peak_pct_err"],
+    "dipole_pct": nominal["modulation"]["m1_pct"],
+    "dipole_pct_sigma": nominal["modulation"]["m1_pct_err"],
+    "quadrupole_pct": nominal["modulation"]["m2_pct"],
+    "quadrupole_pct_sigma": nominal["modulation"]["m2_pct_err"],
     "sigma_pos0": cmp["pos0"]["median_sigma_nominal"],
     "sigma_pos1": cmp["pos1"]["median_sigma_nominal"],
 }
