@@ -97,8 +97,7 @@ def main(argv=None) -> None:
         (re, "pull", "fitted sky"),
     ):
         h = show(axis, d[key], cmap=DIVERGING, vmin=-PULL_RANGE, vmax=PULL_RANGE)
-        v = d[key][np.isfinite(d[key])]
-        axis.set_title(f"{title}: rms {np.std(v):.2f}", fontsize=7, loc="right")
+        axis.set_title(title, fontsize=7, loc="right")
     fig.colorbar(h, ax=[rd, re], shrink=0.85, label="roof-A share pull")
 
     bins = np.linspace(-6, 6, 61)
