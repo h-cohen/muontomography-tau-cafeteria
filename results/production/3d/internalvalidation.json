@@ -1,0 +1,201 @@
+{
+  "scope": "retrospective pilot; conditional internal evidence",
+  "count_folds": 3,
+  "count_deviance": 10921.775533800554,
+  "count_slab_deviance": 25136.910858979154,
+  "count_covered_bins": 7712,
+  "count_improvement_percent": 56.55084431387405,
+  "count_worse_folds": 0,
+  "angular_folds": 5,
+  "angular_deviance": 12834.089061467332,
+  "angular_slab_deviance": 14161.175807514439,
+  "angular_covered_bins": 2586,
+  "angular_improvement_percent": 9.371303372583695,
+  "angular_worse_folds": 1,
+  "thin_replicas": 5,
+  "thin_truth_thickness": 0.3,
+  "thin_boundary": 1,
+  "thin_z_bias": -1.1489827449848464,
+  "thick_replicas": 5,
+  "thick_truth_thickness": 1.8,
+  "thick_boundary": 0,
+  "thick_z_bias": -1.8347779274845888,
+  "recovery_outcomes": 10,
+  "excess_peak_outcomes": 3,
+  "count_replicas": 5,
+  "count_train_fraction": 0.5,
+  "prediction_uncertainty_replicas": 2,
+  "corrected_analytic_objective": 0.44658493801183463,
+  "corrected_poisson_objective": 0.4421767087975887,
+  "corrected_weight_peaks": 5,
+  "original_weight_objective": 0.7024048152252038,
+  "input_files": [
+    {
+      "path": "paper-draft/figures/voxels.png",
+      "sha256": "9e8461a939d0839b62eafb8b3ee07caacb00da6c8be29a9ac64a1cf89f14fde7",
+      "size_bytes": 1162677,
+      "location": "explicit"
+    },
+    {
+      "path": "runs/internal-validation/weight-correction-joint3d/choices/beam-excess-weights.npz",
+      "sha256": "a944ff9f3abafd8cbf8105267535600cf0078b13b6e7922bb15b3c3372a57601",
+      "size_bytes": 151292,
+      "location": "explicit"
+    },
+    {
+      "path": "runs/internal-validation/weight-correction-joint3d/choices/manifest.json",
+      "sha256": "06b9333df1f7cf7ca03d45ffc97a6b814ea03146ae6877fcf781f0151a35532b",
+      "size_bytes": 80347,
+      "location": "explicit"
+    },
+    {
+      "path": "runs/internal-validation/weight-correction-joint3d/comparison.json",
+      "sha256": "a542b04d4cb7b06bba9fc7686b5f8e9fa749eb295a22b02b444a46fc02e79df5",
+      "size_bytes": 148052,
+      "location": "explicit"
+    },
+    {
+      "path": "runs/internal-validation/weight-correction-joint3d/registration.json",
+      "sha256": "89efa10f2805bd5d33fddf3d1884ed9ca7fc8acdba1f4c7dbf20955f17c88963",
+      "size_bytes": 4684,
+      "location": "explicit"
+    },
+    {
+      "path": "runs/joint3d-2026-10-29/baseline/voxels/views.npy",
+      "sha256": "0c4b54336c89ca7ca7bc02c6764edb37972e7cbe26f0990f3864fe80dd5acb3c",
+      "size_bytes": 618928,
+      "location": "explicit"
+    },
+    {
+      "path": "runs/joint3d-2026-10-29/baseline/voxels/volume_full.npz",
+      "sha256": "0701ab5b35a47f3dc5f4182cee6092c6ae7b883029c5e9e22fe214be638f158b",
+      "size_bytes": 1118204,
+      "location": "explicit"
+    },
+    {
+      "path": "folds/count-0/fold.json",
+      "sha256": "3119f5851f02a8344aff3f53fe5b422304def1db7766d8a6566c18a3cdcbb295",
+      "size_bytes": 105958,
+      "location": "archive"
+    },
+    {
+      "path": "folds/count-0/support-degree2-threshold3.npz",
+      "sha256": "51721109097cff806933fff32d1fc912b1dfc3df2aef1e87b0bc00e049dd04db",
+      "size_bytes": 34845,
+      "location": "archive"
+    },
+    {
+      "path": "manifest.json",
+      "sha256": "fe7c0337d1e7a6c7de637dca1353206222bda479b8e53065b16ca3dcb8f423e4",
+      "size_bytes": 1064041,
+      "location": "archive"
+    },
+    {
+      "path": "results/prediction.json",
+      "sha256": "741d0f7e3f39fdf1edff5166de1021de8439c50d709b20eaa1091b7aa3482ab9",
+      "size_bytes": 1031998,
+      "location": "archive"
+    },
+    {
+      "path": "results/recovery.json",
+      "sha256": "0d4bbf90d6d0a1d83980ebb89b389d06f9d7f5e5afa214d7c79090a24ab5f49e",
+      "size_bytes": 394874,
+      "location": "archive"
+    },
+    {
+      "path": "results/stability.json",
+      "sha256": "ae084fa8fb4cb6324c7cc3afb3728c2b7d0587e1b804534a796364bd0672169e",
+      "size_bytes": 522504,
+      "location": "archive"
+    },
+    {
+      "path": "results/support.json",
+      "sha256": "8e3c5f1ee44b498c3328b15b642a29403dcc25966b22f90203fa8bc4b0540747",
+      "size_bytes": 14353,
+      "location": "archive"
+    },
+    {
+      "path": "stability/count/manifest.json",
+      "sha256": "79f42ddbc198f173c07df1d77153e5f2a98dae37cc52e58160716db79861993b",
+      "size_bytes": 39050,
+      "location": "archive"
+    },
+    {
+      "path": "stability/count/stability.npz",
+      "sha256": "7ad93c1c6c341125084e6e4ee5dd24557304360c98f85badc742a0b68805847b",
+      "size_bytes": 505099,
+      "location": "archive"
+    }
+  ],
+  "selection_arguments": {
+    "archive": "runs/internal-validation/pilot-joint3d",
+    "correction": "runs/internal-validation/weight-correction-joint3d",
+    "main_volume": "runs/joint3d-2026-10-29/baseline/voxels/volume_full.npz",
+    "main_coverage": "runs/joint3d-2026-10-29/baseline/voxels/views.npy",
+    "overlay": "paper-draft/figures/voxels.png"
+  },
+  "baseline_inputs": [
+    {
+      "path": "arraydepth.json",
+      "source_path": "results/production/3d/arraydepth.json",
+      "sha256": "31ce0e070fca411d9b65de4756b5aae2e1878e9865531ccdea8eb8d584f09564"
+    },
+    {
+      "path": "autofocus.json",
+      "source_path": "results/production/3d/autofocus.json",
+      "sha256": "155a8bdd3964c5ef912c86b926632b73e93896518a8459a6ec9f86e5f7343856"
+    },
+    {
+      "path": "autofocuslayer.json",
+      "source_path": "results/production/3d/autofocuslayer.json",
+      "sha256": "85630e4b47a7887f3022db6ef37223bebada76aad7fa7d0fe86543ad3e4b9855"
+    },
+    {
+      "path": "beamdepth.json",
+      "source_path": "results/production/3d/beamdepth.json",
+      "sha256": "3759186b48c8d0cb7001f8496de6db55814fbc1ceba9943087c20244eec72f22"
+    },
+    {
+      "path": "beams.json",
+      "source_path": "results/production/3d/beams.json",
+      "sha256": "39f6cdbf892598106ef7dda571bd2378fe8736383bcfcba27a4d528c3dd6849d"
+    },
+    {
+      "path": "data.json",
+      "source_path": "results/production/3d/data.json",
+      "sha256": "c125548dece9ee9a0a54d590f09181b003d8e41a5f580d0ce4f3616bdd549ced"
+    },
+    {
+      "path": "depthdiagnostics.json",
+      "source_path": "results/production/3d/depthdiagnostics.json",
+      "sha256": "9e39d28205a765d08fa64de66d1d196b63630e22bb2860d381384989f500bc8a"
+    },
+    {
+      "path": "inputs.json",
+      "source_path": "results/production/3d/inputs.json",
+      "sha256": "36b5a6c23507a5f6af6db13cb5480e897f166bfec8a4fab08de9d53106717941"
+    },
+    {
+      "path": "pose.json",
+      "source_path": "results/production/3d/pose.json",
+      "sha256": "1269886f8ff502e6b49f385ff1312f06d64258b9f7d091650d068e6db600068d"
+    },
+    {
+      "path": "reconstruction.json",
+      "source_path": "results/production/3d/reconstruction.json",
+      "sha256": "577be311414b52793e62c60fa05523afd36597f89046df02ebcdca85d1d7b467"
+    },
+    {
+      "path": "uncertainty.json",
+      "source_path": "results/production/3d/uncertainty.json",
+      "sha256": "a07d1a460de5242b062ca91a66e7eee42e59e17790ea0daa6b0dd316ed4e75a0"
+    },
+    {
+      "path": "validation.json",
+      "source_path": "results/production/3d/validation.json",
+      "sha256": "fab0dc00fbecf4020aaef4bf747545f5c60f384420ee8aca083df013792e5f2d"
+    }
+  ],
+  "original_archive": "runs/internal-validation/pilot-joint3d",
+  "corrected_comparison": "runs/internal-validation/weight-correction-joint3d"
+}

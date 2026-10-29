@@ -249,9 +249,14 @@ PRODSTAGE  := runs/production-stage
 JOINT3DRUNS ?= runs/joint3d-2026-10-29
 PRODRUNS   ?= $(JOINT3DRUNS)/baseline
 RESULTS3D   = $(RESULTS)/production/3d
+# The internal-validation pilot on that run (`joint3d-internal`).
+PRODIVARCHIVE    ?= runs/internal-validation/pilot-joint3d
+PRODIVCACHE      ?= runs/internal-validation/cache-joint3d
+PRODIVCORRECTION ?= runs/internal-validation/weight-correction-joint3d
+PRODIVTRACE      ?= runs/internal-validation/recovery-trace-joint3d
+PRODIVFIGOUT     ?= runs/figure-review/joint3d
 PRODUCTION_FIGURES := parallax depth setup slices zprofile arrayfit pose coverage autofocus
 # Nominal reconstruction rerun with every iterate's chi2 kept (volume bit-identical to PRODRUNS).
-CONVRUNS   ?= runs/convergence-2026-10-21
 PRODUCTION_RAW_FIGURES := maps2d channelcal
 SKYRUNS    ?= runs/skyswap
 SKYCACHE   ?= $(SKYRUNS)/cache
@@ -260,21 +265,20 @@ PRODUCTION_LINT ?= 3d.tex,2d.tex,rawdata.tex,sky.tex
 production-stage: internal-paper
 	test -d $(PRODRUNS)/opacity -a -d $(PRODRUNS)/bootstrap -a -d $(PRODRUNS)/ingest
 	rm -rf $(PRODSTAGE) && mkdir -p $(PRODSTAGE)/figures
-	$(CLI) numbers --results $(RESULTS3D) --out $(PRODSTAGE)/numbers.tex \
-	  --also $(RESULTS)/internalvalidation.json
+	$(CLI) numbers --results $(RESULTS3D) --out $(PRODSTAGE)/numbers.tex
 	$(CLI) numbers --results $(RESULTS)/production --out $(PRODSTAGE)/production-numbers.tex
 	$(CLI) config-numbers --config $(CONFIG) --volume $(PRODRUNS)/voxels/volume_full.npz \
 	  --out $(PRODSTAGE)/config-numbers.tex
 	$(CLI) raw-numbers --rawdata $(RAWDATA) --config $(CONFIG) \
 	  --out $(PRODSTAGE)/raw-numbers.tex
-	cp $(IVFIGOUT)/internal-numbers.tex $(IVFIGOUT)/internal-main.pdf $(PRODSTAGE)/
+	cp $(PRODIVFIGOUT)/internal-numbers.tex $(PRODIVFIGOUT)/internal-main.pdf $(PRODSTAGE)/
 	mv $(PRODSTAGE)/internal-main.pdf $(PRODSTAGE)/figures/
 	for f in $(PRODUCTION_FIGURES); do \
 	  uv run python paper-draft/figures/make_$$f.py --config $(CONFIG) --pose $(RESULTS3D)/pose.json \
 	    --results $(RESULTS3D) --runs $(PRODRUNS) --frame detector --out $(PRODSTAGE)/figures/$$f.pdf || exit 1; \
 	done
-	uv run python paper-draft/figures/make_convergence.py --config $(CONFIG) --pose $(POSE) \
-	  --results $(RESULTS) --runs $(CONVRUNS) --frame detector --out $(PRODSTAGE)/figures/convergence.pdf
+	uv run python paper-draft/figures/make_convergence.py --config $(CONFIG) --pose $(RESULTS3D)/pose.json \
+	  --results $(RESULTS3D) --runs $(PRODRUNS) --frame detector --out $(PRODSTAGE)/figures/convergence.pdf
 	for f in $(PRODUCTION_RAW_FIGURES); do \
 	  uv run python paper-draft/figures/make_$$f.py --config $(CONFIG) --pose $(POSE) \
 	    --results $(RESULTS) --runs $(RAWRUNS) --frame detector --out $(PRODSTAGE)/figures/$$f.pdf || exit 1; \
@@ -293,7 +297,7 @@ production-push: production-check
 	git -C $(PRODUCTION) push origin HEAD:main
 
 # Registered studies on the internal-validation pilot (scripts tracked in studies/).
-.PHONY: weight-correction recovery-trace autofocus-study sky-joint stripes joint3d tools reproduce
+.PHONY: weight-correction recovery-trace autofocus-study sky-joint stripes joint3d joint3d-internal tools reproduce
 weight-correction:
 	test ! -e $(IVCORRECTION)
 	uv run python studies/weight-correction/compare.py --pilot $(IVPAPERARCHIVE) --out $(IVCORRECTION)
@@ -301,7 +305,7 @@ recovery-trace:
 	test ! -e $(IVTRACE)
 	for step in register run compare; do \
 	  OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 uv run python studies/recovery-trace/trace.py $$step --pilot $(IVPAPERARCHIVE) \
-	    --out $(IVTRACE) --ingest $(RUNS)/ingest || exit 1; \
+	    --out $(IVTRACE) --ingest $(RUNS)/ingest --config $(CONFIG) || exit 1; \
 	done
 	for step in register run; do \
 	  uv run python studies/recovery-trace/support_supplement.py $$step \
@@ -368,6 +372,19 @@ joint3d:
 	cp $(JOINT3DRUNS)/results/*.json $(JOINT3DRUNS)/autofocus-study/autofocuslayer.json $(RESULTS3D)/
 	cp configs/paper-inputs.json $(RESULTS3D)/inputs.json
 
+# The internal-validation pilot, corrected-weight comparison and recovery trace on the
+# joint-sky 3D, with its panels and internal-numbers.tex; the summary goes to
+# results/production/3d/internalvalidation.json.
+joint3d-internal:
+	test ! -e $(PRODIVARCHIVE)
+	$(MAKE) RUNS=$(PRODRUNS) IVOUT=$(PRODIVARCHIVE) IVCACHE=$(PRODIVCACHE) internal-validate
+	$(MAKE) IVPAPERARCHIVE=$(PRODIVARCHIVE) IVCORRECTION=$(PRODIVCORRECTION) weight-correction
+	$(MAKE) RUNS=$(PRODRUNS) IVPAPERARCHIVE=$(PRODIVARCHIVE) IVTRACE=$(PRODIVTRACE) recovery-trace
+	uv run python paper-draft/figures/make_internal_paper.py --archive $(PRODIVARCHIVE) \
+	  --correction $(PRODIVCORRECTION) --main-volume $(PRODRUNS)/voxels/volume_full.npz \
+	  --main-coverage $(PRODRUNS)/voxels/views.npy --overlay paper-draft/figures/voxels.png \
+	  --out $(PRODIVFIGOUT) --summary $(RESULTS3D)/internalvalidation.json --baseline-results $(RESULTS3D)
+
 # Everything from the inputs into one fresh root REPRO (never the tracked results/ or the
 # reviewed archives). Compare afterwards with `cafetomo compare-results`. See REPRODUCE.md.
 REPRO_VARS = RUNS=$(REPRO)/baseline RESULTS=$(REPRO)/results GEN=$(REPRO)/draft/generated \
@@ -376,7 +393,11 @@ REPRO_VARS = RUNS=$(REPRO)/baseline RESULTS=$(REPRO)/results GEN=$(REPRO)/draft/
   IVCORRECTION=$(REPRO)/internal-validation/weight-correction \
   IVTRACE=$(REPRO)/internal-validation/recovery-trace IVNOMINAL=$(REPRO)/baseline/voxels \
   IVFIGOUT=$(REPRO)/figure-review/selection IVSUMMARY=$(REPRO)/results/internalvalidation.json \
-  RAWRUNS=$(REPRO)/raw CONVRUNS=$(REPRO)/baseline \
+  RAWRUNS=$(REPRO)/raw PRODIVARCHIVE=$(REPRO)/internal-validation/pilot-joint3d \
+  PRODIVCACHE=$(REPRO)/internal-validation/cache-joint3d \
+  PRODIVCORRECTION=$(REPRO)/internal-validation/weight-correction-joint3d \
+  PRODIVTRACE=$(REPRO)/internal-validation/recovery-trace-joint3d \
+  PRODIVFIGOUT=$(REPRO)/figure-review/joint3d \
   JOINT3DRUNS=$(REPRO)/joint3d SKYRUNS=$(REPRO)/skyswap STRIPERUNS=$(REPRO)/stripes \
   PRODSTAGE=$(REPRO)/production-stage
 # reproduce-stages continues an interrupted reproduction: finished stages are skipped
@@ -398,6 +419,8 @@ reproduce-stages:
 	test -e $(REPRO)/results/production/raw/rawdata.json || $(MAKE) $(REPRO_VARS) rawdata-promote
 	test -e $(REPRO)/results/production/skyjoint.json || $(MAKE) $(REPRO_VARS) sky-joint
 	test -e $(REPRO)/results/production/3d/autofocuslayer.json || $(MAKE) $(REPRO_VARS) joint3d
+	test -e $(REPRO)/results/production/3d/internalvalidation.json || \
+	  $(MAKE) $(REPRO_VARS) joint3d-internal
 	test -e $(REPRO)/results/production/stripes.json || $(MAKE) $(REPRO_VARS) stripes
 	$(MAKE) $(REPRO_VARS) production-stage
 

@@ -211,7 +211,16 @@ def test_default_targets_keep_the_reviewed_archives():
     assert "runs/figure-review/selected-paper-publication-2026-10-18-fix3" in out
     assert "--runs runs/joint3d-2026-10-29/baseline" in out
     assert "numbers --results results/production/3d" in out
-    assert "--also results/internalvalidation.json" in out
+    assert "cp runs/figure-review/joint3d/internal-numbers.tex" in out
+    assert "--results results/production/3d --runs runs/joint3d-2026-10-29/baseline" in out
+
+
+def test_joint3d_internal_validates_the_joint_sky_run(tmp_path):
+    out = _dry("joint3d-internal", f"RESULTS={tmp_path}/res")
+    assert "--ingest runs/joint3d-2026-10-29/baseline/ingest" in out
+    assert "--out runs/internal-validation/pilot-joint3d" in out
+    assert f"--summary {tmp_path}/res/production/3d/internalvalidation.json" in out
+    assert f"--baseline-results {tmp_path}/res/production/3d" in out
 
 
 def test_joint3d_seeds_from_the_joint_sky_and_promotes_into_production(tmp_path):
@@ -229,6 +238,7 @@ def test_reproduce_writes_only_under_its_root(tmp_path):
     for stage in (
         "internal-validate",
         "joint3d",
+        "joint3d-internal",
         "make_internal_paper.py",
         "rawcheck",
         "weight-correction",

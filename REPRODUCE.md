@@ -42,6 +42,7 @@ make reproduce REPRO=runs/repro JOBS=4
 | Recovery trace replay and support supplement | `recovery-trace` (`studies/recovery-trace/`) | `internal-validation/recovery-trace/` | ~1 h |
 | Raw chain: raw ingest, 2D maps, channel calibration, raw-versus-ROOT checks | `raw` | `raw/` | ~15 min |
 | Production 3D on the joint open-sky reference, with the corrected autofocus | `joint3d` (after `sky-joint`) | `joint3d/`, `results/production/3d/` | ~17 h |
+| Internal-validation pilot, weight correction and recovery trace on the production 3D | `joint3d-internal` | `internal-validation/*-joint3d/`, `figure-review/joint3d/`, `results/production/3d/internalvalidation.json` | ~6 h |
 | Draft panels and scalars; draft paper | `internal-selected`, `internal-paper` (inside `production-stage`) | `figure-review/selection/`, `results/internalvalidation.json`, `draft/paper.pdf` | minutes |
 | Production paper macros and figures | `production-stage` | `production-stage/` | minutes |
 

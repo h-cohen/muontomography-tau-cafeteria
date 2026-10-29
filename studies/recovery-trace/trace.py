@@ -16,15 +16,14 @@ from cafetomo.internal_validation import source_hash
 from cafetomo.prediction import _digest
 from cafetomo.recovery import direct_controls, run_recovery_case, simulate_counts, standard_cases
 
-CONFIG = Path("configs/cafeteria.yaml")
-# Set from the command line: the trace output, the pilot it replays and the baseline ingest.
-ROOT = PILOT = INGEST = None
+# Set from the command line: trace output, replayed pilot, baseline ingest and its config.
+ROOT = PILOT = INGEST = CONFIG = None
 
 
-def set_paths(root, pilot, ingest):
+def set_paths(root, pilot, ingest, config):
     # Workers are not forked on every platform, so they receive the paths explicitly.
-    global ROOT, PILOT, INGEST
-    ROOT, PILOT, INGEST = root, pilot, ingest
+    global ROOT, PILOT, INGEST, CONFIG
+    ROOT, PILOT, INGEST, CONFIG = root, pilot, ingest, config
 
 
 def sha(path):
@@ -145,7 +144,7 @@ def run():
     assert os.environ.get("OMP_NUM_THREADS") == "1"
     jobs = [*reg["cases"], None]
     with ProcessPoolExecutor(
-        max_workers=3, initializer=set_paths, initargs=(ROOT, PILOT, INGEST)
+        max_workers=3, initializer=set_paths, initargs=(ROOT, PILOT, INGEST, CONFIG)
     ) as pool:
         pending = {
             pool.submit(controls if job is None else one, *([] if job is None else [job])): job
@@ -240,6 +239,7 @@ if __name__ == "__main__":
     ap.add_argument("--pilot", required=True, type=Path)
     ap.add_argument("--out", required=True, type=Path)
     ap.add_argument("--ingest", required=True, type=Path)
+    ap.add_argument("--config", default=Path("configs/cafeteria.yaml"), type=Path)
     a = ap.parse_args()
-    ROOT, PILOT, INGEST = a.out.resolve(), a.pilot, a.ingest
+    ROOT, PILOT, INGEST, CONFIG = a.out.resolve(), a.pilot, a.ingest, a.config
     {"register": register, "run": run, "compare": compare}[a.step]()

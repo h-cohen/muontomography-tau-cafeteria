@@ -339,12 +339,12 @@ make production-push                           # only when agreed
 
 | Generated file | Source |
 |---|---|
-| `numbers.tex` | `results/production/3d/` (the 3D on the joint open-sky reference, `make joint3d`) and `results/internalvalidation.json` |
-| `internal-numbers.tex` | the reviewed pilot (as for the draft) |
+| `numbers.tex` | `results/production/3d/` (the 3D on the joint open-sky reference, `make joint3d`, and its pilot summary, `make joint3d-internal`) |
+| `internal-numbers.tex` | the internal-validation pilot on the joint-sky 3D (`make joint3d-internal`) |
 | `config-numbers.tex` | `configs/cafeteria.yaml`, named code constants, and the baseline volume's selected iterate |
 | `production-numbers.tex` | `results/production/*.json` (joint open-sky reference, stripes) |
 | `raw-numbers.tex` | `results/production/raw/rawdata.json` (reviewed copy of `runs/raw/results/rawdata.json`, `make rawdata-promote`) and the calibration/view settings |
-| `figures/*.pdf` | `paper-draft/figures/make_*.py` with `--frame detector`, from the joint-sky 3D run `runs/joint3d-2026-10-29/baseline`, `runs/raw`, `runs/convergence-2026-10-21` and `runs/skyswap/joint` (`skyroof`, `skyjoint`) |
+| `figures/*.pdf` | `paper-draft/figures/make_*.py` with `--frame detector`, from the joint-sky 3D run `runs/joint3d-2026-10-29/baseline` (solver history included), `runs/raw` and `runs/skyswap/joint` (`skyroof`, `skyjoint`) |
 
 It refuses when this repository or `paper-production/` has uncommitted changes,
 pulls Overleaf edits by fast-forward only (refusing diverged histories), replaces
@@ -392,8 +392,11 @@ and `skyjoint` (2D maps of pos0 and pos1).
 (`studies/joint3d/seed.py`: pedestal-based hit selection, gain-corrected raw counts),
 runs the full 3D chain and the corrected autofocus into `runs/joint3d-2026-10-29/`, and
 promotes its results to `results/production/3d/`, the production paper's 3D. The
-top-level `results/` stay the reviewed draft's (DAQ histograms); the internal-validation
-pilot and the solver history (`runs/convergence-2026-10-21`) belong to that baseline.
+top-level `results/` stay the reviewed draft's (DAQ histograms). `make joint3d-internal`
+reruns the internal-validation pilot, weight correction and recovery trace on that baseline
+(`runs/internal-validation/*-joint3d`) and renders its panels and macros into
+`runs/figure-review/joint3d` and `results/production/3d/internalvalidation.json`; the
+production convergence figure reads the solver history of the same baseline.
 
 **Solver history.** `runs/convergence-2026-10-21` reruns the nominal
 reconstruction with every iterate's chi2 kept; its volume is bit-identical to the
