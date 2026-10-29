@@ -18,7 +18,7 @@ def relative_score(score) -> np.ndarray:
 
 def main(argv=None) -> None:
     a, _ = frame.setup(argv)
-    af = json.loads((Path(a.results) / "production" / "autofocuslayer.json").read_text())
+    af = json.loads((Path(a.results) / "autofocuslayer.json").read_text())
     beams = style.load_result(a, "beams")
     fig, ax = plt.subplots(figsize=(style.COLUMN_IN, 2.4), layout="constrained")
     ax.axvspan(

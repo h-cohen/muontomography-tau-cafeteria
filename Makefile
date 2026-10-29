@@ -245,7 +245,10 @@ arxiv-internal: arxiv
 # sync into paper-production/generated, check, and push only on request.
 PRODUCTION ?= paper-production
 PRODSTAGE  := runs/production-stage
-PRODRUNS   ?= runs/response-aware-2026-10-07
+# The production paper's 3D: the chain from the joint open-sky reference (`joint3d`).
+JOINT3DRUNS ?= runs/joint3d-2026-10-29
+PRODRUNS   ?= $(JOINT3DRUNS)/baseline
+RESULTS3D   = $(RESULTS)/production/3d
 PRODUCTION_FIGURES := parallax depth setup slices zprofile arrayfit pose coverage autofocus
 # Nominal reconstruction rerun with every iterate's chi2 kept (volume bit-identical to PRODRUNS).
 CONVRUNS   ?= runs/convergence-2026-10-21
@@ -257,7 +260,8 @@ PRODUCTION_LINT ?= 3d.tex,2d.tex,rawdata.tex,sky.tex
 production-stage: internal-paper
 	test -d $(PRODRUNS)/opacity -a -d $(PRODRUNS)/bootstrap -a -d $(PRODRUNS)/ingest
 	rm -rf $(PRODSTAGE) && mkdir -p $(PRODSTAGE)/figures
-	$(CLI) numbers --results $(RESULTS) --out $(PRODSTAGE)/numbers.tex
+	$(CLI) numbers --results $(RESULTS3D) --out $(PRODSTAGE)/numbers.tex \
+	  --also $(RESULTS)/internalvalidation.json
 	$(CLI) numbers --results $(RESULTS)/production --out $(PRODSTAGE)/production-numbers.tex
 	$(CLI) config-numbers --config $(CONFIG) --volume $(PRODRUNS)/voxels/volume_full.npz \
 	  --out $(PRODSTAGE)/config-numbers.tex
@@ -266,8 +270,8 @@ production-stage: internal-paper
 	cp $(IVFIGOUT)/internal-numbers.tex $(IVFIGOUT)/internal-main.pdf $(PRODSTAGE)/
 	mv $(PRODSTAGE)/internal-main.pdf $(PRODSTAGE)/figures/
 	for f in $(PRODUCTION_FIGURES); do \
-	  uv run python paper-draft/figures/make_$$f.py --config $(CONFIG) --pose $(POSE) \
-	    --results $(RESULTS) --runs $(PRODRUNS) --frame detector --out $(PRODSTAGE)/figures/$$f.pdf || exit 1; \
+	  uv run python paper-draft/figures/make_$$f.py --config $(CONFIG) --pose $(RESULTS3D)/pose.json \
+	    --results $(RESULTS3D) --runs $(PRODRUNS) --frame detector --out $(PRODSTAGE)/figures/$$f.pdf || exit 1; \
 	done
 	uv run python paper-draft/figures/make_convergence.py --config $(CONFIG) --pose $(POSE) \
 	  --results $(RESULTS) --runs $(CONVRUNS) --frame detector --out $(PRODSTAGE)/figures/convergence.pdf
@@ -289,7 +293,7 @@ production-push: production-check
 	git -C $(PRODUCTION) push origin HEAD:main
 
 # Registered studies on the internal-validation pilot (scripts tracked in studies/).
-.PHONY: weight-correction recovery-trace autofocus-study sky-joint stripes tools reproduce
+.PHONY: weight-correction recovery-trace autofocus-study sky-joint stripes joint3d tools reproduce
 weight-correction:
 	test ! -e $(IVCORRECTION)
 	uv run python studies/weight-correction/compare.py --pilot $(IVPAPERARCHIVE) --out $(IVCORRECTION)
@@ -304,15 +308,13 @@ recovery-trace:
 	    --pilot $(IVPAPERARCHIVE) --out $(IVTRACE)/support-supplement || exit 1; \
 	done
 
-# Autofocus with the corrected layer; promoted into results/production/ (production only).
+# Autofocus with the corrected layer (production only; `joint3d` promotes it).
 AFRUNS ?= runs/autofocus-study-2026-10-21
 autofocus-study:
 	test ! -e $(AFRUNS)
 	OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 $(CLI) autofocus-study --config $(CONFIG) --pose $(POSE) \
 	  --ingest $(RUNS)/ingest --opacity $(RUNS)/opacity --results $(RESULTS) \
 	  --out $(AFRUNS)/autofocuslayer.json --cache $(AFRUNS)/cache
-	mkdir -p $(RESULTS)/production
-	cp $(AFRUNS)/autofocuslayer.json $(RESULTS)/production/autofocuslayer.json
 
 # Open-sky reference from both roof orientations (studies/sky-orientation, preregistered);
 # promoted into results/production/skyjoint.json (production only).
@@ -351,6 +353,21 @@ stripes:
 	mkdir -p $(RESULTS)/production
 	uv run python studies/maps2d/promote.py $(STRIPERUNS)/maps2d $(RESULTS)/production/stripes.json
 
+# The 3D chain on the joint open-sky reference of both roof orientations (the pedestal
+# selection and gain-corrected raw counts of `sky-joint`), with the corrected autofocus.
+# Promoted into results/production/3d/, the production paper's 3D results; the top-level
+# results/ stay those of the reviewed draft.
+joint3d:
+	test ! -e $(JOINT3DRUNS)
+	uv run python studies/joint3d/seed.py $(CONFIG) $(SKYRUNS)/joint/ingest_m3_phi0 $(JOINT3DRUNS)
+	$(MAKE) RUNS=$(JOINT3DRUNS)/baseline RESULTS=$(JOINT3DRUNS)/results \
+	  viewer validation depthcheck arraydepth
+	$(MAKE) RUNS=$(JOINT3DRUNS)/baseline RESULTS=$(JOINT3DRUNS)/results \
+	  AFRUNS=$(JOINT3DRUNS)/autofocus-study autofocus-study
+	mkdir -p $(RESULTS3D)
+	cp $(JOINT3DRUNS)/results/*.json $(JOINT3DRUNS)/autofocus-study/autofocuslayer.json $(RESULTS3D)/
+	cp configs/paper-inputs.json $(RESULTS3D)/inputs.json
+
 # Everything from the inputs into one fresh root REPRO (never the tracked results/ or the
 # reviewed archives). Compare afterwards with `cafetomo compare-results`. See REPRODUCE.md.
 REPRO_VARS = RUNS=$(REPRO)/baseline RESULTS=$(REPRO)/results GEN=$(REPRO)/draft/generated \
@@ -359,8 +376,8 @@ REPRO_VARS = RUNS=$(REPRO)/baseline RESULTS=$(REPRO)/results GEN=$(REPRO)/draft/
   IVCORRECTION=$(REPRO)/internal-validation/weight-correction \
   IVTRACE=$(REPRO)/internal-validation/recovery-trace IVNOMINAL=$(REPRO)/baseline/voxels \
   IVFIGOUT=$(REPRO)/figure-review/selection IVSUMMARY=$(REPRO)/results/internalvalidation.json \
-  RAWRUNS=$(REPRO)/raw PRODRUNS=$(REPRO)/baseline CONVRUNS=$(REPRO)/baseline \
-  AFRUNS=$(REPRO)/autofocus-study SKYRUNS=$(REPRO)/skyswap STRIPERUNS=$(REPRO)/stripes \
+  RAWRUNS=$(REPRO)/raw CONVRUNS=$(REPRO)/baseline \
+  JOINT3DRUNS=$(REPRO)/joint3d SKYRUNS=$(REPRO)/skyswap STRIPERUNS=$(REPRO)/stripes \
   PRODSTAGE=$(REPRO)/production-stage
 # reproduce-stages continues an interrupted reproduction: finished stages are skipped
 # (by make, or by the study's last output), and the studies refuse an existing output directory.
@@ -379,8 +396,8 @@ reproduce-stages:
 	  $(MAKE) $(REPRO_VARS) recovery-trace
 	$(MAKE) $(REPRO_VARS) raw
 	test -e $(REPRO)/results/production/raw/rawdata.json || $(MAKE) $(REPRO_VARS) rawdata-promote
-	test -e $(REPRO)/results/production/autofocuslayer.json || $(MAKE) $(REPRO_VARS) autofocus-study
 	test -e $(REPRO)/results/production/skyjoint.json || $(MAKE) $(REPRO_VARS) sky-joint
+	test -e $(REPRO)/results/production/3d/autofocuslayer.json || $(MAKE) $(REPRO_VARS) joint3d
 	test -e $(REPRO)/results/production/stripes.json || $(MAKE) $(REPRO_VARS) stripes
 	$(MAKE) $(REPRO_VARS) production-stage
 

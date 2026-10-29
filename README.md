@@ -339,11 +339,12 @@ make production-push                           # only when agreed
 
 | Generated file | Source |
 |---|---|
-| `numbers.tex`, `internal-numbers.tex` | `results/*.json` and the reviewed pilot (as for the draft) |
+| `numbers.tex` | `results/production/3d/` (the 3D on the joint open-sky reference, `make joint3d`) and `results/internalvalidation.json` |
+| `internal-numbers.tex` | the reviewed pilot (as for the draft) |
 | `config-numbers.tex` | `configs/cafeteria.yaml`, named code constants, and the baseline volume's selected iterate |
-| `production-numbers.tex` | `results/production/` (production-only results, e.g. the corrected autofocus) |
+| `production-numbers.tex` | `results/production/*.json` (joint open-sky reference, stripes) |
 | `raw-numbers.tex` | `results/production/raw/rawdata.json` (reviewed copy of `runs/raw/results/rawdata.json`, `make rawdata-promote`) and the calibration/view settings |
-| `figures/*.pdf` | `paper-draft/figures/make_*.py` with `--frame detector`, from the reviewed baseline archive `runs/response-aware-2026-10-07`, `runs/raw`, `runs/convergence-2026-10-21` and `runs/skyswap/joint` (`skyroof`, `skyjoint`) |
+| `figures/*.pdf` | `paper-draft/figures/make_*.py` with `--frame detector`, from the joint-sky 3D run `runs/joint3d-2026-10-29/baseline`, `runs/raw`, `runs/convergence-2026-10-21` and `runs/skyswap/joint` (`skyroof`, `skyjoint`) |
 
 It refuses when this repository or `paper-production/` has uncommitted changes,
 pulls Overleaf edits by fast-forward only (refusing diverged histories), replaces
@@ -369,8 +370,9 @@ results go in `results/production/`.
 +0.05 m (a rounding of thickness/spacing); it is now the configured 0.3 m,
 centred on the trial height. `cafetomo autofocus-study` reruns only autofocus
 (nominal scan, the original bootstrap's 50 replicas, pose/flux/scattering/
-background shifts, phantom check) into `runs/autofocus-study-2026-10-21/`, promoted
-to `results/production/autofocuslayer.json`. The draft keeps the reviewed value.
+background shifts, phantom check); `make joint3d` runs it on the joint-sky 3D and
+promotes it to `results/production/3d/autofocuslayer.json`. The draft keeps the
+reviewed value.
 
 **Joint open-sky reference.** `make sky-joint` (preregistered,
 `studies/sky-orientation/PREREG-joint-sky.md`) fits ln S, the sky's azimuthal structure
@@ -384,8 +386,14 @@ inclined bins (mean < 0.002), a smooth gradient that leaves the beam contrast un
 Outputs `runs/skyswap/` (ingest per part, `joint/` with reference ingest dirs per
 orientation hypothesis and their `beams2d`), promoted to
 `results/production/skyjoint.json`; production figures `skyroof` (Fig. 5, roof rates)
-and `skyjoint` (2D maps of pos0 and pos1). The 3D analysis still uses the DAQ sky
-histogram; its rerun with the joint reference is next.
+and `skyjoint` (2D maps of pos0 and pos1).
+
+**Joint-sky 3D.** `make joint3d` seeds a baseline from the joint reference ingest
+(`studies/joint3d/seed.py`: pedestal-based hit selection, gain-corrected raw counts),
+runs the full 3D chain and the corrected autofocus into `runs/joint3d-2026-10-29/`, and
+promotes its results to `results/production/3d/`, the production paper's 3D. The
+top-level `results/` stay the reviewed draft's (DAQ histograms); the internal-validation
+pilot and the solver history (`runs/convergence-2026-10-21`) belong to that baseline.
 
 **Solver history.** `runs/convergence-2026-10-21` reruns the nominal
 reconstruction with every iterate's chi2 kept; its volume is bit-identical to the

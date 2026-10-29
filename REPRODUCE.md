@@ -41,7 +41,7 @@ make reproduce REPRO=runs/repro JOBS=4
 | Corrected-weight comparison | `weight-correction` (`studies/weight-correction/`) | `internal-validation/weight-correction/` | ~3 min |
 | Recovery trace replay and support supplement | `recovery-trace` (`studies/recovery-trace/`) | `internal-validation/recovery-trace/` | ~1 h |
 | Raw chain: raw ingest, 2D maps, channel calibration, raw-versus-ROOT checks | `raw` | `raw/` | ~15 min |
-| Corrected autofocus (production only) | `autofocus-study` | `autofocus-study/`, `results/production/` | ~1.5 h |
+| Production 3D on the joint open-sky reference, with the corrected autofocus | `joint3d` (after `sky-joint`) | `joint3d/`, `results/production/3d/` | ~17 h |
 | Draft panels and scalars; draft paper | `internal-selected`, `internal-paper` (inside `production-stage`) | `figure-review/selection/`, `results/internalvalidation.json`, `draft/paper.pdf` | minutes |
 | Production paper macros and figures | `production-stage` | `production-stage/` | minutes |
 

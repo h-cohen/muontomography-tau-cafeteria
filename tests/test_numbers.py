@@ -83,6 +83,17 @@ def test_write_numbers(tmp_path):
     assert "\\newcommand{\\XY}{2}" in out.read_text()
 
 
+def test_write_numbers_adds_single_result_files(tmp_path):
+    (tmp_path / "d").mkdir()
+    (tmp_path / "d" / "x.json").write_text(json.dumps({"y": 2.0}))
+    (tmp_path / "z.json").write_text(json.dumps({"w": 3.0}))
+    text = write_numbers(tmp_path / "d", tmp_path / "n.tex", also=[tmp_path / "z.json"]).read_text()
+    assert "\\newcommand{\\XY}{2}" in text and "\\newcommand{\\ZW}{3}" in text
+    (tmp_path / "x.json").write_text(json.dumps({"y": 1.0}))
+    with pytest.raises(ValueError, match="collides"):
+        write_numbers(tmp_path / "d", tmp_path / "n.tex", also=[tmp_path / "x.json"])
+
+
 def test_macro_names_are_letters_only(tmp_path):
     (tmp_path / "d2.json").write_text(json.dumps({"pos0_n": 3, "a.b-c": 1.0}))
     assert all(re.fullmatch(r"[A-Za-z]+", k) for k in flatten(tmp_path))

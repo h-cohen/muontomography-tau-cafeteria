@@ -642,7 +642,8 @@ def cmd_viewer(args) -> None:
 def cmd_numbers(args) -> None:
     from cafetomo.numbers import write_numbers
 
-    write_numbers(Path(args.results), Path(args.out))
+    also = args.also.split(",") if args.also else ()
+    write_numbers(Path(args.results), Path(args.out), also)
 
 
 def cmd_config_numbers(args) -> None:
@@ -754,7 +755,7 @@ def main(argv: list[str] | None = None) -> None:
         # Without --pose a stage runs on the config's prior pose; the Makefile
         # passes the fitted one to every stage after selfcal.
         for o in opts:
-            optional = {"cache", "pose", "jobs", "exposure", "sky", "neighbour-sigmas"}
+            optional = {"cache", "pose", "jobs", "exposure", "sky", "neighbour-sigmas", "also"}
             p.add_argument(f"--{o}", required=o not in optional)
 
     stage(
@@ -796,7 +797,7 @@ def main(argv: list[str] | None = None) -> None:
     )
     stage("export", cmd_export, "config", "pose", "voxels", "bootstrap", "results", "out")
     stage("viewer", cmd_viewer, "export", "out")
-    stage("numbers", cmd_numbers, "results", "out")
+    stage("numbers", cmd_numbers, "results", "out", "also")
     stage("config-numbers", cmd_config_numbers, "config", "volume", "out")
     stage("raw-numbers", cmd_raw_numbers, "rawdata", "config", "out")
     stage("compare-results", cmd_compare_results, "reference", "candidate", "out")

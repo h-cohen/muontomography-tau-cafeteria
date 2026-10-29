@@ -209,7 +209,18 @@ def test_default_targets_keep_the_reviewed_archives():
     out = _dry("production-stage")
     assert "runs/internal-validation/pilot-2026-10-13-a" in out
     assert "runs/figure-review/selected-paper-publication-2026-10-18-fix3" in out
-    assert "--runs runs/response-aware-2026-10-07" in out
+    assert "--runs runs/joint3d-2026-10-29/baseline" in out
+    assert "numbers --results results/production/3d" in out
+    assert "--also results/internalvalidation.json" in out
+
+
+def test_joint3d_seeds_from_the_joint_sky_and_promotes_into_production(tmp_path):
+    j = tmp_path / "j"
+    out = _dry("joint3d", f"JOINT3DRUNS={j}", f"RESULTS={tmp_path}/res")
+    assert f"seed.py configs/cafeteria.yaml runs/skyswap/joint/ingest_m3_phi0 {j}" in out
+    assert f"RESULTS={j}/results" in out
+    assert f"{j}/autofocus-study/autofocuslayer.json {tmp_path}/res/production/3d/" in out
+    assert f"cp configs/paper-inputs.json {tmp_path}/res/production/3d/inputs.json" in out
 
 
 def test_reproduce_writes_only_under_its_root(tmp_path):
@@ -217,7 +228,7 @@ def test_reproduce_writes_only_under_its_root(tmp_path):
     out = _dry("reproduce", f"REPRO={root}")
     for stage in (
         "internal-validate",
-        "autofocus-study",
+        "joint3d",
         "make_internal_paper.py",
         "rawcheck",
         "weight-correction",
