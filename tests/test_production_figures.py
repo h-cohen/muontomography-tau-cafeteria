@@ -85,7 +85,7 @@ def test_depth_resolution_grows_with_height_squared():
 
 
 def test_score_normalized_to_its_minimum():
-    from make_parallax import relative_score
+    from make_heights import relative_score
 
     assert relative_score(np.array([2.0, 1.0, 1.5])).tolist() == [1.0, 0.0, 0.5]
 

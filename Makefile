@@ -255,7 +255,7 @@ PRODIVCACHE      ?= runs/internal-validation/cache-joint3d
 PRODIVCORRECTION ?= runs/internal-validation/weight-correction-joint3d
 PRODIVTRACE      ?= runs/internal-validation/recovery-trace-joint3d
 PRODIVFIGOUT     ?= runs/figure-review/joint3d
-PRODUCTION_FIGURES := parallax depth setup slices arrayfit pose coverage
+PRODUCTION_FIGURES := heights parallax depth setup slices arrayfit pose coverage
 # Nominal reconstruction rerun with every iterate's chi2 kept (volume bit-identical to PRODRUNS).
 PRODUCTION_RAW_FIGURES := maps2d channelcal
 SKYRUNS    ?= runs/skyswap
