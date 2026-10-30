@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from cafetomo.arraydepth import mean_flux_opacity
+from cafetomo.arraydepth import continued_centres, mean_flux_opacity
 
 
 def test_partially_covered_aperture_averages_flux_before_log():
@@ -188,3 +188,9 @@ def test_boundary_replicas_are_flagged_and_retained():
     assert record["replicas"][0]["bound_parameters"] == ["depth"]
     assert record["quadrature_major"] == 32
     assert record["quadrature_minor"] == 3
+
+
+def test_continued_centres_extends_each_end_by_the_median_spacing():
+    centres = np.array([0.0, 1.5, 3.0, 4.6])
+    assert continued_centres(centres, per_end=1).tolist() == [-1.5, 0.0, 1.5, 3.0, 4.6, 6.1]
+    assert len(continued_centres(centres)) == len(centres) + 4

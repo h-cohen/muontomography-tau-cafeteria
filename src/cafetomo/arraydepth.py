@@ -53,14 +53,14 @@ def mean_flux_opacity(offsets, sx, sy, origin_z, *, z, w, h, centres, columns):
     return -logsumexp(-attenuation, axis=1) + np.log(offsets.shape[1])
 
 
-def continued_centres(centres):
+def continued_centres(centres, per_end=CONTINUED_PER_END):
     """Continue measured centre spacing at both ends, without a survey target."""
     centres = np.asarray(centres)
     pitch = np.median(np.diff(centres))
     return np.r_[
-        centres[0] - pitch * np.arange(CONTINUED_PER_END, 0, -1),
+        centres[0] - pitch * np.arange(per_end, 0, -1),
         centres,
-        centres[-1] + pitch * np.arange(1, CONTINUED_PER_END + 1),
+        centres[-1] + pitch * np.arange(1, per_end + 1),
     ]
 
 

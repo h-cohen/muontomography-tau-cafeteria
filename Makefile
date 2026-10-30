@@ -295,7 +295,7 @@ production-push: production-check
 	git -C $(PRODUCTION) push origin HEAD:main
 
 # Registered studies on the internal-validation pilot (scripts tracked in studies/).
-.PHONY: weight-correction recovery-trace autofocus-study sky-joint stripes joint3d joint3d-internal tools reproduce
+.PHONY: weight-correction recovery-trace autofocus-study sky-joint stripes joint3d joint3d-internal systematics3d tools reproduce
 weight-correction:
 	test ! -e $(IVCORRECTION)
 	uv run python studies/weight-correction/compare.py --pilot $(IVPAPERARCHIVE) --out $(IVCORRECTION)
@@ -382,6 +382,17 @@ joint3d-internal:
 	  --correction $(PRODIVCORRECTION) --main-volume $(PRODRUNS)/voxels/volume_full.npz \
 	  --main-coverage $(PRODRUNS)/voxels/views.npy --overlay paper-draft/figures/voxels.png \
 	  --out $(PRODIVFIGOUT) --summary $(RESULTS3D)/internalvalidation.json --baseline-results $(RESULTS3D)
+
+# Registered 3D systematics, time stability and depth controls on the production baseline
+# (studies/systematics3d/PREREG.md); its summary becomes results/production/3d/systematics.json.
+SYS3DRUNS ?= runs/systematics3d-2026-10-30
+systematics3d:
+	test ! -e $(SYS3DRUNS)
+	OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 uv run python studies/systematics3d/run.py run \
+	  --config $(JOINT3DRUNS)/config.yaml --baseline $(PRODRUNS) --results $(RESULTS3D) \
+	  --skyswap $(SKYRUNS) --out $(SYS3DRUNS) --jobs $(or $(JOBS),12)
+	uv run python studies/systematics3d/run.py summarize --out $(SYS3DRUNS) --results $(RESULTS3D)
+	cp $(SYS3DRUNS)/summary.json $(RESULTS3D)/systematics.json
 
 # Everything from the inputs into one fresh root REPRO (never the tracked results/ or the
 # reviewed archives). Compare afterwards with `cafetomo compare-results`. See REPRODUCE.md.
