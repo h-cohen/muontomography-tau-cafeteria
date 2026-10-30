@@ -287,8 +287,6 @@ production-stage: internal-paper
 	  uv run python paper-draft/figures/make_$$f.py --config $(CONFIG) --pose $(POSE) \
 	    --results $(RESULTS) --runs $(SKYRUNS)/joint --frame detector --out $(PRODSTAGE)/figures/$$f.pdf || exit 1; \
 	done
-	uv run python paper-draft/figures/make_stripes.py --config $(CONFIG) --pose $(POSE) \
-	  --results $(RESULTS) --runs $(STRIPERUNS)/maps2d --frame detector --out $(PRODSTAGE)/figures/stripes.pdf
 production-sync: production-stage
 	$(CLI) production-sync --production $(PRODUCTION) --staged $(PRODSTAGE) --results $(RESULTS)
 production-check:

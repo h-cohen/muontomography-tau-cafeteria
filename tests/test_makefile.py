@@ -244,7 +244,6 @@ def test_reproduce_writes_only_under_its_root(tmp_path):
         "weight-correction",
         "recovery-trace",
         "maps2d.py",
-        "make_stripes.py",
         "production-stage",
     ):
         assert stage in out, stage
