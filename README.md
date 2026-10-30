@@ -398,6 +398,13 @@ reruns the internal-validation pilot, weight correction and recovery trace on th
 `runs/figure-review/joint3d` and `results/production/3d/internalvalidation.json`; the
 production convergence figure reads the solver history of the same baseline.
 
+**3D systematics.** `make systematics3d` runs the registered study of
+`studies/systematics3d/PREREG.md` on that baseline: alternative open-sky references,
+early/late halves of the room runs, reconstruction choices, the continued-array scale
+factor, centre/completeness/pose/background shifts, and null, recovery and misspecified
+controls. Its summary, `results/production/3d/systematics.json`, gives the totals the
+production paper quotes.
+
 **Solver history.** `runs/convergence-2026-10-21` reruns the nominal
 reconstruction with every iterate's chi2 kept; its volume is bit-identical to the
 baseline.

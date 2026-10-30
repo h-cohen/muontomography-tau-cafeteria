@@ -5,6 +5,7 @@ import math
 from pathlib import Path
 
 import numpy as np
+from run import RECOVERY_H, SLAB
 
 from cafetomo.beamdepth import AT_BOUND_FRACTION
 
@@ -37,6 +38,11 @@ CONTROL_NAMES = {
     1.8: "thick",
 }
 NOMINAL_TOL = 1e-6
+
+
+def key(name: str) -> str:
+    """A variant name as a macro-safe key (signs spelled out)."""
+    return name.replace("+", "plus").replace("-", "minus")
 
 
 def stat_sigmas(results: Path) -> dict:
@@ -87,7 +93,7 @@ def summarize(out: Path, results: Path) -> dict:
             if shifts:
                 for n in names:
                     if q in v[n]:
-                        doc[f"{q}_{family}_{n}"] = v[n][q] - nominal[q]
+                        doc[f"{q}_{family}_{key(n)}"] = v[n][q] - nominal[q]
                 # an unmeasured variant (NaN) is counted, not taken as a zero shift
                 doc[f"{q}_{family}"] = float(np.nanmax(np.abs(shifts)))
                 doc[f"{q}_{family}_unmeasured"] = int(np.isnan(shifts).sum())
@@ -151,5 +157,21 @@ def summarize(out: Path, results: Path) -> dict:
             np.mean([np.mean(c["normal_columns"]) for c in fits])
         )
     doc["nominal_column_mean"] = float(np.mean(nominal_array["normal_columns"]))
+    doc["control_null_column_ratio"] = doc["control_null_column_mean"] / doc["nominal_column_mean"]
+    recovery = [CONTROL_NAMES[h] for h in RECOVERY_H]
+    for label in recovery:
+        doc[f"control_{label}_true_h"] = next(
+            c["true_h"] for c in controls if CONTROL_NAMES[c["case"]] == label
+        )
+    doc["control_recovery_max_abs_bias"] = max(abs(doc[f"control_{x}_h_bias"]) for x in recovery)
+    doc["control_recovery_max_spread"] = max(doc[f"control_{x}_h_spread"] for x in recovery)
+    doc["control_slab_opacity"] = SLAB
+    doc["reconstruction_spacing_fine"] = v["spacing_015"]["value"]
+    doc["reconstruction_spacing_coarse"] = v["spacing_025"]["value"]
+    # descriptive only, not a budget entry: the sky envelope without the half-turned roof A,
+    # under which the beam centres are not triangulated
+    for q in (*HEIGHTS, *DEPTH):
+        rest = [v[n][q] - nominal[q] for n in FAMILIES["sky"] if n != "sky_flip"]
+        doc[f"{q}_sky_without_flip"] = float(np.max(np.abs(rest)))
     (out / "summary.json").write_text(json.dumps(doc, indent=2, sort_keys=True) + "\n")
     return doc
