@@ -12,6 +12,8 @@ system matrix serves the full fit and every holdout fit alike.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import numpy as np
 from scipy import sparse
 
@@ -68,12 +70,33 @@ def _coverage_damping(col_inv: np.ndarray, mu: float) -> np.ndarray | None:
     return d
 
 
+def _support(fwd: ForwardModel, min_views: int) -> np.ndarray | None:
+    """Voxels crossed by rays of at least `min_views` positions, or None for all.
+
+    A voxel seen from one position only has no depth information: its value is
+    wherever the solver parks that position's residual along the ray.
+    """
+    if min_views <= 1:
+        return None
+    A = fwd.A.tocsr()
+    seen = np.zeros(A.shape[1], dtype=np.int64)
+    for i in range(len(fwd.rows.position_ids)):
+        block = A[np.flatnonzero(fwd.rows.pos_of_row == i)]
+        seen[np.unique(block.indices[block.data != 0])] += 1
+    return seen >= min_views
+
+
 def _named(c: np.ndarray, position_ids) -> dict[str, float]:
     return {pid: float(v) for pid, v in zip(position_ids, c, strict=True)}
 
 
 def sirt(
-    fwd: ForwardModel, data: FitData, rc: Reconstruction, *, fit_offsets: bool
+    fwd: ForwardModel,
+    data: FitData,
+    rc: Reconstruction,
+    *,
+    fit_offsets: bool,
+    support: np.ndarray | None = None,
 ) -> tuple[np.ndarray, dict]:
     """Weighted SIRT with nonnegativity and per-position offset refinement.
 
@@ -106,6 +129,8 @@ def sirt(
             np.maximum(x, 0.0, out=x)
         if damp is not None:
             x /= damp
+        if support is not None:
+            x[~support] = 0.0
         n_updates = k + 1
     history.append(chi2)
     return x, {
@@ -156,7 +181,12 @@ def _prox_tv(
 
 
 def sirt_tv(
-    fwd: ForwardModel, data: FitData, rc: Reconstruction, *, fit_offsets: bool
+    fwd: ForwardModel,
+    data: FitData,
+    rc: Reconstruction,
+    *,
+    fit_offsets: bool,
+    support: np.ndarray | None = None,
 ) -> tuple[np.ndarray, dict]:
     """SIRT with a per-iteration anisotropic-TV proximal (denoising) step.
 
@@ -197,6 +227,8 @@ def sirt_tv(
         scale = float(np.percentile(x[x > 0], TV_SCALE_PERCENTILE)) if (x > 0).any() else 0.0
         gamma = rc.tv_alpha * max(scale, 1e-9)
         x = _prox_tv(x.reshape(shape), gamma, rc.tv_z_weight, dual).ravel()
+        if support is not None:
+            x[~support] = 0.0
 
     return best[1], {
         "offsets": _named(best[2], fwd.rows.position_ids),
@@ -219,7 +251,14 @@ def solve(
     point is measured. Fitting c_p against a measured level re-opens the
     degeneracy that moves a flat overburden into the offset and its oblique
     excess into the outer shell of the volume.
+
+    With `rc.min_views` > 1 only the voxels seen by that many positions are
+    unknowns; the others are held at zero.
     """
     if rc.algorithm not in SOLVERS:
         raise ValueError(f"unknown algorithm {rc.algorithm!r}; have {sorted(SOLVERS)}")
-    return SOLVERS[rc.algorithm](fwd, data, rc, fit_offsets=fit_offsets)
+    support = _support(fwd, rc.min_views)
+    if support is None:
+        return SOLVERS[rc.algorithm](fwd, data, rc, fit_offsets=fit_offsets)
+    masked = replace(fwd, A=sparse.csr_matrix(fwd.A.multiply(support[None, :])))
+    return SOLVERS[rc.algorithm](masked, data, rc, fit_offsets=fit_offsets, support=support)

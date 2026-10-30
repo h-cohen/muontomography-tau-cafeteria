@@ -76,3 +76,17 @@ columns and centre height z_c = bottom + h/2 of the nominal fit:
 No outcome is a pass/fail gate on the reported depth; controls are reported as found. The depth is
 quoted as a measurement only with its full budget; if the recovery bias at the nominal h exceeds
 the total uncertainty, the paper says so.
+
+## Amendment (2026-10-30) — undamped two-view reconstruction
+
+Registered before any run of this study on the new nominal. The production 3D now reconstructs with
+`configs/production3d.yaml`: coverage damping μ = 0 and only voxels seen from both positions as
+unknowns (`min_views: 2`). The change was made after inspecting reconstructions: a ceiling-only
+phantom through the real rows put 23% of its opacity below 5 m with μ = 0.05 and 4% with μ = 0, and
+the cross-position prediction of the data improved without damping. The two-view support raises the
+nominal χ² per row; it is reported, not tuned.
+
+Item 8 changes accordingly. μ × {1/2, 2} is void at μ = 0 and is replaced by μ ∈ {0.01, 0.05}
+(0.05 = the previous nominal); a third variant solves on every voxel (`min_views: 1`). All three
+belong to the `reconstruction` family and its envelope. Every other item is unchanged and is rerun
+on the new nominal in a fresh output directory.

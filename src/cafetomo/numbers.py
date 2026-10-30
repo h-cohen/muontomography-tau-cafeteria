@@ -160,10 +160,10 @@ def archive_macros(volume_npz: Path) -> dict[str, str]:
 
 
 def write_config_numbers(config: Path, volume_npz: Path, out: Path) -> Path:
-    import yaml
+    from cafetomo.config import read_config
 
     macros = {
-        **config_macros(yaml.safe_load(Path(config).read_text())),
+        **config_macros(read_config(config)),
         **paper_constants(),
         **archive_macros(Path(volume_npz)),
     }

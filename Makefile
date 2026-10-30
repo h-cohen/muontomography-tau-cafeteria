@@ -246,15 +246,17 @@ arxiv-internal: arxiv
 PRODUCTION ?= paper-production
 PRODSTAGE  := runs/production-stage
 # The production paper's 3D: the chain from the joint open-sky reference (`joint3d`).
-JOINT3DRUNS ?= runs/joint3d-2026-10-29
+JOINT3DRUNS ?= runs/joint3d-2026-10-30
+# Its config: the campaign's, with the undamped two-view reconstruction support.
+PROD3DCONFIG ?= configs/production3d.yaml
 PRODRUNS   ?= $(JOINT3DRUNS)/baseline
 RESULTS3D   = $(RESULTS)/production/3d
 # The internal-validation pilot on that run (`joint3d-internal`).
-PRODIVARCHIVE    ?= runs/internal-validation/pilot-joint3d
-PRODIVCACHE      ?= runs/internal-validation/cache-joint3d
-PRODIVCORRECTION ?= runs/internal-validation/weight-correction-joint3d
-PRODIVTRACE      ?= runs/internal-validation/recovery-trace-joint3d
-PRODIVFIGOUT     ?= runs/figure-review/joint3d
+PRODIVARCHIVE    ?= runs/internal-validation/pilot-joint3d-2026-10-30
+PRODIVCACHE      ?= runs/internal-validation/cache-joint3d-2026-10-30
+PRODIVCORRECTION ?= runs/internal-validation/weight-correction-joint3d-2026-10-30
+PRODIVTRACE      ?= runs/internal-validation/recovery-trace-joint3d-2026-10-30
+PRODIVFIGOUT     ?= runs/figure-review/joint3d-2026-10-30
 PRODUCTION_FIGURES := heights parallax depth setup slices arrayfit pose coverage
 # Nominal reconstruction rerun with every iterate's chi2 kept (volume bit-identical to PRODRUNS).
 PRODUCTION_RAW_FIGURES := maps2d channelcal
@@ -267,17 +269,18 @@ production-stage: internal-paper
 	rm -rf $(PRODSTAGE) && mkdir -p $(PRODSTAGE)/figures
 	$(CLI) numbers --results $(RESULTS3D) --out $(PRODSTAGE)/numbers.tex
 	$(CLI) numbers --results $(RESULTS)/production --out $(PRODSTAGE)/production-numbers.tex
-	$(CLI) config-numbers --config $(CONFIG) --volume $(PRODRUNS)/voxels/volume_full.npz \
+	$(CLI) config-numbers --config $(PROD3DCONFIG) --volume $(PRODRUNS)/voxels/volume_full.npz \
 	  --out $(PRODSTAGE)/config-numbers.tex
 	$(CLI) raw-numbers --rawdata $(RAWDATA) --config $(CONFIG) \
 	  --out $(PRODSTAGE)/raw-numbers.tex
 	cp $(PRODIVFIGOUT)/internal-numbers.tex $(PRODIVFIGOUT)/internal-main.pdf $(PRODSTAGE)/
 	mv $(PRODSTAGE)/internal-main.pdf $(PRODSTAGE)/figures/
 	for f in $(PRODUCTION_FIGURES); do \
-	  uv run python paper-draft/figures/make_$$f.py --config $(CONFIG) --pose $(RESULTS3D)/pose.json \
+	  uv run python paper-draft/figures/make_$$f.py --config $(PROD3DCONFIG) --pose $(RESULTS3D)/pose.json \
 	    --results $(RESULTS3D) --runs $(PRODRUNS) --frame detector --out $(PRODSTAGE)/figures/$$f.pdf || exit 1; \
 	done
-	uv run python paper-draft/figures/make_convergence.py --config $(CONFIG) --pose $(RESULTS3D)/pose.json \
+	uv run python paper-draft/figures/make_convergence.py --config $(PROD3DCONFIG) \
+	  --pose $(RESULTS3D)/pose.json \
 	  --results $(RESULTS3D) --runs $(PRODRUNS) --frame detector --out $(PRODSTAGE)/figures/convergence.pdf
 	for f in $(PRODUCTION_RAW_FIGURES); do \
 	  uv run python paper-draft/figures/make_$$f.py --config $(CONFIG) --pose $(POSE) \
@@ -361,10 +364,10 @@ stripes:
 # results/ stay those of the reviewed draft.
 joint3d:
 	test ! -e $(JOINT3DRUNS)
-	uv run python studies/joint3d/seed.py $(CONFIG) $(SKYRUNS)/joint/ingest_m3_phi0 $(JOINT3DRUNS)
-	$(MAKE) RUNS=$(JOINT3DRUNS)/baseline RESULTS=$(JOINT3DRUNS)/results \
+	uv run python studies/joint3d/seed.py $(PROD3DCONFIG) $(SKYRUNS)/joint/ingest_m3_phi0 $(JOINT3DRUNS)
+	$(MAKE) CONFIG=$(PROD3DCONFIG) RUNS=$(JOINT3DRUNS)/baseline RESULTS=$(JOINT3DRUNS)/results \
 	  viewer validation depthcheck arraydepth
-	$(MAKE) RUNS=$(JOINT3DRUNS)/baseline RESULTS=$(JOINT3DRUNS)/results \
+	$(MAKE) CONFIG=$(PROD3DCONFIG) RUNS=$(JOINT3DRUNS)/baseline RESULTS=$(JOINT3DRUNS)/results \
 	  AFRUNS=$(JOINT3DRUNS)/autofocus-study autofocus-study
 	mkdir -p $(RESULTS3D)
 	cp $(JOINT3DRUNS)/results/*.json $(JOINT3DRUNS)/autofocus-study/autofocuslayer.json $(RESULTS3D)/
@@ -375,9 +378,12 @@ joint3d:
 # results/production/3d/internalvalidation.json.
 joint3d-internal:
 	test ! -e $(PRODIVARCHIVE)
-	$(MAKE) RUNS=$(PRODRUNS) IVOUT=$(PRODIVARCHIVE) IVCACHE=$(PRODIVCACHE) internal-validate
-	$(MAKE) IVPAPERARCHIVE=$(PRODIVARCHIVE) IVCORRECTION=$(PRODIVCORRECTION) weight-correction
-	$(MAKE) RUNS=$(PRODRUNS) IVPAPERARCHIVE=$(PRODIVARCHIVE) IVTRACE=$(PRODIVTRACE) recovery-trace
+	$(MAKE) CONFIG=$(PROD3DCONFIG) RUNS=$(PRODRUNS) IVOUT=$(PRODIVARCHIVE) IVCACHE=$(PRODIVCACHE) \
+	  internal-validate
+	$(MAKE) CONFIG=$(PROD3DCONFIG) IVPAPERARCHIVE=$(PRODIVARCHIVE) IVCORRECTION=$(PRODIVCORRECTION) \
+	  weight-correction
+	$(MAKE) CONFIG=$(PROD3DCONFIG) RUNS=$(PRODRUNS) IVPAPERARCHIVE=$(PRODIVARCHIVE) \
+	  IVTRACE=$(PRODIVTRACE) recovery-trace
 	uv run python paper-draft/figures/make_internal_paper.py --archive $(PRODIVARCHIVE) \
 	  --correction $(PRODIVCORRECTION) --main-volume $(PRODRUNS)/voxels/volume_full.npz \
 	  --main-coverage $(PRODRUNS)/voxels/views.npy --overlay paper-draft/figures/voxels.png \
@@ -385,11 +391,11 @@ joint3d-internal:
 
 # Registered 3D systematics, time stability and depth controls on the production baseline
 # (studies/systematics3d/PREREG.md); its summary becomes results/production/3d/systematics.json.
-SYS3DRUNS ?= runs/systematics3d-2026-10-30
+SYS3DRUNS ?= runs/systematics3d-twoview-2026-10-30
 systematics3d:
 	test ! -e $(SYS3DRUNS)
 	OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 uv run python studies/systematics3d/run.py run \
-	  --config $(JOINT3DRUNS)/config.yaml --baseline $(PRODRUNS) --results $(RESULTS3D) \
+	  --config $(PROD3DCONFIG) --baseline $(PRODRUNS) --results $(RESULTS3D) \
 	  --skyswap $(SKYRUNS) --out $(SYS3DRUNS) --jobs $(or $(JOBS),12)
 	uv run python studies/systematics3d/run.py summarize --out $(SYS3DRUNS) --results $(RESULTS3D)
 	cp $(SYS3DRUNS)/summary.json $(RESULTS3D)/systematics.json

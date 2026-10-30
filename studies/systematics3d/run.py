@@ -36,8 +36,9 @@ SKY_VARIANTS = {
 RECON_VARIANTS = {
     "alpha_half": ("reconstruction", "tv_alpha", 0.5),
     "alpha_double": ("reconstruction", "tv_alpha", 2.0),
-    "damping_half": ("reconstruction", "coverage_damping", 0.5),
-    "damping_double": ("reconstruction", "coverage_damping", 2.0),
+    "damping_001": ("reconstruction", "coverage_damping", 0.01),
+    "damping_005": ("reconstruction", "coverage_damping", 0.05),
+    "support_all": ("reconstruction", "min_views", 1),
     "spacing_015": ("volume", "spacing_m", 0.15),
     "spacing_025": ("volume", "spacing_m", 0.25),
     "early_stop": ("reconstruction", "n_iter", 15),
@@ -211,7 +212,7 @@ def task(spec):
         section, key, factor = arg
         value = (
             factor
-            if key in ("spacing_m", "n_iter")
+            if key in ("spacing_m", "n_iter", "coverage_damping", "min_views")
             else getattr(getattr(cfg, section), key) * factor
         )
         doc = evaluate(data, nominal_cfg(set=[(section, key, value)]), sky, name)

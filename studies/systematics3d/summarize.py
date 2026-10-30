@@ -17,8 +17,9 @@ FAMILIES = {
     "reconstruction": (
         "alpha_half",
         "alpha_double",
-        "damping_half",
-        "damping_double",
+        "damping_001",
+        "damping_005",
+        "support_all",
         "spacing_015",
         "spacing_025",
         "early_stop",
@@ -28,7 +29,14 @@ FAMILIES = {
     "background": ("background_1", "background_3"),
     "pose": tuple(f"pose_{a}_{s}" for a in ("x", "y", "az_deg") for s in ("-1", "+1")),
 }
-SAME_GRID = ("alpha_half", "alpha_double", "damping_half", "damping_double", "early_stop")
+SAME_GRID = (
+    "alpha_half",
+    "alpha_double",
+    "damping_001",
+    "damping_005",
+    "support_all",
+    "early_stop",
+)
 CONTROL_NAMES = {
     "null": "null",
     "slab": "slab",

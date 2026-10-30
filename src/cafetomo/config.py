@@ -94,6 +94,8 @@ class Reconstruction:
     tv_alpha: float = 0.03
     tv_z_weight: float = 0.0
     coverage_damping: float = 0.05
+    # Voxels seen by fewer positions are not unknowns: they carry no depth information.
+    min_views: int = 1
     seed: int = 42
 
 
@@ -364,9 +366,30 @@ def _load_raw(raw: dict | None, base: Path) -> RawSettings | None:
     return replace(settings, exposures=dirs)
 
 
+def read_config(path: str | Path) -> dict:
+    """The config's YAML, with `extends: <file>` resolved: the named config (in the
+    same directory, so relative paths keep their meaning) with this file's keys laid
+    over it, section by section."""
+    path = Path(path).resolve()
+    raw = yaml.safe_load(path.read_text()) or {}
+    parent = raw.pop("extends", None)
+    if parent is None:
+        return raw
+    base_path = path.parent / parent
+    if base_path.parent != path.parent:
+        raise ValueError(f"config {path.name}: extends must name a config in the same directory")
+    base = read_config(base_path)
+    for key, value in raw.items():
+        if isinstance(value, dict) and isinstance(base.get(key), dict):
+            base[key] = {**base[key], **value}
+        else:
+            base[key] = value
+    return base
+
+
 def load_config(path: str | Path, pose_file: str | Path | None = None) -> Config:
     path = Path(path).resolve()
-    raw = yaml.safe_load(path.read_text())
+    raw = read_config(path)
     sections = {
         "binning": Binning,
         "opacity": OpacitySettings,

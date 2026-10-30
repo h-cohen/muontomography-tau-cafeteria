@@ -209,16 +209,18 @@ def test_default_targets_keep_the_reviewed_archives():
     out = _dry("production-stage")
     assert "runs/internal-validation/pilot-2026-10-13-a" in out
     assert "runs/figure-review/selected-paper-publication-2026-10-18-fix3" in out
-    assert "--runs runs/joint3d-2026-10-29/baseline" in out
+    assert "--runs runs/joint3d-2026-10-30/baseline" in out
     assert "numbers --results results/production/3d" in out
-    assert "cp runs/figure-review/joint3d/internal-numbers.tex" in out
-    assert "--results results/production/3d --runs runs/joint3d-2026-10-29/baseline" in out
+    assert "cp runs/figure-review/joint3d-2026-10-30/internal-numbers.tex" in out
+    assert "--results results/production/3d --runs runs/joint3d-2026-10-30/baseline" in out
+    assert "--config configs/production3d.yaml --pose results/production/3d/pose.json" in out
 
 
 def test_joint3d_internal_validates_the_joint_sky_run(tmp_path):
     out = _dry("joint3d-internal", f"RESULTS={tmp_path}/res")
-    assert "--ingest runs/joint3d-2026-10-29/baseline/ingest" in out
-    assert "--out runs/internal-validation/pilot-joint3d" in out
+    assert "--ingest runs/joint3d-2026-10-30/baseline/ingest" in out
+    assert "--out runs/internal-validation/pilot-joint3d-2026-10-30" in out
+    assert "--config configs/production3d.yaml" in out
     assert f"--summary {tmp_path}/res/production/3d/internalvalidation.json" in out
     assert f"--baseline-results {tmp_path}/res/production/3d" in out
 
@@ -226,7 +228,8 @@ def test_joint3d_internal_validates_the_joint_sky_run(tmp_path):
 def test_joint3d_seeds_from_the_joint_sky_and_promotes_into_production(tmp_path):
     j = tmp_path / "j"
     out = _dry("joint3d", f"JOINT3DRUNS={j}", f"RESULTS={tmp_path}/res")
-    assert f"seed.py configs/cafeteria.yaml runs/skyswap/joint/ingest_m3_phi0 {j}" in out
+    assert f"seed.py configs/production3d.yaml runs/skyswap/joint/ingest_m3_phi0 {j}" in out
+    assert f"CONFIG=configs/production3d.yaml RUNS={j}/baseline" in out
     assert f"RESULTS={j}/results" in out
     assert f"{j}/autofocus-study/autofocuslayer.json {tmp_path}/res/production/3d/" in out
     assert f"cp configs/paper-inputs.json {tmp_path}/res/production/3d/inputs.json" in out

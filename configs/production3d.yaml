@@ -1,0 +1,8 @@
+# The production paper's 3D: the campaign config with the reconstruction's support.
+# A ceiling-only phantom through the real rows shows the coverage damping pushing
+# opacity from the ceiling (few rays per voxel) into the air near the detectors
+# (many); undamped, the one-view voxels hold no depth and are left out of the solve.
+extends: cafeteria.yaml
+reconstruction:
+  coverage_damping: 0.0
+  min_views: 2

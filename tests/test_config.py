@@ -70,3 +70,37 @@ def test_unknown_flux_model_raises(tmp_path):
     bad.write_text(text.replace("../data", os.path.abspath("data")))
     with pytest.raises(ValueError, match="nope"):
         load_config(bad)
+
+
+def test_extends_overrides_only_the_named_keys(tmp_path):
+    base = tmp_path / "base.yaml"
+    base.write_text(open(CONFIG).read().replace("../data", os.path.abspath("data")))
+    child = tmp_path / "child.yaml"
+    child.write_text(
+        "extends: base.yaml\nreconstruction:\n  coverage_damping: 0.0\n  min_views: 2\n"
+    )
+    b, c = load_config(base), load_config(child)
+    assert c.reconstruction.coverage_damping == 0.0
+    assert c.reconstruction.min_views == 2
+    assert c.reconstruction.tv_alpha == b.reconstruction.tv_alpha
+    assert c.volume == b.volume and c.data_dir == b.data_dir
+
+
+def test_extends_must_name_a_config_beside_it(tmp_path):
+    child = tmp_path / "child.yaml"
+    child.write_text("extends: ../elsewhere/base.yaml\n")
+    with pytest.raises(ValueError, match="same directory"):
+        load_config(child)
+
+
+def test_production_3d_config_changes_only_the_reconstruction_support():
+    from cafetomo.config import read_config
+
+    base, prod = read_config(CONFIG), read_config("configs/production3d.yaml")
+    assert {k for k in base if base[k] != prod[k]} == {"reconstruction"}
+    changed = {
+        k
+        for k in prod["reconstruction"]
+        if prod["reconstruction"][k] != base["reconstruction"].get(k)
+    }
+    assert changed == {"coverage_damping", "min_views"}

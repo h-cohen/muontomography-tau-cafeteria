@@ -208,3 +208,23 @@ def test_tv_records_every_scored_iterate():
     x, info = sirt_tv(fwd, data, _rc(algorithm="tv", n_iter=40, tv_alpha=0.01), fit_offsets=True)
     assert len(info["chi2_history"]) == 40
     assert info["chi2_history"][info["best_iter"]] == info["best_chi2"]
+
+
+def test_min_views_leaves_voxels_seen_by_one_position_empty():
+    """Under min_views=2 a voxel crossed by one position's rays only is not an unknown:
+    it holds nothing, and the rest of the volume carries the fit."""
+    fwd, truth, data = _toy(shape=(4, 4, 2))
+    A = fwd.A.tolil()
+    pos1_rows = np.flatnonzero(data.rows.pos_of_row == 1)
+    A[pos1_rows, :4] = 0.0  # voxels 0..3: seen by pos0 alone
+    A[:, 4] = 0.0
+    A[0, 4] = 1.0  # voxel 4: one ray of pos0 only
+    fwd = replace(fwd, A=A.tocsr())
+    data = replace(data, lam=fwd.A @ truth)
+    for algorithm in ("sirt", "tv"):
+        rc = _rc(algorithm=algorithm, n_iter=60, chi2_target=1e-12, tv_alpha=0.01, min_views=2)
+        x, _ = solve(fwd, data, rc, fit_offsets=False)
+        assert np.all(x[:5] == 0.0), algorithm
+        assert x[5:].max() > 0.0
+    x1, _ = solve(fwd, data, _rc(algorithm="sirt", n_iter=60, chi2_target=1e-12), fit_offsets=False)
+    assert x1[:5].max() > 0.0  # min_views=1 (the default) keeps them
