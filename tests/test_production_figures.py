@@ -31,7 +31,7 @@ def test_profile_axes_span_fitted_pose():
 
 
 def test_half_maximum_level():
-    from make_zprofile import half_maximum
+    from make_coverage import half_maximum
 
     assert half_maximum(np.array([0.0, 2.0, 1.0])) == 1.0
 
@@ -85,7 +85,7 @@ def test_depth_resolution_grows_with_height_squared():
 
 
 def test_score_normalized_to_its_minimum():
-    from make_autofocus import relative_score
+    from make_parallax import relative_score
 
     assert relative_score(np.array([2.0, 1.0, 1.5])).tolist() == [1.0, 0.0, 0.5]
 

@@ -1,4 +1,5 @@
-"""Where the two views constrain the volume, and how vertical resolution falls with height."""
+"""Where the two views constrain the volume, how vertical resolution falls with height, and
+the beam-minus-gap voxel profile along z with its half-maximum width."""
 
 from pathlib import Path
 
@@ -15,6 +16,10 @@ def resolution_curve(z, *, sigma_t: float, baseline: float) -> np.ndarray:
     return np.array([depth_resolution(float(v), baseline, sigma_t) for v in np.atleast_1d(z)])
 
 
+def half_maximum(profile) -> float:
+    return float(np.nanmax(profile)) / 2
+
+
 def main(argv=None) -> None:
     a, cfg = frame.setup(argv)
     beams = style.load_result(a, "beams")
@@ -28,12 +33,9 @@ def main(argv=None) -> None:
     k = int(np.argmin(np.abs(zc - beams["z"])))
     band = np.abs(yc) <= cfg.beamdepth.y_band_m[1]
 
-    fig, (ax, bx, cx) = plt.subplots(
-        1,
-        3,
-        figsize=(style.FULL_IN, 2.5),
-        layout="constrained",
-        gridspec_kw={"width_ratios": [1, 1.6, 1]},
+    bd = style.load_result(a, "beamdepth")
+    fig, ((ax, bx), (cx, dx)) = plt.subplots(
+        2, 2, figsize=(style.FULL_IN, 4.8), layout="constrained"
     )
     shown, extent_shown = frame.top_view(
         views[:, :, k], (xc[0] - half, xc[-1] + half), (yc[0] - half, yc[-1] + half)
@@ -72,7 +74,25 @@ def main(argv=None) -> None:
     )
     cx.set(xlabel=r"$\delta z$ (m)", ylabel=r"$z$ (m)")
     cx.legend(loc="lower right")
-    style.label_panels((ax, bx, cx))
+
+    zp = np.asarray(bd["zprofile_profile_z"])
+    p = np.asarray(bd["zprofile_profile"])
+    dx.axvspan(
+        array["bottom"], array["bottom"] + array["h"], color=style.GRID, label="conditional box"
+    )
+    dx.plot(zp, p, "o-", ms=2.5, color=style.INK, label=r"$\Pi(z)$")
+    dx.axhline(half_maximum(p), color=style.MUTED, lw=0.8, ls=":")
+    for key in ("zprofile_bottom", "zprofile_top"):
+        dx.axvline(bd[key], color=style.INK_SECONDARY, lw=0.8, ls="--")
+    dx.annotate(
+        "",
+        xy=(bd["zprofile_top"], half_maximum(p)),
+        xytext=(bd["zprofile_bottom"], half_maximum(p)),
+        arrowprops={"arrowstyle": "<->", "lw": 0.8},
+    )
+    dx.set(xlabel=r"$z$ (m)", ylabel=r"beam minus gap $q$ (1/m)")
+    dx.legend(loc="upper left")
+    style.label_panels((ax, bx, cx, dx))
     style.save(fig, a)
 
 

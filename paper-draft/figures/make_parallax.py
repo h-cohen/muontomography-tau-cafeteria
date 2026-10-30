@@ -1,5 +1,7 @@
-"""Geometric ceiling-height test: parallax correlation, projected shadows, angular spectra."""
+"""Ceiling-plane height: parallax correlation, projected shadows, angular spectra and the
+corrected data-driven autofocus (cross-position prediction score versus layer height)."""
 
+import json
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -21,6 +23,12 @@ def projected_profiles(t, profiles: dict, origins: dict, *, z: float, n: int = 4
     }
 
 
+def relative_score(score) -> np.ndarray:
+    """Score excess over its minimum, as a fraction of the minimum."""
+    s = np.asarray(score, dtype=float)
+    return s / s.min() - 1.0
+
+
 def main(argv=None) -> None:
     a, cfg = frame.setup(argv)
     beams = style.load_result(a, "beams")
@@ -30,7 +38,9 @@ def main(argv=None) -> None:
     band = cfg.beams.band_x
     origins = cfg.origins()
 
-    fig, (ax, bx, cx) = plt.subplots(1, 3, figsize=(style.FULL_IN, 2.5), layout="constrained")
+    fig, ((ax, bx), (cx, dx)) = plt.subplots(
+        2, 2, figsize=(style.FULL_IN, 4.6), layout="constrained"
+    )
     ax.plot(
         beams["scan_z"], beams["scan_corr_x"], color=style.INK, label=rf"$\rho_{frame.ax('x')}$"
     )
@@ -64,7 +74,23 @@ def main(argv=None) -> None:
         cx.axvline(1 / beams["period_per_position"][pid], color=style.POSITION_COLORS[pid], lw=0.8)
     cx.set(xlabel=r"angular frequency (1/tangent unit)", ylabel="normalized FFT amplitude")
     cx.legend(loc="upper right")
-    style.label_panels((ax, bx, cx))
+
+    af = json.loads((Path(a.results) / "autofocuslayer.json").read_text())
+    dx.axvspan(
+        af["z"] - af["z_total"], af["z"] + af["z_total"], color=style.GRID, label="evaluated total"
+    )
+    dx.plot(af["scan_z"], relative_score(af["scan_score"]), "o-", ms=3, color=style.INK)
+    dx.axvline(af["z"], color=style.INK, ls="--", lw=0.8, label="autofocus")
+    dx.axvline(
+        beams["z_x"],
+        color=style.POSITION_COLORS["pos1"],
+        ls=":",
+        lw=0.8,
+        label=rf"triangulated $z_{frame.ax('x')}$",
+    )
+    dx.set(xlabel="trial layer height (m)", ylabel=r"$\mathcal{C}/\mathcal{C}_{\min}-1$")
+    dx.legend(loc="upper center")
+    style.label_panels((ax, bx, cx, dx))
     style.save(fig, a)
 
 
