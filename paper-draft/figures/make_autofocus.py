@@ -31,7 +31,7 @@ def main(argv=None) -> None:
         color=style.POSITION_COLORS["pos1"],
         ls=":",
         lw=0.8,
-        label=r"triangulated $z_x$",
+        label=rf"triangulated $z_{frame.ax('x')}$",
     )
     ax.set(xlabel="trial layer height (m)", ylabel=r"$\mathcal{C}/\mathcal{C}_{\min}-1$")
     ax.legend(loc="upper center")
