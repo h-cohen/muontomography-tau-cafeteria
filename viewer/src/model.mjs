@@ -1,5 +1,5 @@
 import { CAMERA_PRESETS } from './camera.mjs';
-import { colormapStops } from './colormap.mjs';
+import { DEFAULT_COLORMAP, colormapStops } from './colormap.mjs';
 
 // The viewer's display state: defaults, and which follow-ups each field needs
 // when it changes. app.mjs owns the GL/DOM side; commit() there runs the
@@ -20,7 +20,7 @@ export function createState() {
       distance: 3,
       target: [0, 0, 0],
     },
-    transferStops: colormapStops('viridis'),
+    transferStops: colormapStops(DEFAULT_COLORMAP),
     clipMin: [0, 0, 0],
     clipMax: [1, 1, 1],
     clipPlaneEnabled: false,

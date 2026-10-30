@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { COLORMAP_NAMES, colormapStops } from '../src/colormap.mjs';
+import { COLORMAP_NAMES, DEFAULT_COLORMAP, colormapStops } from '../src/colormap.mjs';
 
 test('exposes the four presets', () => {
   for (const n of ['viridis', 'inferno', 'magma', 'grayscale']) {
@@ -29,4 +29,23 @@ test('grayscale is neutral (r==g==b at every stop)', () => {
 
 test('unknown name falls back to viridis', () => {
   assert.deepEqual(colormapStops('nope'), colormapStops('viridis'));
+});
+
+test('reversed presets: light at low density, dark at high, same alpha ramp', () => {
+  for (const n of ['viridis', 'inferno', 'magma', 'grayscale']) {
+    assert.ok(COLORMAP_NAMES.includes(`${n}_r`), `${n}_r`);
+    const fwd = colormapStops(n);
+    const rev = colormapStops(`${n}_r`);
+    rev.forEach((st, i) => {
+      const mirror = fwd[fwd.length - 1 - i];
+      assert.deepEqual([st.r, st.g, st.b], [mirror.r, mirror.g, mirror.b]);
+      assert.equal(st.a, fwd[i].a);
+    });
+  }
+  const g = colormapStops('grayscale_r');
+  assert.ok(g[0].r > g[g.length - 1].r);
+});
+
+test('the default is the reversed viridis', () => {
+  assert.equal(DEFAULT_COLORMAP, 'viridis_r');
 });

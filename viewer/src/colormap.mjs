@@ -7,10 +7,16 @@ const RGB = {
   grayscale:[[0,0,0],[64,64,64],[128,128,128],[192,192,192],[255,255,255]],
 };
 
-export const COLORMAP_NAMES = ['viridis', 'inferno', 'magma', 'grayscale'];
+const BASE_NAMES = ['viridis', 'inferno', 'magma', 'grayscale'];
+
+// `<name>_r` mirrors the colours only: low density stays the most transparent.
+export const COLORMAP_NAMES = BASE_NAMES.flatMap((n) => [n, `${n}_r`]);
+export const DEFAULT_COLORMAP = 'viridis_r';
 
 export function colormapStops(name) {
-  const rgb = RGB[name] || RGB.viridis;
+  const reversed = typeof name === 'string' && name.endsWith('_r');
+  const base = RGB[reversed ? name.slice(0, -2) : name] || RGB.viridis;
+  const rgb = reversed ? [...base].reverse() : base;
   return rgb.map((c, i) => ({
     t: i / (rgb.length - 1),
     r: c[0], g: c[1], b: c[2], a: RAMP_A[i],

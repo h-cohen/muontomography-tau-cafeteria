@@ -5,7 +5,7 @@ import { orbitToEye, CAMERA_PRESETS } from './camera.mjs';
 import { computeHistogram, robustWindow, windowToBandPx, bandPxToWindow } from './histogram.mjs';
 import { availableLayers } from './layers.mjs';
 import { initDock } from './dock.mjs';
-import { COLORMAP_NAMES, colormapStops } from './colormap.mjs';
+import { COLORMAP_NAMES, DEFAULT_COLORMAP, colormapStops } from './colormap.mjs';
 import { captureView, loadViews, saveViews } from './views.mjs';
 import { SHORTCUTS, keyToAction } from './shortcuts.mjs';
 import { markerVertices, dedupeDetectors, projectToScreen } from './markers.mjs';
@@ -715,7 +715,7 @@ export function initViewer(root) {
   const state = Object.assign(createState(), {
     gl, program, uniforms, floatLinear,
     raysTex: dummyVolume, snrTex: dummyVolume, volumeTex: dummyVolume, sigmaTex: dummyVolume,
-    lutTex: makeLutTexture(gl, buildTransferLUT(colormapStops('viridis'))),
+    lutTex: makeLutTexture(gl, buildTransferLUT(colormapStops(DEFAULT_COLORMAP))),
   });
 
   function worldBounds() {
@@ -1967,9 +1967,9 @@ export function initViewer(root) {
     opt.value = name; opt.textContent = name;
     cmapSel.appendChild(opt);
   }
-  let lastCmap = 'viridis';
-  try { lastCmap = localStorage.getItem('cafetomo-viewer:colormap') || 'viridis'; } catch { /* ignore */ }
-  cmapSel.value = COLORMAP_NAMES.includes(lastCmap) ? lastCmap : 'viridis';
+  let lastCmap = DEFAULT_COLORMAP;
+  try { lastCmap = localStorage.getItem('cafetomo-viewer:colormap') || DEFAULT_COLORMAP; } catch { /* ignore */ }
+  cmapSel.value = COLORMAP_NAMES.includes(lastCmap) ? lastCmap : DEFAULT_COLORMAP;
   function applyColormap(name) {
     try { localStorage.setItem('cafetomo-viewer:colormap', name); } catch { /* ignore */ }
     commit({ transferStops: colormapStops(name) });
