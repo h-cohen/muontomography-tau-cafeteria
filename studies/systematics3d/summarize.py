@@ -176,6 +176,8 @@ def summarize(out: Path, results: Path) -> dict:
     doc["control_slab_opacity"] = SLAB
     doc["reconstruction_spacing_fine"] = v["spacing_015"]["value"]
     doc["reconstruction_spacing_coarse"] = v["spacing_025"]["value"]
+    doc["reconstruction_damping_low"] = v["damping_001"]["value"]
+    doc["reconstruction_damping_high"] = v["damping_005"]["value"]
     # descriptive only, not a budget entry: the sky envelope without the half-turned roof A,
     # under which the beam centres are not triangulated
     for q in (*HEIGHTS, *DEPTH):

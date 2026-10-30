@@ -298,7 +298,7 @@ production-push: production-check
 	git -C $(PRODUCTION) push origin HEAD:main
 
 # Registered studies on the internal-validation pilot (scripts tracked in studies/).
-.PHONY: weight-correction recovery-trace autofocus-study sky-joint stripes joint3d joint3d-internal systematics3d tools reproduce
+.PHONY: weight-correction recovery-trace autofocus-study sky-joint stripes joint3d joint3d-internal systematics3d support3d tools reproduce
 weight-correction:
 	test ! -e $(IVCORRECTION)
 	uv run python studies/weight-correction/compare.py --pilot $(IVPAPERARCHIVE) --out $(IVCORRECTION)
@@ -400,6 +400,13 @@ systematics3d:
 	uv run python studies/systematics3d/run.py summarize --out $(SYS3DRUNS) --results $(RESULTS3D)
 	cp $(SYS3DRUNS)/summary.json $(RESULTS3D)/systematics.json
 
+# Where the reconstruction puts opacity a ceiling does not have: coverage damping and the
+# two-view support on a ceiling-only phantom and on the data (studies/support/run.py).
+support3d:
+	OPENBLAS_NUM_THREADS=8 OMP_NUM_THREADS=8 uv run python studies/support/run.py \
+	  --config $(PROD3DCONFIG) --baseline $(PRODRUNS) --results $(RESULTS3D) \
+	  --out $(RESULTS3D)/support.json
+
 # Everything from the inputs into one fresh root REPRO (never the tracked results/ or the
 # reviewed archives). Compare afterwards with `cafetomo compare-results`. See REPRODUCE.md.
 REPRO_VARS = RUNS=$(REPRO)/baseline RESULTS=$(REPRO)/results GEN=$(REPRO)/draft/generated \
@@ -436,6 +443,7 @@ reproduce-stages:
 	test -e $(REPRO)/results/production/3d/autofocuslayer.json || $(MAKE) $(REPRO_VARS) joint3d
 	test -e $(REPRO)/results/production/3d/internalvalidation.json || \
 	  $(MAKE) $(REPRO_VARS) joint3d-internal
+	test -e $(REPRO)/results/production/3d/support.json || $(MAKE) $(REPRO_VARS) support3d
 	test -e $(REPRO)/results/production/stripes.json || $(MAKE) $(REPRO_VARS) stripes
 	$(MAKE) $(REPRO_VARS) production-stage
 

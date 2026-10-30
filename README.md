@@ -344,7 +344,7 @@ make production-push                           # only when agreed
 | `config-numbers.tex` | `configs/cafeteria.yaml`, named code constants, and the baseline volume's selected iterate |
 | `production-numbers.tex` | `results/production/*.json` (joint open-sky reference, stripes) |
 | `raw-numbers.tex` | `results/production/raw/rawdata.json` (reviewed copy of `runs/raw/results/rawdata.json`, `make rawdata-promote`) and the calibration/view settings |
-| `figures/*.pdf` | `paper-draft/figures/make_*.py` with `--frame detector`, from the joint-sky 3D run `runs/joint3d-2026-10-29/baseline` (solver history included), `runs/raw` and `runs/skyswap/joint` (`skyroof`, `skyjoint`) |
+| `figures/*.pdf` | `paper-draft/figures/make_*.py` with `--frame detector`, from the joint-sky 3D run `runs/joint3d-2026-10-30/baseline` (solver history included), `runs/raw` and `runs/skyswap/joint` (`skyroof`, `skyjoint`) |
 
 It refuses when this repository or `paper-production/` has uncommitted changes,
 pulls Overleaf edits by fast-forward only (refusing diverged histories), replaces
@@ -390,7 +390,9 @@ and `skyjoint` (2D maps of pos0 and pos1).
 
 **Joint-sky 3D.** `make joint3d` seeds a baseline from the joint reference ingest
 (`studies/joint3d/seed.py`: pedestal-based hit selection, gain-corrected raw counts),
-runs the full 3D chain and the corrected autofocus into `runs/joint3d-2026-10-29/`, and
+runs the full 3D chain and the corrected autofocus into `runs/joint3d-2026-10-30/` with
+`configs/production3d.yaml` (the campaign config, `extends`-ed: no coverage damping, and only
+voxels seen from both positions as unknowns), and
 promotes its results to `results/production/3d/`, the production paper's 3D. The
 top-level `results/` stay the reviewed draft's (DAQ histograms). `make joint3d-internal`
 reruns the internal-validation pilot, weight correction and recovery trace on that baseline
@@ -404,6 +406,12 @@ early/late halves of the room runs, reconstruction choices, the continued-array 
 factor, centre/completeness/pose/background shifts, and null, recovery and misspecified
 controls. Its summary, `results/production/3d/systematics.json`, gives the totals the
 production paper quotes.
+
+**Reconstruction support.** `make support3d` (`studies/support/run.py`) compares the
+damped solve on every voxel, the undamped one, and the undamped two-view solve of the
+production config: a ceiling-only phantom of the measured geometry and the data, each as the
+share of opacity below the ceiling, the chi2 per row and the cross-position prediction. Output
+`results/production/3d/support.json`.
 
 **Solver history.** `runs/convergence-2026-10-21` reruns the nominal
 reconstruction with every iterate's chi2 kept; its volume is bit-identical to the
