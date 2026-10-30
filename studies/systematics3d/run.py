@@ -122,15 +122,15 @@ def half_ingests():
         c = replace(cfg, raw=replace(raw, exposures=raw.exposures | {"pos0": str(folder)}))
         halves[("pos0", i)] = ingest_raw(c, "pos0", cache, A.jobs, gains=gains["pos0"])
     n_seg = ingest_raw(plain, "pos1", cache, A.jobs).files[0].n_segments
-    seg = {f"pos1_s{k}": RunSubset("pos1", (k, k)) for k in range(1, n_seg + 1)}
+    seg = {f"pos1_s{k}": RunSubset("pos1", (k, k), 0.0) for k in range(1, n_seg + 1)}
     c = replace(
         cfg, raw=replace(raw, first_run=raw.first_run | {"pos1": 1}, subsets=raw.subsets | seg)
     )
     live = np.array([ingest_raw(c, s, cache, A.jobs, gains=gains["pos1"]).live_time_s for s in seg])
     cut = int(np.argmin(np.abs(np.cumsum(live)[:-1] - live.sum() / 2))) + 1
     parts = {
-        "pos1_h0": RunSubset("pos1", (1, cut)),
-        "pos1_h1": RunSubset("pos1", (cut + 1, n_seg)),
+        "pos1_h0": RunSubset("pos1", (1, cut), 0.0),
+        "pos1_h1": RunSubset("pos1", (cut + 1, n_seg), 0.0),
     }
     c = replace(c, raw=replace(c.raw, subsets=c.raw.subsets | parts))
     for i in range(2):
