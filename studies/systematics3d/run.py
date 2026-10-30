@@ -94,13 +94,28 @@ def evaluate(data, cfg, sky, name):
         failure = str(exc)
         m = measure(data, cfg, sky, cache_dir=A.out / "cache", with_volume=False)
     beams = m.details["beams"]
-    arr = array_fit(data, cfg, beams)
+    # fewer than two triangulated centres leave no array to continue: depth not measured
+    found = len(beams["beams_x"]) >= 2
+    arr = (
+        array_fit(data, cfg, beams)
+        if found
+        else dict.fromkeys(DEPTH, np.nan)
+        | {
+            "chisq_per_dof": np.nan,
+            "dof": 0,
+        }
+    )
     if m.volume is not None:
         np.save(A.out / "volumes" / f"{name}.npy", m.volume)
     return {
         **{k: float(m.values.get(k, np.nan)) for k in (*HEIGHTS, *IMAGE)},
         **{k: arr[k] for k in (*DEPTH, "chisq_per_dof", "dof")},
         "beams_x": beams["beams_x"],
+        "beams_found": {
+            k: beams[k]
+            for k in ("ok", "n_beams_x", "n_beams_y", "y_used", "parallax_x_z", "parallax_y_z")
+            if k in beams
+        },
         "flexible_fit": {"xs": list(m.details["depth"].xs), "w": m.details["depth"].w},
         "zprofile_failure": failure,
         "array": arr,
