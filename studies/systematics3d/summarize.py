@@ -88,7 +88,9 @@ def summarize(out: Path, results: Path) -> dict:
                 for n in names:
                     if q in v[n]:
                         doc[f"{q}_{family}_{n}"] = v[n][q] - nominal[q]
-                doc[f"{q}_{family}"] = float(np.max(np.abs(shifts)))
+                # an unmeasured variant (NaN) is counted, not taken as a zero shift
+                doc[f"{q}_{family}"] = float(np.nanmax(np.abs(shifts)))
+                doc[f"{q}_{family}_unmeasured"] = int(np.isnan(shifts).sum())
 
     halves = json.loads((out / "halves.json").read_text())
     for pid, s in halves["shape"].items():

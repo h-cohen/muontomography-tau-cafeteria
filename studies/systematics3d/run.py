@@ -84,14 +84,25 @@ def array_fit(data, cfg, beams, per_end=None, scale=1.0):
 
 def evaluate(data, cfg, sky, name):
     """Every estimator of the registration on one dataset; the volume is kept for correlation."""
-    m = measure(data, cfg, sky, cache_dir=A.out / "cache", with_volume=True)
+    failure = None
+    try:
+        m = measure(data, cfg, sky, cache_dir=A.out / "cache", with_volume=True)
+    except ValueError as exc:
+        # a z-profile off the grid is not measured (NaN); the other estimators stand
+        if "z-profile" not in str(exc):
+            raise
+        failure = str(exc)
+        m = measure(data, cfg, sky, cache_dir=A.out / "cache", with_volume=False)
     beams = m.details["beams"]
     arr = array_fit(data, cfg, beams)
-    np.save(A.out / "volumes" / f"{name}.npy", m.volume)
+    if m.volume is not None:
+        np.save(A.out / "volumes" / f"{name}.npy", m.volume)
     return {
-        **{k: float(m.values[k]) for k in (*HEIGHTS, *IMAGE)},
+        **{k: float(m.values.get(k, np.nan)) for k in (*HEIGHTS, *IMAGE)},
         **{k: arr[k] for k in (*DEPTH, "chisq_per_dof", "dof")},
         "beams_x": beams["beams_x"],
+        "flexible_fit": {"xs": list(m.details["depth"].xs), "w": m.details["depth"].w},
+        "zprofile_failure": failure,
         "array": arr,
     }
 
