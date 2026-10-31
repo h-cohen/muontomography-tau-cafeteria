@@ -3,6 +3,7 @@ import pytest
 
 from cafetomo.autofocus import (
     FocusScan,
+    _lattice_cv_score,
     cv_height_scan,
     layer_cv_score,
     layer_grid,
@@ -88,3 +89,19 @@ def test_layer_has_the_configured_thickness_centred_on_z(cfg, z):
     s = cfg.autofocus
     assert g.shape[2] == round(s.layer_thickness_m / s.spacing_m)
     assert g.origin[2] + g.shape[2] * g.spacing / 2 == pytest.approx(z, abs=1e-12)
+
+
+def test_lattice_score_solves_every_voxel(cfg):
+    from dataclasses import replace
+
+    rows = sky_rows(cfg.position_ids, 0.9, 10)
+    g = VoxelGrid(origin=(-4.0, -4.0, 6.5), spacing=0.4, shape=(22, 20, 3))
+    truth = beam_ceiling(
+        g, xs=(0.0, 1.7), z0=7.0, w=0.4, h=0.8, kappa=(1.5,) * 2, y_extent=(-3.0, 3.0)
+    )
+    like = FitData(lam=np.zeros(rows.n_rows), w=np.full(rows.n_rows, 1 / 0.03**2), rows=rows)
+    data = phantom_data(
+        build_forward_model(rows, cfg, grid=g), truth, like, np.random.default_rng(0)
+    )
+    two_view = replace(cfg, reconstruction=replace(cfg.reconstruction, min_views=2))
+    assert _lattice_cv_score(data, two_view, g, None) == _lattice_cv_score(data, cfg, g, None)

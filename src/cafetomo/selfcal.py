@@ -38,9 +38,10 @@ class PoseFit:
 
 def cross_position_score(data: FitData, cfg: Config, grid: VoxelGrid) -> float:
     """Mean weighted residual of each position predicted from the other alone,
-    with a free offset on the held-out view."""
+    with a free offset on the held-out view. Every voxel is solved: a two-view support
+    moves with the pose and would bias the comparison between poses."""
     fwd = build_forward_model(data.rows, cfg, grid=grid)
-    rc = replace(cfg.reconstruction, algorithm="sirt", n_iter=cfg.selfcal.n_iter)
+    rc = replace(cfg.reconstruction, algorithm="sirt", n_iter=cfg.selfcal.n_iter, min_views=1)
     scores = []
     for train in data.rows.position_ids:
         x, _ = solve(fwd, data.restricted(data.rows.mask_for(train)), rc, fit_offsets=True)

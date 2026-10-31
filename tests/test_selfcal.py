@@ -249,3 +249,22 @@ def test_pose_objective_matches_fit_pose_objective(cfg, monkeypatch):
     fit = selfcal.fit_pose(grid, c, live)
     theta = np.array([fit.pose.x, fit.pose.y, fit.pose.az_deg])
     assert selfcal.pose_objective(grid, c, live)(theta) == seen["value"] == fit.objective
+
+
+def test_cross_position_score_solves_every_voxel(cfg):
+    from cafetomo.forward import build_forward_model
+    from cafetomo.phantom import beam_ceiling, phantom_data, sky_rows
+    from cafetomo.selfcal import cross_position_score
+    from cafetomo.voxels import VoxelGrid
+
+    rows = sky_rows(cfg.position_ids, 0.9, 10)
+    g = VoxelGrid(origin=(-4.0, -4.0, 6.5), spacing=0.4, shape=(22, 20, 3))
+    truth = beam_ceiling(
+        g, xs=(0.0, 1.7), z0=7.0, w=0.4, h=0.8, kappa=(1.5,) * 2, y_extent=(-3.0, 3.0)
+    )
+    like = FitData(lam=np.zeros(rows.n_rows), w=np.full(rows.n_rows, 1 / 0.03**2), rows=rows)
+    data = phantom_data(
+        build_forward_model(rows, cfg, grid=g), truth, like, np.random.default_rng(0)
+    )
+    two_view = replace(cfg, reconstruction=replace(cfg.reconstruction, min_views=2))
+    assert cross_position_score(data, two_view, g) == cross_position_score(data, cfg, g)

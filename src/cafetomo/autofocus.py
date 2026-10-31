@@ -83,7 +83,8 @@ def _lattice_cv_score(
     data: FitData, cfg: Config, grid: VoxelGrid, cache_dir: str | Path | None
 ) -> float:
     fwd = build_forward_model(data.rows, cfg, grid=grid, cache_dir=cache_dir)
-    rc = replace(cfg.reconstruction, algorithm="tv", tv_z_weight=0.0)
+    # every voxel is solved: a two-view support grows with the layer height and would bias the scan
+    rc = replace(cfg.reconstruction, algorithm="tv", tv_z_weight=0.0, min_views=1)
     scores = []
     for train in data.rows.position_ids:
         x, _ = solve(fwd, data.restricted(data.rows.mask_for(train)), rc, fit_offsets=True)

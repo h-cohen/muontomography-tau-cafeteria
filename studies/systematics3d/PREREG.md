@@ -90,3 +90,13 @@ Item 8 changes accordingly. μ × {1/2, 2} is void at μ = 0 and is replaced by 
 (0.05 = the previous nominal); a third variant solves on every voxel (`min_views: 1`). All three
 belong to the `reconstruction` family and its envelope. Every other item is unchanged and is rerun
 on the new nominal in a fresh output directory.
+
+### Addendum (2026-10-31) — pose and autofocus solve every voxel
+
+The first nominal run under this amendment fitted the pose and the autofocus scan with the two-view
+support. The support moves with the pose and grows with the layer height, so it biased both
+comparisons: the fitted baseline fell to 1.38 m. That run is discarded. This study had been started
+on it and was stopped within minutes, and its outputs were not inspected. The pose and autofocus
+scores now always solve every voxel; they keep μ = 0, like the reconstruction. In a test refit,
+the free x of pos1 is 1.79 m, against 1.85 ± 0.03 m with μ = 0.05. The resulting height shifts are
+reported as they come. Everything is rerun from a fresh nominal.
