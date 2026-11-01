@@ -154,9 +154,11 @@ def summarize(out: Path, results: Path) -> dict:
 
     controls = [x for k, x in v.items() if k.startswith("control_")]
     for case, label in CONTROL_NAMES.items():
-        fits = [c for c in controls if c["case"] == case]
+        replicas = [c for c in controls if c["case"] == case]
+        fits = [c for c in replicas if "failed" not in c]
         h = np.array([c["h"] for c in fits])
         doc[f"control_{label}_n"] = len(fits)
+        doc[f"control_{label}_n_failed"] = len(replicas) - len(fits)
         doc[f"control_{label}_h_mean"] = float(h.mean())
         doc[f"control_{label}_h_spread"] = float(h.std(ddof=1))
         doc[f"control_{label}_h_bias"] = float(h.mean() - fits[0]["true_h"])

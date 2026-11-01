@@ -285,13 +285,18 @@ def control(cfg, data, sky, case, replica):
     )
     sim = data.lam.copy()
     sim[keep] = lam + rng.normal(size=lam.size) / np.sqrt(data.w[keep])
-    fit = fit_array_depth(
-        replace(data, lam=sim),
-        cfg,
-        centres=continued_centres(beams["beams_x"]),
-        height_seed=beams["z"],
-    )
-    return {"case": case, "replica": replica, "true_h": h} | {
+    record = {"case": case, "replica": replica, "true_h": h}
+    try:
+        fit = fit_array_depth(
+            replace(data, lam=sim),
+            cfg,
+            centres=continued_centres(beams["beams_x"]),
+            height_seed=beams["z"],
+        )
+    except RuntimeError as exc:
+        # a control fit that does not converge is an outcome, reported with the others
+        return record | {"failed": str(exc)} | dict.fromkeys(DEPTH, np.nan)
+    return record | {
         k: fit[k]
         for k in (*DEPTH, "chisq_per_dof", "normal_columns", "lower_bounds", "upper_bounds")
     }

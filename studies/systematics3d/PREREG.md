@@ -100,3 +100,8 @@ on it and was stopped within minutes, and its outputs were not inspected. The po
 scores now always solve every voxel; they keep μ = 0, like the reconstruction. In a test refit,
 the free x of pos1 is 1.79 m, against 1.85 ± 0.03 m with μ = 0.05. The resulting height shifts are
 reported as they come. Everything is rerun from a fresh nominal.
+
+On the rerun, 1 of the 20 null-control fits (replica 13) did not converge within the fit's
+evaluation limit and stopped the study. Such a fit is now recorded as a failed replica (NaN depth)
+and counted (`control_*_n_failed`); the means, spreads and bound counts use the converged fits. The
+evaluation limit is unchanged.
