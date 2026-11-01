@@ -14,7 +14,13 @@ review records: `docs/dev/reports/`. Specs/plans: `docs/dev/{specs,plans}/` (old
 - Production paper (`paper-production/`, Overleaf, pushed): user owns `3d.tex`; we also wrote `2d.tex`,
   `rawdata.tex`, `sky.tex` and edited coauthors' `setup.tex` (8.5 m = roof-slab top above floor; live times;
   open-sky role without simulation). Coauthors edit in Overleaf. The 3D nominal voxel-field figure is
-  a placeholder: the user will supply the image.
+  the user's viewer render of the production 3D (`figures/voxels.png`).
+- Done (3D, 2026-11-01): production 3D = `configs/production3d.yaml` (extends cafeteria.yaml: no
+  coverage damping, two-view support `min_views: 2`; user's choice after inspecting renders, kept
+  despite wider height budgets). Pose and autofocus scores always solve every voxel. Run
+  `runs/joint3d-2026-10-30`, systematics (PREREG amendment + addenda), pilot, `support3d` promoted.
+  Open: pilot angular folds define the support from training rows (artefact, disclosed in 3d.tex);
+  fix = support from the full row geometry, then rerun `joint3d-internal` (only on user request).
 - Done in production: corrected autofocus (layer bug fixed; `results/production/autofocuslayer.json`,
   7.21 ± 0.35 m; draft keeps 7.18 m), solver-convergence and coverage/resolution figures, raw-chain 2D maps
   and Landau⊗Gauss MPV (PRELIMINARY macros from `runs/raw/results/rawdata.json`, not promoted).

@@ -396,8 +396,8 @@ voxels seen from both positions as unknowns), and
 promotes its results to `results/production/3d/`, the production paper's 3D. The
 top-level `results/` stay the reviewed draft's (DAQ histograms). `make joint3d-internal`
 reruns the internal-validation pilot, weight correction and recovery trace on that baseline
-(`runs/internal-validation/*-joint3d`) and renders its panels and macros into
-`runs/figure-review/joint3d` and `results/production/3d/internalvalidation.json`; the
+(`runs/internal-validation/*-joint3d-2026-10-30`) and renders its panels and macros into
+`runs/figure-review/joint3d-2026-10-30` and `results/production/3d/internalvalidation.json`; the
 production convergence figure reads the solver history of the same baseline.
 
 **3D systematics.** `make systematics3d` runs the registered study of
@@ -411,7 +411,10 @@ production paper quotes.
 damped solve on every voxel, the undamped one, and the undamped two-view solve of the
 production config: a ceiling-only phantom of the measured geometry and the data, each as the
 share of opacity below the ceiling, the chi2 per row and the cross-position prediction. Output
-`results/production/3d/support.json`.
+`results/production/3d/support.json`. The pose and autofocus scores always solve every voxel. The
+internal pilot's training folds define the support from their own rows, so its masked
+angular folds lose support voxels and do not test the two-view image; its count-thinning
+folds keep every row.
 
 **Solver history.** `runs/convergence-2026-10-21` reruns the nominal
 reconstruction with every iterate's chi2 kept; its volume is bit-identical to the
